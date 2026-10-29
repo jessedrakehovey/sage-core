@@ -1,0 +1,32 @@
+{
+ "id": "google-sheets",
+ "name": "Google Sheets",
+ "functions": ["accounting"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage writes specific cells through the executor kind `sheet_set` with a read-back verifier implemented in `assistant/scripts/exec_store.py`. The owner must grant the Sheets API scope during the Google OAuth consent flow. All cell writes require an approval card and are verified by reading back the written value after execution.",
+   "reads": ["named ranges", "cell values", "sheet tab metadata"],
+   "writes": ["cell values via the sheet_set executor kind (after approval)"],
+   "always_tap": ["any cell write", "any formula change", "any share or publish action"],
+   "status": "built"
+  },
+  {
+   "tier": 4,
+   "path": "browser",
+   "how": "For bulk formatting, chart insertion, or complex range operations not covered by the sheet_set executor, Sage drives Sheets in a signed-in Playwright browser. The owner must confirm the browser profile is logged into the correct Google account.",
+   "reads": ["anything visible in the Sheets web UI"],
+   "writes": ["any edit available via the Sheets web UI"],
+   "always_tap": ["any edit to financial data", "any share or publish action"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "sheet_set writes are verified by reading back; a mismatch re-queues the action rather than silently failing.",
+  "The Sheets API scope must be added to the existing OAuth token; re-consent may be required if it was not granted originally.",
+  "Never overwrite a formula cell with a plain value without explicit owner approval.",
+  "Large reads may require pagination; the API returns up to 1000 rows per call."
+ ],
+ "notes": "Google Sheets is used for structured data tracking such as budgets and delivery logs; writes are executor-gated and read-back verified."
+}

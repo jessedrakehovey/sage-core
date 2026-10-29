@@ -1,0 +1,76 @@
+{
+ "_doc": "Thread mining (assistant/scripts/tracking/mining.py, ruling 3 of TRACKING_DESIGN.md) and the personal-text exception (scripts/text_gate.py, ruling 13). Every word list the code matches on lives here so another organization edits a file, not code. Regexes are Python, case-insensitive. mail_arm.py's bill / renewal / shipment patterns are NOT repeated here: mining imports them and only adds what is listed under money.extra.",
+ "enabled": true,
+ "lookback_days": 7,
+ "max_cards_per_run": 3,
+ "max_days_ahead": 365,
+ "sources": {
+  "phone_threads": true,
+  "tickets": true,
+  "chat": false,
+  "honeybook_messages": true
+ },
+ "people": {
+  "_doc": "A date beside one of these words, said by a couple / planner / vendor / family / friend / owner, is a commitment worth a calendar hold. The word may sit in the same sentence or the one before it. A lead's wedding date is never a hold (an inquiry is not a booking): lead_wedding_day sentences from a lead are skipped unless they also name a lead_meeting word, and inquiry_new tickets are not mined at all. A hold is only for the owners' own plans (2026-10-28): a message matching third_party_message (a prayer request) is about someone else and gets no hold; a sentence matching third_party (a surgery, a hospital stay) is skipped and never lends its commitment word to the next line; a sentence with no date of its own borrows the one before only when it names a time itself.",
+  "commitment": "\\b(meet(?:ing)?|call|coming|come (?:over|by|to|at)|arriv\\w*|drop(?:ping)? (?:off|by)|pick(?:ing)? up|pickup|send(?:ing)?|deliver\\w*|due|see you|dinner|lunch|brunch|breakfast|coffee|party|birthday|appointment|appt|leave|leaving|leaves|flight|boat|train|show|game|church|rsvp|deadline|book(?:ed|ing)?|reserv\\w*|walk.?through|rehearsal|ceremony|reception|shoot|session|tour|visit\\w*|trip|camp\\w*|hike|be there|be at|starts?|start at|ends?|open(?:s|ing)?|close(?:s|d)?|at \\d|from \\d|until|by (?:noon|then|\\d)|plan(?:s|ning)?|hang|join|over at|head(?:ing)? (?:out|over|up|down)|we'?re (?:doing|going)|i'?m (?:doing|going)|let'?s|works? for (?:me|us)|confirm\\w*|scheduled|set for|moved to|pushed to|rescheduled)\\b",
+  "past": "\\b(?:were|was|came|went|did|yesterday|last (?:week|night|month|year)|ago)\\b",
+  "future": "\\b(?:will|'ll|gonna|going to|tomorrow|next|tonight|this (?:weekend|week|friday|saturday|sunday|monday|tuesday|wednesday|thursday))\\b",
+  "keep_questions_with": "\\b(rsvp|deadline|due|by when)\\b",
+  "lead_wedding_day": "\\b(wedding|ceremony|reception|big day|getting married|married on|elop\\w*)\\b",
+  "lead_meeting": "\\b(meet(?:ing)?|call|chat|zoom|facetime|consult\\w*|talk)\\b",
+  "third_party_message": "\\b(pray(?:ing|ers?|ed)?|prayer request|in your (?:thoughts|prayers)|thoughts and prayers)\\b",
+  "third_party": "\\b(surgery|surgeries|hospital\\w*|icu|chemo\\w*|biopsy|diagnos\\w*|recover(?:y|ing)|transplant)\\b"
+ },
+ "money": {
+  "_doc": "Senders whose dates are duties: due / renewal / action-required. mail_arm.py already arms bill-due, renewal and delivery reminders silently from mail; mining adds the shapes below from the SAME senders and proposes them on a card.",
+  "senders": "(?:bank|chase|wells ?fargo|relay(?:fi)?|mercury|amex|american express|capital ?one|discover|citi|barclays|visa|mastercard|insurance|geico|progressive|state ?farm|allstate|farmers|lemonade|irs\\.gov|irs\\b|ftb\\.ca\\.gov|franchise tax|treasury|dmv|paypal|venmo|zelle|stripe|square(?:up)?|quickbooks|intuit|turbotax|gusto|adobe|dropbox|backblaze|frame\\.io|apple\\.com|icloud|netflix|spotify|youtube|verizon|at&t|att\\.com|t-mobile|comcast|xfinity|spectrum|edison|sce\\.com|socalgas|water|billing|statements?|payments?|invoice|noreply@.*(?:bank|pay|billing)|no-reply@.*(?:bank|pay|billing)|accounts?@|collections?@|lensrentals|honeybook|musicbed|artlist|tailscale|godaddy|squarespace|namecheap|cloudflare|github)",
+  "subject": "\\b(statement|invoice|payment|bill|autopay|renew\\w*|policy|premium|subscription|membership|tax|1099|w-?2|refund|balance|past due|overdue|declined|failed|action required|verify|expir\\w*|final notice|suspend\\w*|cancel\\w*)\\b",
+  "extra": "\\b(action (?:required|needed)|respond by|reply by|verify (?:by|before)|confirm (?:by|before)|complete (?:by|before)|last day|final notice|final reminder|deadline|expires? (?:on|in|at)|expiring|payment (?:failed|declined|returned|unsuccessful)|card (?:was )?declined|update your (?:card|payment)|past due|overdue|will be (?:suspended|cancell?ed|disconnected|charged)|auto-?renews?|free trial ends|trial (?:ends|expires)|price (?:increase|change)|goes up on)\\b",
+  "followup": {
+   "due": ["money", "bill-due"],
+   "renewal": ["money", "renewal"],
+   "action": ["personal", "reminder"]
+  },
+  "lead_days": {
+   "action": 3
+  }
+ },
+ "dates": {
+  "_doc": "Relative day words resolved from the day the message was sent (the shape of the property OS's vendor_threads._when). Absolute dates come from mail_arm.find_dates.",
+  "relative": "\\b(today|tonight|tomorrow|tmrw|tmr|this (?:morning|afternoon|evening|weekend)|next (?:week|weekend|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\\b",
+  "time": "\\b(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm|a\\.m\\.|p\\.m\\.)\\b|\\b(\\d{1,2}):(\\d{2})\\b(?!\\s*(?:am|pm))|\\b(noon|midnight)\\b",
+  "bare_hour": "\\b(?:at|around|by|from|till|until)\\s+(\\d{1,2})\\b(?!\\s*(?::|am|pm|a\\.m|p\\.m|/|-|th|st|nd|rd|%|k\\b|\\d))",
+  "evening_words": "\\b(dinner|drinks|party|tonight|evening|show|game|concert|movie|night)\\b",
+  "weekday_means_next": true
+ },
+ "skip": {
+  "noise": "\\b(verification code|your code is|one-time|otp|unsubscribe|reply stop|flash sale|% off|promo code|liked|loved|laughed at|emphasized|questioned|disliked)\\b|^\\d{4,8}$|wm\\.attn\\.tv|^example-SEND",
+  "chat_handled_by_agent": "\\b(remind me|put (?:it|that|this|the \\w+) on (?:my|the|our) calendar|add (?:it|that|this|the \\w+) to (?:my|the|our) calendar|schedule (?:a|the|an)|set up a call)\\b",
+  "min_sentence_chars": 8,
+  "flag_line": "^\\W*(?:flags?|recommended|budget|pricing|wants)\\s*:"
+ },
+ "classes": {
+  "_doc": "Who the sender is -> which lane the proposal lands in and who gets the card. Owners' own words (chat) go to their own lane.",
+  "lead": {"lane": "wedding"},
+  "couple": {"lane": "wedding"},
+  "vendor": {"lane": "wedding"},
+  "planner": {"lane": "wedding"},
+  "family": {"lane": "personal"},
+  "friend": {"lane": "personal"},
+  "owner6": {"lane": "owner6"},
+  "owner1": {"lane": "personal"},
+  "money": {"lane": "money"},
+  "unknown": {"lane": "personal"}
+ },
+ "event": {
+  "duration_min": 60,
+  "title": "{who}: {gist}",
+  "gist_words": 7
+ },
+ "personal_text_exception": {
+  "_doc": "Ruling 13 (2026-10-15): a personal text may get a draft card ONLY when it is time-related (a date or time AND a plan word) or money-tied (an amount, or pay / owe / venmo words). The switch is config.json -> phone.personal_exceptions; the vocabulary is here.",
+  "time_words": "\\b(today|tonight|tomorrow|tmrw|this (?:morning|afternoon|evening|weekend|week)|next (?:week|weekend|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|\\d{1,2}/\\d{1,2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.? \\d{1,2}|\\d{1,2}(?::\\d{2})?\\s?(?:am|pm)|noon|midnight)\\b",
+  "plan_words": "\\b(dinner|lunch|brunch|breakfast|coffee|drinks|party|birthday|meet(?:ing)?|come|coming|over|pick(?:ing)? up|drop(?:ping)? off|leave|leaving|leaves|flight|boat|train|show|game|church|appointment|appt|rsvp|wedding|trip|camp\\w*|hike|be there|see you|free|available|plan(?:s|ning)?|hang|join|visit\\w*|arriv\\w*|start(?:s|ing)?|at \\d|by \\d|from \\d|until|reservation|tickets?|open\\w*|close\\w*)\\b",
+  "money_words": "\\$\\s?\\d|\\b\\d+\\s?(?:bucks|dollars)\\b|\\b(pay(?:ing|ment|back)?|paid|owe[sd]?|venmo|zelle|cash ?app|paypal|split(?:ting)?|chip in|reimburs\\w*|invoice|bill|refund|cover (?:it|me|us)|my share|your share|cost(?:s)?)\\b"
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "id": "calendly",
+ "name": "Calendly",
+ "functions": ["scheduling_booking", "calendar"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Calendly via the official Calendly v2 REST API using a Personal Access Token (or OAuth 2.0) stored in the OS credential store. The owner must generate a Personal Access Token in Calendly's Integrations settings and store it via setup_creds. New bookings can trigger Sage's lead intake flow via Calendly webhook, which requires a public HTTPS endpoint.",
+   "reads": ["scheduled events", "event types", "invitee details", "cancellations and reschedules", "availability rules"],
+   "writes": ["cancellations of existing events (on behalf of the owner)"],
+   "always_tap": ["any cancellation of a client appointment initiated by Sage"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Calendly webhooks require a public HTTPS endpoint; use Tailscale Funnel or a VPS reverse proxy.",
+  "Cancellations via the Calendly API automatically send notification emails to the invitee; always require an approval tap before canceling.",
+  "The free Calendly plan limits event types and active scheduling links; verify the subscription tier.",
+  "Calendly is now owned by Calendly Inc.; the API at developer.calendly.com is the canonical reference."
+ ],
+ "notes": "Calendly is a self-serve scheduling tool; the owner configures availability and event types, and Sage reads new bookings to trigger intake flows."
+}

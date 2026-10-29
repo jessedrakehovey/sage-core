@@ -1,0 +1,64 @@
+{
+ "id": "honeybook",
+ "name": "HoneyBook",
+ "functions": [
+  "lead_intake",
+  "crm",
+  "scheduling_booking",
+  "payments_invoicing",
+  "contracts_esign"
+ ],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "mcp",
+   "how": "Sage connects to HoneyBook through the official HoneyBook MCP connector, which the owner installs and authorizes in their Claude app. Once connected, Sage reads contacts, projects, pipeline stages, and booked dates. Sage can draft messages, notes, and file actions; every send to a client or lead waits for an approval card before anything goes out.",
+   "reads": [
+    "leads",
+    "projects",
+    "contacts",
+    "pipeline stages",
+    "booked dates",
+    "brochures and files",
+    "invoice status"
+   ],
+   "writes": [
+    "pipeline stage changes",
+    "project notes",
+    "file publishes",
+    "drafted messages"
+   ],
+   "always_tap": [
+    "any message sent to a client or lead",
+    "any contract send",
+    "any invoice send",
+    "any payment request"
+   ],
+   "status": "known"
+  },
+  {
+   "tier": 4,
+   "path": "browser",
+   "how": "When the MCP connector refuses a send headless, Sage falls back to driving HoneyBook's web composer in the doer's signed-in Playwright browser. The owner must ensure the doer browser profile is logged in to the correct HoneyBook account. This path is a last resort and may break with UI updates.",
+   "reads": [
+    "anything visible in the HoneyBook web UI"
+   ],
+   "writes": [
+    "messages to clients via the web composer",
+    "template sends",
+    "file shares"
+   ],
+   "always_tap": [
+    "any outbound message to a client or lead",
+    "any contract or invoice send"
+   ],
+   "status": "unverified"
+  }
+ ],
+ "gotchas": [
+  "The connector can refuse some sends when run headless; a browser path is the fallback for those cases.",
+  "Keep the doer browser profile logged in to HoneyBook so the browser fallback is always ready.",
+  "Every send to a client requires an approval card regardless of transport."
+ ],
+ "notes": "A CRM many service studios use; the MCP connector is the preferred path for reads and most writes, every client-facing send waits for a card."
+}

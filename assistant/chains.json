@@ -1,0 +1,842 @@
+{
+ "_doc": "Next-step chains (assistant/scripts/tracking/chains.py; TRACKING_DESIGN.md ruling 4). A chain is a list of gates an entity must pass in order; each gate has a due offset (days from the chain's anchor date, or a window from the previous gate) and the evidence that satisfies it. When a gate is up next (the one before it is done or ending) and has no evidence by its ask time, Sage posts ONE card for it: Booked / Book it for me / Not yet / Drop. Everything an organization tunes is here; the code only interprets it. Evidence sources: ledger (the delivery ledger), hb (the CRM snapshot), editor (the edit pipeline), calendar, followup, ticket, exec (what actually went out), chat (the owners' own words), register (assistant/data/registers/*.json), plus the owner's own tap on the gate's card, which always counts. default_amount: the dollars at stake for the priority brain when the record carries none (an average booking). question: the gate's own closing question (default 'Book it?').",
+ "ask": {
+  "_doc": "Defaults for every chain: a gate is asked from lead_days before its due date, re-asked after reask_days of silence, at most max_asks times; a chain may set offsets_days (days from the anchor, negative = before) and then asks only when the clock crosses an offset. ending_days: the previous gate counts as ending when its due date is within this many days. max_per_lane_per_day caps new chain cards per lane per day (the per-lane chaser is separate).",
+  "lead_days": 7,
+  "reask_days": 7,
+  "max_asks": 3,
+  "ending_days": 2,
+  "max_per_lane_per_day": 2,
+  "options": {
+   "booked": "Booked",
+   "book": "Book it for me",
+   "not_yet": "Not yet",
+   "drop": "Drop"
+  }
+ },
+ "chains": {
+  "shoot": {
+   "title": "Shoot day",
+   "lane": "wedding",
+   "entity": "couple",
+   "anchor": "wedding_date",
+   "applies": {
+    "ledger_stages": [
+     "booked",
+     "pre-shoot"
+    ],
+    "anchor_window_days": [
+     -60,
+     0
+    ]
+   },
+   "offsets_days": [
+    -14,
+    -7,
+    -3
+   ],
+   "gates": [
+    {
+     "id": "timeline",
+     "label": "the day's timeline from the couple",
+     "due_offset_days": -14,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "followup",
+       "sop": "wedding-lifecycle",
+       "step": "timeline-request",
+       "status": [
+        "done"
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "timeline",
+        "run of show",
+        "schedule for the day"
+       ]
+      },
+      {
+       "source": "ticket",
+       "kinds": [
+        "email",
+        "mail",
+        "hb_message",
+        "imessage_in"
+       ],
+       "words": [
+        "timeline",
+        "run of show"
+       ]
+      },
+      {
+       "source": "hb",
+       "stage_min_order": 11
+      }
+     ],
+     "book_instruction": "Draft the timeline request to the couple (shoot-prep skill) as a send card.",
+     "question": "Has it come in?"
+    },
+    {
+     "id": "second_shooter",
+     "label": "the second shooter",
+     "due_offset_days": -14,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "chat",
+       "words": [
+        "second shooter",
+        "owner6 is shooting",
+        "owner6's shooting",
+        "2nd shooter"
+       ]
+      },
+      {
+       "source": "calendar",
+       "owner": "owner6",
+       "match_entity": true,
+       "within_days": [
+        0,
+        0
+       ]
+      },
+      {
+       "source": "register",
+       "register": "trips",
+       "piece": "second shooter"
+      }
+     ],
+     "book_instruction": "Confirm with owner6 (or the backup shooter) that she is on this date and put it on her calendar.",
+     "question": "Is she confirmed?"
+    },
+    {
+     "id": "rentals",
+     "label": "gear rentals",
+     "due_offset_days": -7,
+     "optional": true,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "calendar",
+       "words": [
+        "lensrentals",
+        "rental",
+        "lens delivery",
+        "gear delivery"
+       ],
+       "within_days": [
+        -10,
+        0
+       ]
+      },
+      {
+       "source": "ticket",
+       "kinds": [
+        "email",
+        "mail"
+       ],
+       "words": [
+        "lensrentals",
+        "rental order",
+        "order confirmation"
+       ],
+       "within_days": [
+        -30,
+        0
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "rentals ordered",
+        "ordered the lenses",
+        "lensrentals order",
+        "no rentals",
+        "nothing to rent"
+       ]
+      },
+      {
+       "source": "register",
+       "register": "trips",
+       "piece": "rentals"
+      }
+     ],
+     "book_instruction": "Open the Lensrentals cart for the lenses this shoot needs (doer checkpoint card before paying)."
+    },
+    {
+     "id": "travel",
+     "label": "travel and lodging",
+     "due_offset_days": -7,
+     "optional": true,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "calendar",
+       "words": [
+        "flight",
+        "hotel",
+        "airbnb",
+        "drive to",
+        "lodging",
+        "check-in"
+       ],
+       "within_days": [
+        -3,
+        1
+       ]
+      },
+      {
+       "source": "ticket",
+       "kinds": [
+        "email",
+        "mail"
+       ],
+       "words": [
+        "itinerary",
+        "reservation",
+        "booking confirmation",
+        "hotel"
+       ],
+       "within_days": [
+        -45,
+        0
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "booked the hotel",
+        "booked flights",
+        "no travel",
+        "local wedding",
+        "driving there"
+       ]
+      },
+      {
+       "source": "register",
+       "register": "trips",
+       "piece": "travel"
+      }
+     ],
+     "book_instruction": "Find lodging near the venue for the night before; hold the pick on a checkpoint card."
+    },
+    {
+     "id": "cards",
+     "label": "cards formatted and batteries charged",
+     "due_offset_days": -3,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "chat",
+       "words": [
+        "cards formatted",
+        "formatted the cards",
+        "cards are formatted",
+        "batteries charged",
+        "gear is packed",
+        "packed the gear"
+       ]
+      },
+      {
+       "source": "followup",
+       "sop": "wedding-lifecycle",
+       "step": "week-of-confirm",
+       "status": [
+        "done"
+       ]
+      }
+     ],
+     "book_instruction": "Not bookable: owner1 formats the cards himself after the last ingest is hash-verified on two drives.",
+     "question": "Is it done?"
+    }
+   ],
+   "default_amount": 5000
+  },
+  "edit": {
+   "title": "Edit and delivery",
+   "lane": "wedding",
+   "entity": "couple",
+   "anchor": "wedding_date",
+   "applies": {
+    "ledger_stages": [
+     "booked",
+     "pre-shoot",
+     "ingest",
+     "edit",
+     "review",
+     "revisions"
+    ],
+    "anchor_window_days": [
+     1,
+     120
+    ]
+   },
+   "gates": [
+    {
+     "id": "ingested",
+     "label": "footage ingested and verified on two drives",
+     "due_offset_days": 2,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "editor",
+       "exists": true
+      },
+      {
+       "source": "ledger",
+       "stage_min": "edit"
+      },
+      {
+       "source": "followup",
+       "sop": "wedding-lifecycle",
+       "step": "ingest-gate",
+       "status": [
+        "done"
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "ingested",
+        "cards are in",
+        "footage is safe",
+        "offloaded"
+       ]
+      }
+     ],
+     "book_instruction": "Not bookable: run card-ingest on the PC with the cards plugged in.",
+     "question": "Is it done?"
+    },
+    {
+     "id": "music",
+     "label": "music licensed",
+     "due_offset_days": 14,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "editor",
+       "field": "music"
+      },
+      {
+       "source": "editor",
+       "stage": "music"
+      },
+      {
+       "source": "chat",
+       "words": [
+        "licensed the song",
+        "music licensed",
+        "musicbed",
+        "artlist"
+       ]
+      },
+      {
+       "source": "ticket",
+       "kinds": [
+        "email",
+        "mail"
+       ],
+       "words": [
+        "musicbed",
+        "artlist",
+        "license confirmation"
+       ],
+       "within_days": [
+        0,
+        60
+       ]
+      }
+     ],
+     "book_instruction": "Run music-license-check on the couple's song list and open the Musicbed/Artlist license page for the pick (checkpoint card before paying)."
+    },
+    {
+     "id": "first_cut",
+     "label": "the first cut",
+     "due_offset_days": 35,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "editor",
+       "stage": "slots"
+      },
+      {
+       "source": "editor",
+       "stage": "assembly"
+      },
+      {
+       "source": "ledger",
+       "stage_min": "review"
+      },
+      {
+       "source": "chat",
+       "words": [
+        "first cut",
+        "rough cut done",
+        "cut is done"
+       ]
+      }
+     ],
+     "book_instruction": "Not bookable: owner1's edit. The wedding-edit pipeline gets the project to the SLOTS timeline.",
+     "question": "Is it done?"
+    },
+    {
+     "id": "review_sent",
+     "label": "the review link to the couple",
+     "due_offset_days": 42,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "ledger",
+       "stage_min": "review"
+      },
+      {
+       "source": "exec",
+       "kinds": [
+        "email_send",
+        "hb_message"
+       ],
+       "words": [
+        "review",
+        "first cut",
+        "sneak peek",
+        "draft"
+       ]
+      },
+      {
+       "source": "followup",
+       "sop": "wedding-lifecycle",
+       "step": "review-request",
+       "status": [
+        "done"
+       ]
+      }
+     ],
+     "book_instruction": "Draft the 'here is your first cut' email with the review link as a send card (delivery-tracker skill).",
+     "question": "Has it gone out?"
+    },
+    {
+     "id": "revisions",
+     "label": "revisions (two rounds included)",
+     "due_offset_days": 49,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "ledger",
+       "stage_min": "revisions"
+      },
+      {
+       "source": "ticket",
+       "kinds": [
+        "email",
+        "mail",
+        "hb_message"
+       ],
+       "words": [
+        "revision",
+        "changes",
+        "notes on the film",
+        "love it"
+       ],
+       "within_days": [
+        30,
+        90
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "revisions done",
+        "approved the cut",
+        "they loved it",
+        "no changes"
+       ]
+      }
+     ],
+     "book_instruction": "Not bookable: the couple's notes come back on their own; Sage cards the reply.",
+     "question": "Are they in?"
+    },
+    {
+     "id": "delivery",
+     "label": "final delivery",
+     "due_offset_days": 56,
+     "hard": true,
+     "bookable": false,
+     "evidence": [
+      {
+       "source": "ledger",
+       "stage_min": "delivered"
+      },
+      {
+       "source": "exec",
+       "kinds": [
+        "email_send",
+        "hb_message"
+       ],
+       "words": [
+        "your film is ready",
+        "final film",
+        "delivered",
+        "gallery"
+       ]
+      }
+     ],
+     "book_instruction": "Draft the 'your film is ready' email with the gallery link as a send card (delivery-tracker skill).",
+     "question": "Has it gone out?"
+    }
+   ],
+   "default_amount": 5000
+  },
+  "lead": {
+   "title": "Lead",
+   "lane": "wedding",
+   "entity": "lead",
+   "anchor": "stage_moved_at",
+   "applies": {
+    "hb_status": [
+     "lead",
+     "lead_sent"
+    ],
+    "max_quiet_days": 45,
+    "stale_days": 60,
+    "skip_name_prefixes": [
+     "ZZ "
+    ]
+   },
+   "gates": [
+    {
+     "id": "reply",
+     "label": "the first reply",
+     "hb_min_order": 1,
+     "window_days": 1,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "followup",
+       "sop": "inquiry",
+       "step": "reply-sla",
+       "status": [
+        "done",
+        "dismissed"
+       ]
+      },
+      {
+       "source": "exec",
+       "kinds": [
+        "email_send",
+        "hb_message",
+        "imessage_send"
+       ]
+      }
+     ],
+     "book_instruction": "Draft the warm first reply with availability (inquiry-reply skill) as a send card.",
+     "question": "Has it gone out?"
+    },
+    {
+     "id": "call",
+     "label": "a call on the calendar",
+     "hb_min_order": 3,
+     "window_days": 7,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "calendar",
+       "match_entity": true,
+       "words": [
+        "call",
+        "meeting",
+        "zoom",
+        "consult"
+       ],
+       "within_days": [
+        0,
+        30
+       ]
+      },
+      {
+       "source": "chat",
+       "words": [
+        "call booked",
+        "we spoke",
+        "had the call",
+        "talked to"
+       ]
+      }
+     ],
+     "book_instruction": "Propose 2-3 call slots to the couple in a send card; put the hold on the calendar when they pick."
+    },
+    {
+     "id": "proposal",
+     "label": "the proposal",
+     "hb_min_order": 4,
+     "window_days": 7,
+     "bookable": true,
+     "evidence": [
+      {
+       "source": "followup",
+       "sop": "inquiry",
+       "step": "quote-followup-48h"
+      },
+      {
+       "source": "exec",
+       "kinds": [
+        "hb_proposal_draft",
+        "hb_message",
+        "email_send"
+       ],
+       "words": [
+        "proposal",
+        "collection",
+        "package"
+       ]
+      }
+     ],
+     "book_instruction": "Price the collection from the quiz answers and publish the proposal from HoneyBook (doer checkpoint before it goes out).",
+     "question": "Has it gone out?"
+    },
+    {
+     "id": "contract",
+     "label": "the signed contract",
+     "hb_min_order": 6,
+     "window_days": 14,
+     "bookable": false,
+     "evidence": [],
+     "book_instruction": "Not bookable: the couple signs. Sage drafts the follow-up (48 h, 7 d) as send cards.",
+     "question": "Has it come in?"
+    },
+    {
+     "id": "retainer",
+     "label": "the retainer",
+     "hb_min_order": 7,
+     "window_days": 7,
+     "bookable": false,
+     "evidence": [],
+     "book_instruction": "Not bookable: the retainer is paid by the couple. Sage drafts a gentle reminder as a send card.",
+     "question": "Has it been paid?"
+    }
+   ],
+   "default_amount": 5000
+  },
+  "money": {
+   "title": "Taxes",
+   "lane": "money",
+   "entity": "obligation",
+   "anchor": "due_date",
+   "applies": {
+    "horizon_days": 60
+   },
+   "schedule": {
+    "quarterly": {
+     "title": "Quarterly estimated tax",
+     "dates": [
+      "01-15",
+      "04-15",
+      "06-15",
+      "09-15"
+     ],
+     "amount_field": "quarterly_estimate",
+     "gates": [
+      {
+       "id": "bookkeeping",
+       "label": "the quarter's bookkeeping",
+       "due_offset_days": -21,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "bookkeeping"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "bookkeeping done",
+          "books are done",
+          "categorized the quarter",
+          "reconciled"
+         ]
+        },
+        {
+         "source": "followup",
+         "sop": "money",
+         "step": "quarterly-estimate",
+         "status": [
+          "done"
+         ]
+        }
+       ],
+       "book_instruction": "Run the money lane's categorize pass over the quarter and post the unknowns card.",
+       "question": "Is it done?"
+      },
+      {
+       "id": "estimate",
+       "label": "the estimated payment amount",
+       "due_offset_days": -10,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "estimate"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "estimate is",
+          "owe about",
+          "set aside",
+          "quarterly is"
+         ]
+        }
+       ],
+       "book_instruction": "Compute the running estimate (tax-return skill, estimate mode) and post it as a card.",
+       "question": "Is it done?"
+      },
+      {
+       "id": "payment",
+       "label": "the payment scheduled with IRS and FTB",
+       "due_offset_days": -3,
+       "hard": true,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "payment"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "scheduled the payment",
+          "paid the quarterly",
+          "eftps",
+          "ftb payment",
+          "paid irs"
+         ]
+        },
+        {
+         "source": "ticket",
+         "kinds": [
+          "email",
+          "mail"
+         ],
+         "words": [
+          "eftps",
+          "payment scheduled",
+          "franchise tax board",
+          "irs payment"
+         ],
+         "within_days": [
+          -30,
+          2
+         ]
+        }
+       ],
+       "book_instruction": "Not bookable: Sage never pays or enters credentials. owner1 schedules it on EFTPS and FTB Web Pay.",
+       "question": "Is it done?"
+      }
+     ]
+    },
+    "tax_season": {
+     "title": "Tax return",
+     "dates": [
+      "04-15"
+     ],
+     "gates": [
+      {
+       "id": "documents",
+       "label": "the year's documents gathered",
+       "due_offset_days": -60,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "documents"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "1099s are in",
+          "documents gathered",
+          "got the 1099",
+          "w-2 is in"
+         ]
+        }
+       ],
+       "book_instruction": "List every income source and deduction bucket from the money lane (tax-return skill, gather mode).",
+       "question": "Is it done?"
+      },
+      {
+       "id": "prepared",
+       "label": "the return prepared",
+       "due_offset_days": -14,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "prepared"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "return is done",
+          "prepared the return",
+          "olt",
+          "ready to file"
+         ]
+        }
+       ],
+       "book_instruction": "Prepare the federal + California return (tax-return skill) and hand back the packet.",
+       "question": "Is it done?"
+      },
+      {
+       "id": "filed",
+       "label": "the return filed",
+       "due_offset_days": 0,
+       "hard": true,
+       "bookable": false,
+       "evidence": [
+        {
+         "source": "register",
+         "register": "money",
+         "piece": "filed"
+        },
+        {
+         "source": "chat",
+         "words": [
+          "filed",
+          "e-filed",
+          "mailed the return",
+          "extension filed"
+         ]
+        },
+        {
+         "source": "ticket",
+         "kinds": [
+          "email",
+          "mail"
+         ],
+         "words": [
+          "return accepted",
+          "e-file accepted",
+          "irs accepted"
+         ],
+         "within_days": [
+          -30,
+          10
+         ]
+        }
+       ],
+       "book_instruction": "Not bookable: filing is owner1's own click.",
+       "question": "Is it done?"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

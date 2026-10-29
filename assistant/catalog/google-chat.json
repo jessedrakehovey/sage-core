@@ -1,0 +1,23 @@
+{
+ "id": "google-chat",
+ "name": "Google Chat",
+ "functions": ["team_chat"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage receives messages via Cloud Pub/Sub PULL (no public endpoint needed) using `assistant/agent/gchat.py` and sends messages and approval cards through the Chat API. Card button taps require a public HTTPS endpoint, today served by Tailscale Funnel to Mission Control at `/gchat/events`; a 'buttons off' fallback mode accepts approvals as typed words in the thread instead. Requires Google Workspace — a Chat app cannot be built on a consumer Gmail account. Setup runbook: `assistant/agent/GOOGLE_SETUP.md`.",
+   "reads": ["messages in spaces and DMs", "card button tap events", "thread history"],
+   "writes": ["messages in spaces and DMs", "approval cards with interactive buttons"],
+   "always_tap": ["any outbound message that initiates a consequential action (not a Sage reply)", "any deletion of a message"],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "Requires Google Workspace; a consumer Gmail account cannot host a Chat app.",
+  "Card button taps require a public HTTPS endpoint (Tailscale Funnel); without it use 'buttons off' mode where approvals are typed words.",
+  "All Chat messages from Sage must pass voice.py before being sent; system-internal cards go to Mission Control only, never to Chat.",
+  "Never post personal details or client PII into a team space visible to staff."
+ ],
+ "notes": "Google Chat is Sage's primary notification and approval channel; every outbound action card lands here before any consequential step is taken."
+}

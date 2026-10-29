@@ -1,0 +1,32 @@
+{
+ "id": "gmail",
+ "name": "Gmail",
+ "functions": ["mail", "lead_intake"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage reads Gmail via the Google API over OAuth (scopes gmail.readonly + calendar.events) using `assistant/agent/google_api.py`. The owner must complete the OAuth consent flow once; the refresh token is stored in the OS credential store. This path is strictly read-only and does not draft or send.",
+   "reads": ["inbox threads", "message headers and bodies", "labels", "drafts"],
+   "writes": [],
+   "always_tap": [],
+   "status": "built"
+  },
+  {
+   "tier": 2,
+   "path": "cli",
+   "how": "Sage also reads and appends drafts via IMAP using `assistant/scripts/mail.py`, with the app password stored in the OS credential store via `assistant/scripts/setup_creds.py`. The one and only send path is `assistant/scripts/email_send.py` (SMTP from an allow-listed identity). All send operations require an approval card before `email_send.py` is called; no other send path exists.",
+   "reads": ["inbox messages", "sent mail", "folders"],
+   "writes": ["drafts (appended via IMAP; never sent without approval)"],
+   "always_tap": ["any outbound email send", "any reply to a client or lead"],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "The ONLY send path is `assistant/scripts/email_send.py`; never route a send through any other mechanism.",
+  "Sends are restricted to an allow-listed set of identities configured in `email_send.py`; any from-address not on the list is refused.",
+  "The Google API path (`google_api.py`) is read-only and cannot draft or send.",
+  "App passwords require 2-step verification to be enabled on the Google account."
+ ],
+ "notes": "Gmail is the primary long-form correspondence channel; drafts may be created freely but sending always requires owner approval via `email_send.py`."
+}

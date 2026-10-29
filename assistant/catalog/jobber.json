@@ -1,0 +1,23 @@
+{
+ "id": "jobber",
+ "name": "Jobber",
+ "functions": ["crm", "scheduling_booking", "payments_invoicing"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Jobber via the official Jobber GraphQL API (OAuth 2.0) at developer.getjobber.com. The owner must create a Jobber App in the developer portal, complete the OAuth consent flow, and store the refresh token via setup_creds. Token refresh is automatic. Reads are free; writes require approval.",
+   "reads": ["clients", "jobs", "quotes", "invoices", "work schedule", "team members"],
+   "writes": ["job notes", "invoice sends", "quote updates"],
+   "always_tap": ["any invoice send to a client", "any job dispatch to a team member", "any payment collection"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Jobber's GraphQL API requires all query fields to be specified explicitly; there are no wildcard selectors.",
+  "OAuth refresh tokens expire; implement token rotation with a refresh-before-expiry strategy.",
+  "Jobber is designed for field-service businesses; some CRM and marketing features are less developed than in a general-purpose CRM.",
+  "Jobber's developer portal and API documentation are at developer.getjobber.com."
+ ],
+ "notes": "Jobber is a field-service management platform with strong scheduling and dispatch features; well-suited to trades and home-service businesses."
+}

@@ -1,0 +1,571 @@
+{
+ "_doc": "SOP follow-through map for assistant/scripts/followups.py. One entry per SOP with a `lane`; each step holds a TRIGGER (date | mail | manual) and an ACTION template with {var} placeholders. Date triggers may use offsets like T-14d / T+2h against the `anchor` var (or wedding_date / date). A fired step becomes an assistant TICKET (kind followup) that the operator turns into a card; nothing sends without the owner's tap. Turnaround/pricing language in instructions stays as [the owner: confirm] blanks: the assistant never commits to dates or prices.",
+ "version": 1,
+ "sops": {
+  "wedding-lifecycle": {
+   "title": "Booked wedding: prep -> shoot -> ingest -> edit -> deliver -> review",
+   "lane": "wedding",
+   "doc": "CLAUDE.md#Production Pipeline",
+   "steps": {
+    "finishing-touches": {
+     "_what": "T-60 days (two months out; one month is too soon): the Finishing Touches file (never 'add-ons': it has to sound upscale) goes to the couple in HoneyBook with the owner's email, prices hidden until checkout, followed by a text. the owner's standing rule 2026-10-17. The operator confirms which collection they booked, then client_texts.py sends it without a card.",
+     "subject": "{couple} ({wedding_date}) - Finishing Touches file (2 months out)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-60d"
+     },
+     "expires_at": "T-40d",
+     "action": {
+      "skill": "",
+      "instruction": "{couple}'s wedding is {wedding_date} (about two months out). owner1's standing rule: their Finishing Touches file (the touches their collection does NOT include: toasts & speeches film, aerial cinematography, second cinematographer, iPhone content creator, feature film, raw footage...) goes out now in HoneyBook with his email, prices hidden until checkout, followed by a text. Find which collection they booked and any touches already bought: the signed 'Videography Collection Details' / contract in their HoneyBook project (read-only), or the 'Package booked' line in Wiki/Couples/<date> <Lastname>.md. Then run: python assistant/scripts/client_texts.py touches --unit {unit} --package <keepsake|classic|signature|legacy> [--has drone,second_videographer ...] [--skip ...]. If you cannot tell which collection they booked, post ONE decision card asking owner1 (options: the four collections) and stage this ticket on it; on his answer run the command. TOUCHES_HELD means post ONE decision card with the printed reason. Never write the email or build the file yourself; never say 'add-ons' to a couple.",
+      "satisfied_when": {
+       "check": "touches_sent"
+      }
+     }
+    },
+    "timeline-request": {
+     "_what": "T-30 days: ask the couple for the day-of timeline, vendor list and must-have shots (the HoneyBook questionnaire may already cover it; check first).",
+     "subject": "{couple} ({wedding_date}) - request day-of timeline",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-30d"
+     },
+     "expires_at": "T-1d",
+     "action": {
+      "skill": "shoot-prep",
+      "instruction": "{couple}'s wedding is on {wedding_date} (30 days out). Check HoneyBook for their questionnaire/timeline. If it is missing or incomplete, draft a warm email (from the account their thread lives on) asking for the day-of timeline, ceremony + reception addresses, vendor list, and must-have shots. Post it as an exec card. If it is already in, note it and do nothing.",
+      "satisfied_when": {
+       "check": "timeline_on_file"
+      }
+     }
+    },
+    "questionnaire-reminder": {
+     "_what": "T-30 days: HoneyBook sent the Wedding Questionnaire at T-60 ('Questionnaire Sent' stage). If it is still blank, the standard reminder text goes out (the owner's standing rule 2026-10-17). The operator does the HoneyBook check; the words and the number are fixed.",
+     "subject": "{couple} ({wedding_date}) - questionnaire reminder text (30 days out)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-30d"
+     },
+     "expires_at": "T-22d",
+     "action": {
+      "skill": "",
+      "instruction": "{couple}'s wedding is {wedding_date} (30 days out). Check the Wedding Questionnaire in their HoneyBook project (read-only: the questionnaire smart file's responses / its status). If it has been filled out, `tickets.py done` this with a note saying so and do nothing else. If it is still blank or incomplete, run: python assistant/scripts/client_texts.py send questionnaire_reminder --unit {unit}  (the standard text, from owner1's phone, no card). If that prints CLIENT_TEXT_HELD, post ONE decision card for owner1 with the printed text and reason. Never write the text yourself.",
+      "satisfied_when": {
+       "check": "questionnaire_answered"
+      }
+     }
+    },
+    "questionnaire-reminder-2": {
+     "_what": "T-21 days: the last questionnaire nudge, three weeks out, so the prep packet at T-14 has their answers.",
+     "subject": "{couple} ({wedding_date}) - questionnaire reminder text (3 weeks out)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-21d"
+     },
+     "expires_at": "T-8d",
+     "action": {
+      "skill": "",
+      "instruction": "{couple}'s wedding is {wedding_date} (three weeks out). Check the Wedding Questionnaire in their HoneyBook project (read-only). If it has been filled out, `tickets.py done` this with a note saying so. If it is still blank or incomplete, run: python assistant/scripts/client_texts.py send questionnaire_reminder --unit {unit}  (the standard text from owner1's phone, no card; it refuses a second send inside 7 days). If that prints CLIENT_TEXT_HELD, post ONE decision card for owner1 with the printed text and reason. Never write the text yourself.",
+      "satisfied_when": {
+       "check": "questionnaire_answered"
+      }
+     }
+    },
+    "checkin-text": {
+     "_what": "T-14 days: the standard check-in text (sets up the check-in call) goes by itself, zero-LLM (followups -> client_texts.auto_fire). Only when it cannot go does this reach the operator.",
+     "subject": "{couple} ({wedding_date}) - check-in text (2 weeks out)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-14d"
+     },
+     "expires_at": "T-6d",
+     "action": {
+      "skill": "",
+      "auto": "client_texts:checkin",
+      "instruction": "{couple}'s wedding is {wedding_date} (two weeks out) and the standard check-in text could not be sent by itself (see the note at the front of this instruction, usually no phone number on file). Look for their number (HoneyBook contact, lead file, their last text to owner1), then post ONE card for owner1 with the number you found (or that none exists) and the text to send (python assistant/scripts/client_texts.py send checkin --unit {unit} --dry-run prints it). owner1 can add 'phone' to the ledger entry {unit} in scripts/projects/project_state.json so the rest of the chain can text them."
+     }
+    },
+    "prep-checkin": {
+     "_what": "T-14 days: the shoot-prep packet and the check-in email.",
+     "subject": "{couple} ({wedding_date}) - shoot prep + check-in",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-14d"
+     },
+     "expires_at": "T-1d",
+     "action": {
+      "skill": "shoot-prep",
+      "instruction": "Run the shoot-prep skill for {couple} ({wedding_date}): build the call sheet / run-of-show from the wiki couple note + HoneyBook, verify gear + backup plan, and draft the pre-shoot check-in email as an exec card. Never state a delivery date; leave [owner1: confirm] blanks.",
+      "satisfied_when": {
+       "check": "outbound_since",
+       "days": 7
+      }
+     }
+    },
+    "week-of-confirm": {
+     "_what": "T-3 days: final confirmation of times, addresses, parking and who is the on-site contact.",
+     "subject": "{couple} ({wedding_date}) - week-of confirmation",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-3d"
+     },
+     "expires_at": "T+0d",
+     "action": {
+      "skill": "shoot-prep",
+      "instruction": "Three days to {couple}'s wedding ({wedding_date}). Post ONE decision card with the final run-of-show summary (arrival time, ceremony time, addresses, on-site contact, parking, sunset time) and anything still unknown, with a recommended action for each gap.",
+      "satisfied_when": {
+       "check": "outbound_since",
+       "days": 3
+      }
+     }
+    },
+    "ingest-gate": {
+     "_what": "T+1: cards must be offloaded and hash-verified before anything is formatted. Recurs daily until the ingest report exists.",
+     "subject": "{couple} - footage ingested + verified?",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+1d"
+     },
+     "recur": {
+      "every_days": 1,
+      "count": 0,
+      "max": 5
+     },
+     "action": {
+      "skill": "card-ingest",
+      "instruction": "{couple}'s wedding was {wedding_date}. Find the INGEST REPORT.txt for this wedding (<storage drive>:/example-org Weddings/<wedding>/_Ingest Reports/, also D:/WeddingEditor/projects). If there is none, post a card reminding owner1 to run 'import my cards' (the footage is sacred: nothing gets formatted before two verified copies exist). Cancel this reminder ONLY when the report exists AND every card line reads 'verified copies: 2 -> card may be formatted' with no INCOMPLETE / NOT INGESTED / SAME DRIVE / ONE copy line; otherwise post a card naming the cards that are not safe yet. Cancel command: {cancel}."
+     }
+    },
+    "thank-you": {
+     "_what": "T+2: a short, personal thank-you / sneak-peek note. Draft only.",
+     "subject": "{couple} - day-after thank-you",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+2d"
+     },
+     "expires_at": "T+10d",
+     "action": {
+      "skill": "inquiry-reply",
+      "instruction": "Draft a short, warm thank-you email to {couple} for {wedding_date} in the example-org voice (no delivery date promised; say the edit is underway and owner1 will share a sneak peek when there is one). Post as an exec card from the account their thread lives on.",
+      "satisfied_when": {
+       "check": "outbound_since",
+       "since": "anchor"
+      }
+     }
+    },
+    "edit-start": {
+     "_what": "T+7: the edit should have a project by now.",
+     "subject": "{couple} - edit started?",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+7d"
+     },
+     "action": {
+      "skill": "wedding-edit",
+      "instruction": "One week after {couple}'s wedding: check D:/WeddingEditor/projects for a project + transcripts. If none, post a card recommending owner1 start the wedding-edit pipeline ('start {couple}'s wedding'). Update scripts/projects/project_state.json stage when the answer is known."
+     }
+    },
+    "delivery-check": {
+     "_what": "Delivery SLA checkpoint. Anchor = promised_delivery when known, else wedding_date + the default turnaround in config. Recurs weekly until delivered.",
+     "subject": "{couple} - delivery due {anchor}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-7d"
+     },
+     "recur": {
+      "every_days": 7,
+      "count": 0,
+      "max": 30
+     },
+     "action": {
+      "skill": "delivery-tracker",
+      "instruction": "{couple}'s film is due around {anchor} (from project_state / the default turnaround; owner1 confirms the real promise). Check the edit stage in scripts/projects/project_state.json and D:/WeddingEditor. Post ONE card: on track / at risk / overdue, with the recommended next step. When delivered, mark the project delivered and cancel this: {cancel}."
+     }
+    },
+    "review-request": {
+     "_what": "T+14 after delivery: ask for a review / referral. Armed by delivery-tracker when a project is marked delivered (anchor = delivered date).",
+     "subject": "{couple} - review request",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+14d"
+     },
+     "expires_at": "T+60d",
+     "action": {
+      "skill": "inquiry-reply",
+      "instruction": "{couple}'s film was delivered around {anchor}. Draft a short, grateful email asking for a Google / The Knot review and a referral, example-org voice, exec card from the account their thread lives on."
+     }
+    }
+   }
+  },
+  "inquiry": {
+   "title": "New inquiry: reply SLA -> quote follow-ups",
+   "lane": "wedding",
+   "doc": ".claude/skills/inquiry-reply/SKILL.md",
+   "steps": {
+    "reply-sla": {
+     "_what": "Armed when a new inquiry is sensed. If nothing has gone out within 2 h, escalate.",
+     "subject": "{couple} - inquiry unanswered 2h",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+2h"
+     },
+     "expires_at": "T+3d",
+     "action": {
+      "skill": "inquiry-reply",
+      "instruction": "{couple} inquired at {anchor} and no reply has been carded yet. Read the inquiry (HoneyBook / the mail ticket), draft the reply with the inquiry-reply skill and post it as an exec card. Availability and pricing stay as [owner1: confirm] blanks."
+     }
+    },
+    "quote-followup-48h": {
+     "_what": "Armed when a proposal is sent. Two days later, if unsigned, nudge.",
+     "subject": "{couple} - proposal follow-up (48h)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+2d"
+     },
+     "expires_at": "T+6d",
+     "action": {
+      "skill": "inquiry-reply",
+      "instruction": "A proposal went to {couple} on {anchor}. If HoneyBook still shows it unsigned, draft a light, no-pressure follow-up (any questions? happy to hop on a call) as an exec card. If signed, note it and do nothing."
+     }
+    },
+    "quote-followup-7d": {
+     "_what": "One week after the proposal: last nudge, then let it go.",
+     "subject": "{couple} - proposal follow-up (7d)",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+7d"
+     },
+     "expires_at": "T+14d",
+     "action": {
+      "skill": "inquiry-reply",
+      "instruction": "One week since the proposal to {couple} ({anchor}). If still unsigned, draft a final friendly check-in that leaves the door open, as an exec card. Then let it rest; the cold-leads digest will carry it."
+     }
+    }
+   }
+  },
+  "money": {
+   "title": "Bills, renewals, quarterlies (track and remind; never pay)",
+   "lane": "money",
+   "doc": "CLAUDE.md#money lane",
+   "steps": {
+    "bill-due": {
+     "_what": "Armed from a bill/statement email with a due date (mail_arm) or from the bank feed's recurring-charge forecast (scripts/money/forecast.py). Reminds 3 days before and on the day.",
+     "subject": "{what} due {anchor}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-3d"
+     },
+     "recur": {
+      "every_days": 3,
+      "count": 0,
+      "max": 2
+     },
+     "action": {
+      "skill": "",
+      "instruction": "{what} is due {anchor} ({amount}). Post ONE card reminding owner1 to pay it himself (the assistant never pays or enters credentials). If it is on autopay, say so and recommend Skip."
+     }
+    },
+    "quarterly-estimate": {
+     "_what": "Federal/CA estimated tax checkpoints. Armed by scripts/money/quarterly.py for the next due date (T-10d); the computed amount is in assistant/data/money/quarterly.json.",
+     "subject": "Estimated tax payment due {anchor}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-10d"
+     },
+     "action": {
+      "skill": "tax-return",
+      "instruction": "Estimated tax payment is due {anchor}; the money lane's running estimate says {amount} (federal + CA; assistant/data/money/quarterly.json has the breakdown and the YTD Schedule C). Post ONE card with that amount and the two pay links (IRS Direct Pay, FTB Web Pay); owner1 pays himself, never the assistant. If quarterly.json is missing or stale, say so and give the YTD profit instead."
+     }
+    },
+    "renewal": {
+     "_what": "Insurance / registration / subscription renewals. Armed from a renewal email or by hand.",
+     "subject": "{what} renews {anchor}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T-14d"
+     },
+     "action": {
+      "skill": "",
+      "instruction": "{what} renews on {anchor}. Post a card: keep as-is (Recommended if unchanged), shop it, or cancel; include last year's price if known."
+     }
+    }
+   }
+  },
+  "home": {
+   "title": "Home maintenance and deliveries",
+   "lane": "home",
+   "doc": "",
+   "steps": {
+    "delivery-arriving": {
+     "_what": "Armed from a shipped notification; fires on the expected day.",
+     "subject": "Delivery arriving: {what}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+0d"
+     },
+     "expires_at": "T+3d",
+     "action": {
+      "skill": "",
+      "instruction": "{what} is expected {anchor}. FYI note only unless a signature or someone home is required; then post a card."
+     }
+    },
+    "maintenance": {
+     "_what": "Recurring home tasks (HVAC filter, smoke detectors, camera/NAS backups). Armed by hand with every_days.",
+     "subject": "Home: {what}",
+     "trigger": {
+      "type": "date"
+     },
+     "recur": {
+      "every_days": 90,
+      "count": 0,
+      "max": 40
+     },
+     "action": {
+      "skill": "",
+      "instruction": "Recurring home task: {what}. Post ONE card (Done / Snooze a week (Recommended if busy) / Stop reminding). Cancel with {cancel} if owner1 says stop."
+     }
+    }
+   }
+  },
+  "personal": {
+   "title": "Personal reminders",
+   "lane": "personal",
+   "doc": "",
+   "steps": {
+    "reminder": {
+     "_what": "A one-shot reminder: arm with --var what=... --var anchor=YYYY-MM-DD.",
+     "subject": "Reminder: {what}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+0d"
+     },
+     "action": {
+      "skill": "",
+      "instruction": "Reminder for owner1: {what} ({anchor}). Post a card with Done / Snooze options."
+     }
+    },
+    "awaiting-reply": {
+     "_what": "Armed after the owner sends someone an email he needs an answer to; fires when their reply arrives OR after N days of silence.",
+     "subject": "Waiting on {who}: {what}",
+     "trigger": {
+      "type": "mail",
+      "from_contains": [
+       "{who_email}"
+      ]
+     },
+     "expires_at": "T+14d",
+     "action": {
+      "skill": "",
+      "instruction": "{who} replied about {what} (see the evidence mail ticket). Bring it to the front of the queue: summarise and post a card if a decision is needed."
+     }
+    }
+   }
+  },
+  "owner6": {
+   "title": "owner6's dates and heads-ups",
+   "lane": "owner6",
+   "doc": "assistant/prompts/operator.md (owner6's lane)",
+   "steps": {
+    "heads-up": {
+     "_what": "Armed by the operator when one of owner's texts mentions a future date: --var what=... --var anchor=<heads-up date>.",
+     "subject": "Heads-up: {what}",
+     "trigger": {
+      "type": "date",
+      "fire_at": "T+0d"
+     },
+     "action": {
+      "skill": "",
+      "instruction": "Heads-up for owner6: {what} (heads-up date {anchor}). Post ONE calm card in lane owner6: what is coming, what she needs to do now (buy a gift, RSVP, book a sitter...), options Done / Remind me in 3 days (Recommended if nothing is due yet) / Not needed."
+     }
+    }
+   }
+  }
+ },
+ "inputs": {
+  "_doc": "triage_next.py (2026-10-18): every client input leads to its next action. `facts` = the words that mean a fact is in the message (regex, case-insensitive, matched against the message plus the sender's two previous texts). `actions` = what each fact leads to, in order; gate auto = code does it now, card = code posts the exec card (the owner's tap runs it), operator = left for the drafter. `needs` names what the step requires (a HoneyBook workspace, a ledger unit); without it the step is skipped or handed to the operator. Business words live here, not in code.",
+  "facts": {
+   "copy_on_everything": {
+    "any": [
+     "\\b(copy|cc|include|loop in)\\b.{0,40}\\b(everything|all (the |of the )?(emails|messages|reminders)|every (email|message|reminder))",
+     "\\b(wants?|would like) to be (emailed|cc'?d|copied|included) (on|in)\\b"
+    ]
+   },
+   "questionnaire_done": {
+    "any": [
+     "\\b(filled (out|in)|completed|finished|submitted|done with|sent (in|back|over))\\b.{0,40}\\b(questionnaire|quiz|form)",
+     "\\b(questionnaire|quiz|form)\\b.{0,30}\\b(is )?(done|complete|completed|filled|submitted|in)\\b"
+    ]
+   },
+   "lost": {
+    "any": [
+     "\\b(went|going|go|decided|chose|chosen) (with |in |to go with |on )?(another|a different|someone else|other)\\b",
+     "\\b(another|different) (direction|videographer|vendor|company|route)\\b",
+     "\\bno longer (need|looking|interested)\\b",
+     "\\bwon'?t be (moving forward|booking|needing)\\b",
+     "\\bdecided not to\\b"
+    ]
+   },
+   "date_change": {
+    "any": [
+     "\\b(moved|moving|changed|changing|pushed|push|postpon\\w+|reschedul\\w+|new date)\\b.{0,30}\\b(wedding|date|day)\\b",
+     "\\b(wedding|date) (is now|has moved|changed)\\b"
+    ]
+   },
+   "venue_change": {
+    "any": [
+     "\\b(new|different|changed|changing|switched) venue\\b",
+     "\\bvenue (is now|has changed|changed)\\b"
+    ]
+   },
+   "file_received": {
+    "any": [
+     "\\b(attached|attaching|here(?:'s| is) (?:the|our) (?:timeline|schedule|vendor list|shot list|song list|address(?:es)?))\\b",
+     "\\b(sent|sending|filled in|wrote up) (?:you |over )?(?:the |our )?(?:timeline|schedule|vendor list|shot list|song list)\\b",
+     "\\b(timeline|schedule|vendor list|shot list|song list)\\b.{0,30}\\b(attached|below|is in|sent over|done)\\b"
+    ]
+   },
+   "yes_to_proposal": {
+    "any": [
+     "\\b(we(?:'d| would) (?:love|like) to (?:book|move forward|go ahead|lock (?:it|you) in))\\b",
+     "\\b(let'?s (?:do it|book it|move forward|lock it in)|we'?re in|count us in|ready to (?:book|sign|move forward))\\b",
+     "\\b(we (?:want|would like) to go with you|you'?re hired|book us)\\b"
+    ]
+   }
+  },
+  "actions": {
+   "contact": [
+    {
+     "do": "hb_add_participant",
+     "gate": "card",
+     "needs": "workspace",
+     "detail": "add them to the couple's HoneyBook project (HoneyBook mails them the invite; every message and file then reaches them)"
+    },
+    {
+     "do": "also_notify",
+     "gate": "auto",
+     "needs": "unit",
+     "detail": "copy them on every email-type send (ledger also_notify)"
+    },
+    {
+     "do": "couple_page",
+     "gate": "auto",
+     "needs": "unit",
+     "detail": "their details on the couple's wedding page"
+    }
+   ],
+   "copy_on_everything": [
+    {
+     "do": "hb_add_participant",
+     "gate": "card",
+     "needs": "workspace",
+     "detail": "copy on everything = a participant on the HoneyBook project"
+    },
+    {
+     "do": "also_notify",
+     "gate": "auto",
+     "needs": "unit",
+     "detail": "ledger also_notify"
+    }
+   ],
+   "questionnaire_done": [
+    {
+     "do": "followups_close",
+     "gate": "auto",
+     "needs": "unit",
+     "steps": "questionnaire-reminder",
+     "why": "they said the questionnaire is done"
+    },
+    {
+     "do": "hb_note",
+     "gate": "auto",
+     "needs": "workspace"
+    },
+    {
+     "do": "couple_page",
+     "gate": "auto",
+     "needs": "unit"
+    }
+   ],
+   "lost": [
+    {
+     "do": "hb_set_stage",
+     "gate": "card",
+     "needs": "workspace",
+     "reason": "went another direction",
+     "detail": "archive the project in HoneyBook as lost"
+    },
+    {
+     "do": "followups_stop",
+     "gate": "auto",
+     "why": "went another direction"
+    },
+    {
+     "do": "hb_note",
+     "gate": "auto",
+     "needs": "workspace"
+    },
+    {
+     "do": "couple_page",
+     "gate": "auto",
+     "needs": "unit"
+    }
+   ],
+   "date_change": [
+    {
+     "do": "hb_project_update",
+     "gate": "operator",
+     "detail": "the wedding date moved: confirm the new date with them, then an hb_project_update card (project_date) + the ledger wedding_date + re-arm the chain + the calendar hold"
+    }
+   ],
+   "venue_change": [
+    {
+     "do": "hb_project_update",
+     "gate": "operator",
+     "detail": "new venue: hb_project_update card (project_location) + the couple page + the venue note"
+    }
+   ],
+   "reply": [
+    {
+     "do": "reply_draft",
+     "gate": "operator",
+     "detail": "the reply, as an exec card, naming what code already did with their message"
+    }
+   ],
+   "file_received": [
+    {
+     "do": "followups_close",
+     "gate": "auto",
+     "needs": "unit",
+     "steps": "timeline-request",
+     "why": "they sent the timeline / list"
+    },
+    {
+     "do": "hb_note",
+     "gate": "auto",
+     "needs": "workspace"
+    },
+    {
+     "do": "couple_page",
+     "gate": "auto",
+     "needs": "unit"
+    }
+   ],
+   "yes_to_proposal": [
+    {
+     "do": "hb_note",
+     "gate": "auto",
+     "needs": "workspace",
+     "detail": "note the yes on the project; the proposal / contract step is the operator's reply"
+    },
+    {
+     "do": "followups_close",
+     "gate": "auto",
+     "needs": "unit",
+     "steps": "quote-followup",
+     "why": "they said yes"
+    }
+   ]
+  }
+ },
+ "_doc_preconditions": "WP3 2026-10-24: a step's action.satisfied_when = {check, ...} is read by assistant/scripts/preconditions.py before the step fires: satisfied = done by record (no ticket, no text), moot = dismissed, open/unknown = fires with what was read as evidence. Checks: questionnaire_answered, timeline_on_file, outbound_since {days|since: anchor}, touches_sent."
+}

@@ -1,0 +1,23 @@
+{
+ "id": "quickbooks",
+ "name": "QuickBooks Online",
+ "functions": ["accounting", "payments_invoicing"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to QuickBooks Online via the Intuit Developer API (OAuth 2.0). The owner must create an app at developer.intuit.com, complete the OAuth consent flow to obtain a refresh token, and store it in the credential store. Token refresh is automatic. Reads are free; writes (invoices, journal entries) require an approval card.",
+   "reads": ["profit and loss reports", "invoices", "customers", "transactions", "account balances", "payment history"],
+   "writes": ["invoices", "customer records", "journal entries"],
+   "always_tap": ["any invoice send to a client", "any journal entry or ledger edit", "any payment application", "any customer record deletion"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "OAuth refresh tokens expire if not used within 100 days; schedule a keep-alive read to prevent token expiry.",
+  "QuickBooks uses a minor-version API header that can change response shapes; pin to a known minor version in all requests.",
+  "The Intuit sandbox environment uses entirely separate credentials from the production environment.",
+  "The Intuit Developer app must be moved from development to production mode before it can access a real QuickBooks company."
+ ],
+ "notes": "QuickBooks is the accounting source of truth; Sage reads financial data for cash-flow visibility and drafts invoices but never modifies the ledger without approval."
+}

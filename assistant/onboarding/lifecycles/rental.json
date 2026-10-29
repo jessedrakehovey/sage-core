@@ -1,0 +1,120 @@
+{
+ "id": "rental",
+ "name": "Rental",
+ "_doc": "A lifecycle skeleton defines the ordered stages of a renter journey for this business type. Each stage here is a scaffold only. During onboarding the owner must fill in six fields per stage: trigger (the event that starts this stage), actor (Sage, owner, or client), channel (which tool or surface handles it), template (which message or document template to use), clock (how long after the trigger before Sage flags a stall), and verifier (how Sage confirms the stage is complete). None of those fields are pre-filled here; they are set during the onboarding conversation and stored in the org's lifecycle config.",
+ "fits": "Businesses that rent assets for a fixed period — equipment rental, vacation rentals, event venue hire, studio rentals, and similar time-bound asset lending.",
+ "stages": [
+  {
+   "id": "inquiry",
+   "name": "Inquiry",
+   "what": "A potential renter asks about availability and rates.",
+   "typical_trigger": "Website contact form, email, or phone call",
+   "typical_channel": "lead_intake or mail"
+  },
+  {
+   "id": "check-availability",
+   "name": "Availability Check",
+   "what": "Sage checks the calendar for conflicts and confirms whether the requested dates are open.",
+   "typical_trigger": "Inquiry with specific dates received",
+   "typical_channel": "calendar + crm"
+  },
+  {
+   "id": "quote",
+   "name": "Quote",
+   "what": "Sage drafts a quote with pricing and rental terms; the owner reviews and approves before it is sent.",
+   "typical_trigger": "Dates confirmed as available",
+   "typical_channel": "mail + payments_invoicing"
+  },
+  {
+   "id": "reserve",
+   "name": "Reservation and Deposit",
+   "what": "The renter accepts the quote, signs the rental agreement, and pays the deposit.",
+   "typical_trigger": "Owner taps approval on the quote send card",
+   "typical_channel": "contracts_esign + payments_invoicing + calendar"
+  },
+  {
+   "id": "pre-rental",
+   "name": "Pre-Rental Prep",
+   "what": "Sage sends pickup or check-in instructions and confirms the rental details with the renter.",
+   "typical_trigger": "T-2 days before rental start",
+   "typical_channel": "mail or text_phone"
+  },
+  {
+   "id": "rental-period",
+   "name": "Active Rental",
+   "what": "The asset is in the renter's possession; Sage monitors for any mid-rental communications or issues.",
+   "typical_trigger": "Rental start date reached",
+   "typical_channel": "crm"
+  },
+  {
+   "id": "return",
+   "name": "Return and Check-Out",
+   "what": "The asset is returned or checked out; any damage or overage is logged before financial settlement.",
+   "typical_trigger": "Rental end date reached or renter check-out confirmation received",
+   "typical_channel": "crm + text_phone"
+  },
+  {
+   "id": "deposit-release",
+   "name": "Deposit Release and Final Invoice",
+   "what": "The deposit is released or final charges are invoiced; the owner always approves before any financial action.",
+   "typical_trigger": "Return logged and condition inspection complete",
+   "typical_channel": "payments_invoicing + mail"
+  },
+  {
+   "id": "re-engage",
+   "name": "Re-engagement",
+   "what": "Sage drafts a repeat-booking prompt for the owner to approve and send.",
+   "typical_trigger": "T+30 days after return or approaching the same rental window next season",
+   "typical_channel": "mail or crm"
+  }
+ ],
+ "wiki": {
+  "_doc": "The first custom wiki vocabulary for this business type (agent/schema_growth.py seed): a page type per core noun the stages act on, with the owner's likely words for it; tags from the stage names; the folder each type routes to. Written into Schema/schema.md once, after Discovery and Training.",
+  "types": [
+   {
+    "type": "rental-item",
+    "what": "One note per thing that is rented out: what it is, its condition, upkeep, its rental history.",
+    "words": [
+     "unit",
+     "equipment",
+     "item",
+     "fleet"
+    ]
+   },
+   {
+    "type": "reservation",
+    "what": "One note per reservation: the dates, the deposit, what was promised, how it was returned.",
+    "words": [
+     "rental",
+     "hire",
+     "booking"
+    ]
+   },
+   {
+    "type": "inspection",
+    "what": "One note per check-out or return inspection: the condition found, photos, any damage claim.",
+    "words": [
+     "check-out",
+     "condition-report",
+     "return-check"
+    ]
+   }
+  ],
+  "tags": [
+   "inquiry",
+   "availability",
+   "quote",
+   "reservation",
+   "pre-rental",
+   "active-rental",
+   "return",
+   "deposit-release",
+   "re-engage"
+  ],
+  "folders": {
+   "rental-item": "Rental Items",
+   "reservation": "Reservations",
+   "inspection": "Inspections"
+  }
+ }
+}

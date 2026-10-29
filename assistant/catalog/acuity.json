@@ -1,0 +1,23 @@
+{
+ "id": "acuity",
+ "name": "Acuity Scheduling",
+ "functions": ["scheduling_booking", "calendar"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Acuity via the Acuity Scheduling API v1 using HTTP Basic Auth (User ID and API Key) or OAuth 2.0. The owner must find their API credentials in Acuity Settings > Integrations > API and store them via setup_creds. New appointments can push to Sage via Acuity webhook, which requires a public HTTPS endpoint.",
+   "reads": ["appointments", "appointment types", "availability slots", "client records", "calendar blocks"],
+   "writes": ["appointment cancellations (owner-initiated)", "calendar blocks"],
+   "always_tap": ["any cancellation of a client appointment", "any new booking created on behalf of a client"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Acuity is now part of Squarespace; the API endpoint and branding may change over time — check developer docs for the current base URL.",
+  "Acuity webhooks for new appointments require a public HTTPS endpoint; use Tailscale Funnel or a VPS.",
+  "Cancellations via the API automatically send notification emails to the client; always require an approval tap before canceling.",
+  "OAuth 2.0 is available on higher-tier plans; verify the subscription tier before building OAuth flows."
+ ],
+ "notes": "Acuity is a lightweight self-serve scheduling tool; the owner configures availability and appointment types, and Sage reads new bookings to fire intake flows."
+}

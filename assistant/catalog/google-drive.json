@@ -1,0 +1,32 @@
+{
+ "id": "google-drive",
+ "name": "Google Drive",
+ "functions": ["file_storage"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "New Drive documents from the owner's accounts are pulled hourly into `Raw/Drive/` by `scripts/drive_ingest/`, then promoted to wiki notes via wiki-ingest. The owner must authorize the Drive API scope in the OAuth consent flow and keep the scheduled Drive ingest task running. The ingest is read-only and append-only to `Raw/Drive/`.",
+   "reads": ["new and recently modified documents", "shared files", "folder listings"],
+   "writes": ["nothing; Drive ingest is strictly read-only"],
+   "always_tap": ["any file upload or share initiated on behalf of the owner"],
+   "status": "built"
+  },
+  {
+   "tier": 4,
+   "path": "browser",
+   "how": "For uploads, share-permission changes, or anything the API cannot do headlessly, Sage drives Drive in a signed-in Playwright browser. The owner must confirm the browser profile is logged into the correct Google account before the task runs.",
+   "reads": ["anything visible in the Drive web UI"],
+   "writes": ["uploads", "folder moves", "share permission grants or revocations"],
+   "always_tap": ["any share or permission change", "any file deletion", "any upload of client materials"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Drive ingest is append-only into `Raw/Drive/`; never edit or delete raw source files.",
+  "The hourly ingest may lag up to 60 minutes; do not rely on it for real-time document availability.",
+  "Sharing or uploading client files always requires explicit owner approval.",
+  "The Drive API scope must be added to the existing OAuth token; re-consent may be required."
+ ],
+ "notes": "Google Drive is a read-only source for the wiki knowledge base; the hourly ingest pipeline in `scripts/drive_ingest/` handles promotion to wiki notes."
+}

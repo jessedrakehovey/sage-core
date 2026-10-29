@@ -1,0 +1,30 @@
+{
+ "_doc": "How much the doer may do on its own. Tier A: read or trivially reversible -> just do it and report. Tier B: a reversible write (a setting, a note, a reminder on a site) -> do it, then report with a screenshot. Tier C: irreversible, outward, money or identity -> fill everything, screenshot the review page, STOP and post a checkpoint card; an owner's tap on the card runs the final step. Patterns are case-insensitive regexes; a hit on either list makes the step tier C. `never` is refused outright.",
+ "checkpoint_hosts": [
+  "\\.gov$", "\\.gov\\.", "dmv\\.", "irs\\.", "ftb\\.ca", "ssa\\.", "uscis\\.", "edd\\.ca",
+  "bank", "chase\\.com", "wellsfargo", "bofa", "bankofamerica", "capitalone", "citi\\.com", "usbank", "schwab", "fidelity", "vanguard", "robinhood", "coinbase",
+  "paypal", "venmo", "zelle", "cash\\.app", "stripe\\.com", "square",
+  "amazon\\.com", "ebay", "walmart", "target\\.com", "bestbuy", "apple\\.com/shop", "checkout",
+  "godaddy", "namecheap", "cloudflare", "squarespace", "wix", "vercel",
+  "honeybook", "accounts\\.google\\.com", "myaccount\\.google", "id\\.apple", "login\\.microsoftonline"
+ ],
+ "checkpoint_actions": [
+  "\\b(submit|place|complete|confirm|finalize|file)\\b.{0,30}\\b(order|application|request|payment|filing|renewal|change|transfer|claim|return)\\b",
+  "\\b(pay|purchase|buy|checkout|donate|tip|wire|transfer|withdraw|deposit)\\b",
+  "\\b(change|update|edit)\\b.{0,30}\\b(address|phone|email|name|password|beneficiar|routing|account number|ssn|license)\\b",
+  "\\b(cancel|close|terminate|unsubscribe|downgrade|upgrade)\\b.{0,30}\\b(account|plan|subscription|service|policy)\\b",
+  "\\b(delete|remove|deactivate|disable|revoke)\\b",
+  "\\b(send|post|publish|reply|message|share|invite|tweet|comment)\\b",
+  "\\b(sign|e-?sign|accept|agree)\\b.{0,30}\\b(contract|agreement|terms|lease|waiver)\\b",
+  "\\b(book|reserve|schedule|rsvp)\\b.{0,30}\\b(appointment|flight|hotel|table|room|car|ticket)\\b"
+ ],
+ "never": [
+  "\\b(change|reset|update)\\b.{0,20}\\bpassword\\b",
+  "\\b(disable|turn off|remove)\\b.{0,20}\\b(2fa|two.?factor|two.?step|mfa)\\b",
+  "\\b(delete|close)\\b.{0,20}\\baccount\\b",
+  "\\b(crypto|bitcoin|ethereum|stock|shares|options)\\b.{0,20}\\b(buy|sell|trade|swap)\\b",
+  "example|example|example"
+ ],
+ "quiet_hours": [21, 7],
+ "max_minutes": 15
+}

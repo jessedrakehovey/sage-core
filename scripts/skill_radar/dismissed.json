@@ -1,0 +1,4 @@
+{
+  "_doc": "Dismissals for Skill Radar. When the owner skips a proposed new skill (in morning-ops or by hand), append its key here so detect.py stops re-surfacing it. Format: { \"<sr-key>\": { \"label\": \"...\", \"date\": \"YYYY-MM-DD\", \"reason\": \"...\" } }. ALWAYS include the date: a dated dismissal expires after DISMISS_EXPIRY_DAYS (~120d, set in detect.py) so a once-rejected idea can re-surface if it later becomes relevant. An undated entry is treated as a permanent never-again.",
+  "dismissed": {}
+}

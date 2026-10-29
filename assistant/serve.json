@@ -1,0 +1,18 @@
+{
+ "_doc": "The supervisor's schedule (assistant/sage.py serve): the jobs that used to be separate scheduled tasks, each on its own cadence. every_min or at (HH:MM once a day); window [start_hour, end_hour] in local time (decimals allowed); windows_only for the PowerShell wrappers; even_paused runs while `sage pause` holds the rest; expect = a last-line prefix a clean run must print; builtin = done inside sage.py. `python` is the interpreter running serve. The zero-LLM spine (assistant/spine_jobs.json) keeps its own job list; serve only fires it.",
+ "jobs": [
+  {"name": "spine", "every_min": 10, "cmd": ["python", "assistant/scripts/spine.py"], "timeout_s": 1200, "expect": "SPINE"},
+  {"name": "spine-long", "every_min": 10, "cmd": ["python", "assistant/scripts/spine.py", "--group", "long"], "timeout_s": 1200, "expect": "SPINE"},
+  {"name": "probe", "every_min": 1, "window": [7, 21.5], "cmd": ["python", "assistant/scripts/comms_probe.py"], "timeout_s": 120},
+  {"name": "deadman", "every_min": 30, "cmd": ["python", "assistant/scripts/deadman.py"], "timeout_s": 180, "even_paused": true, "expect": "RESULT DEADMAN"},
+  {"name": "mission-control", "every_min": 1, "builtin": "mc_keepalive", "even_paused": true},
+  {"name": "operator-tick", "every_min": 30, "window": [7.75, 21.75], "cmd": ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "assistant/scripts/operator_cron.ps1"], "timeout_s": 1500, "windows_only": true},
+  {"name": "operator-morning", "at": "07:15", "cmd": ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "assistant/scripts/operator_cron.ps1", "-Morning"], "timeout_s": 1500, "windows_only": true},
+  {"name": "dreaming", "at": "06:30", "cmd": ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", "scripts/dream_cron.ps1"], "timeout_s": 3600, "windows_only": true},
+  {"name": "habits", "every_min": 1440, "window": [9, 20], "cmd": ["python", "assistant/scripts/habits.py", "tick"], "timeout_s": 300, "expect": "HABITS"},
+  {"name": "coverage", "every_min": 1440, "window": [9, 20], "cmd": ["python", "assistant/onboarding.py", "coverage", "--quiet"], "timeout_s": 120, "expect": "COVERAGE"},
+  {"name": "relay-poll", "every_min": 1, "cmd": ["python", "assistant/scripts/relay_poll.py", "--seconds", "50"], "timeout_s": 58, "expect": "RELAY_POLL", "_what": "card taps and dialogs fetched from the Apps Script relay's web app (pull mode, no Tailscale); exits at once without relay_webapp_url in gchat.local.json"},
+  {"name": "core-sync", "every_min": 30, "cmd": ["python", "assistant/core_sync.py", "run"], "timeout_s": 600, "expect": "CORE_SYNC"},
+  {"name": "engine-update", "every_min": 1440, "window": [3, 5], "cmd": ["python", "assistant/updater.py", "run"], "timeout_s": 1800, "expect": "UPDATER", "_what": "once a night: a newer engine release (org.json engine_release_url) is downloaded, sha-checked, gated in a staging folder (compile, doctor, the engine's own tests) and applied with engine.update; pack files never touched; the previous engine kept for `sage rollback`; serve restarts itself after (assistant/data/.sage_restart). Exits UPDATER skipped where no release URL is set"}
+ ]
+}

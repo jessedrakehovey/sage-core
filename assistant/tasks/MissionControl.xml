@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <URI>\example Mission Control (assistant)</URI>
+    <Description>Personal-OS Mission Control page + card answering on 127.0.0.1:9019 (reached via Tailscale Serve). Zero LLM. Restarts at logon.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <!-- keepalive: every 10 min; mc_server.ps1 exits at once when :9019 already answers.
+         (A LogonTrigger is refused by schtasks from the desktop session, so this doubles as the
+         logon start: the first repetition after boot brings the server up.) -->
+    <CalendarTrigger>
+      <StartBoundary>2026-09-30T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+      <Repetition>
+        <Interval>PT10M</Interval>
+        <Duration>P1D</Duration>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{{USER_SID}}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>10</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>wscript.exe</Command>
+      <Arguments>//B //Nologo "{{ORG_ROOT}}\scripts\lib\run_hidden.vbs" -NoProfile -ExecutionPolicy Bypass -File "{{ORG_ROOT}}\assistant\scripts\mc_server.ps1"</Arguments>
+      <WorkingDirectory>{{ORG_ROOT}}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

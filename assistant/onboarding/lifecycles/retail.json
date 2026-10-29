@@ -1,0 +1,113 @@
+{
+ "id": "retail",
+ "name": "Retail",
+ "_doc": "A lifecycle skeleton defines the ordered stages of a customer journey for this business type. Each stage here is a scaffold only. During onboarding the owner must fill in six fields per stage: trigger (the event that starts this stage), actor (Sage, owner, or client), channel (which tool or surface handles it), template (which message or document template to use), clock (how long after the trigger before Sage flags a stall), and verifier (how Sage confirms the stage is complete). None of those fields are pre-filled here; they are set during the onboarding conversation and stored in the org's lifecycle config.",
+ "fits": "Product-based businesses selling physical or digital goods online or in-person, including e-commerce stores, boutiques, and makers.",
+ "stages": [
+  {
+   "id": "browse",
+   "name": "Browse and Discovery",
+   "what": "A potential customer discovers the store via search, social, or referral.",
+   "typical_trigger": "Website visit or social engagement tracked via analytics or pixel",
+   "typical_channel": "social or website-form"
+  },
+  {
+   "id": "add-to-cart",
+   "name": "Add to Cart",
+   "what": "The customer shows purchase intent by adding items to their cart or wishlist.",
+   "typical_trigger": "Cart event fired by the e-commerce platform",
+   "typical_channel": "crm or payments_invoicing tool"
+  },
+  {
+   "id": "checkout",
+   "name": "Checkout",
+   "what": "The customer completes the purchase or abandons the cart; abandoned carts trigger a recovery flow.",
+   "typical_trigger": "Order created or checkout abandoned in the e-commerce platform",
+   "typical_channel": "payments_invoicing + mail"
+  },
+  {
+   "id": "fulfill",
+   "name": "Fulfillment",
+   "what": "The order is picked, packed, and prepared for shipment or in-store pickup.",
+   "typical_trigger": "Order confirmed and payment captured",
+   "typical_channel": "crm or team_chat"
+  },
+  {
+   "id": "ship",
+   "name": "Ship or Dispatch",
+   "what": "The order is shipped or ready for pickup; tracking information is sent to the customer.",
+   "typical_trigger": "Shipping label created or pickup notification generated",
+   "typical_channel": "mail or text_phone"
+  },
+  {
+   "id": "deliver",
+   "name": "Delivery Confirmed",
+   "what": "The carrier confirms delivery or the customer collects the order.",
+   "typical_trigger": "Carrier tracking event or pickup confirmation",
+   "typical_channel": "mail or crm"
+  },
+  {
+   "id": "return-support",
+   "name": "Return and Support",
+   "what": "The customer raises a return, exchange, or support request.",
+   "typical_trigger": "Customer email or return request submitted in the e-commerce platform",
+   "typical_channel": "mail or crm"
+  },
+  {
+   "id": "re-engage",
+   "name": "Re-engagement",
+   "what": "Sage drafts a repeat-purchase prompt or upsell message for the owner to approve and send.",
+   "typical_trigger": "T+30 days after last purchase or an upcoming seasonal trigger",
+   "typical_channel": "mail or automation"
+  }
+ ],
+ "wiki": {
+  "_doc": "The first custom wiki vocabulary for this business type (agent/schema_growth.py seed): a page type per core noun the stages act on, with the owner's likely words for it; tags from the stage names; the folder each type routes to. Written into Schema/schema.md once, after Discovery and Training.",
+  "types": [
+   {
+    "type": "product",
+    "what": "One note per product or line: what it is, supplier, price notes, stock quirks, common questions.",
+    "words": [
+     "item",
+     "sku",
+     "stock",
+     "line"
+    ]
+   },
+   {
+    "type": "order",
+    "what": "One note per order that needs attention beyond the shop system: what happened, what was promised, what is open.",
+    "words": [
+     "purchase",
+     "sale",
+     "shipment"
+    ]
+   },
+   {
+    "type": "return",
+    "what": "One note per return or support case: the reason, what was agreed, how it closed.",
+    "words": [
+     "refund",
+     "exchange",
+     "support-case",
+     "ticket"
+    ]
+   }
+  ],
+  "tags": [
+   "browse",
+   "cart",
+   "checkout",
+   "fulfillment",
+   "shipping",
+   "delivered",
+   "return",
+   "re-engage"
+  ],
+  "folders": {
+   "product": "Products",
+   "order": "Orders",
+   "return": "Returns"
+  }
+ }
+}

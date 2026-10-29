@@ -1,0 +1,108 @@
+{
+ "_doc": "The Discovery checklist is used during Sage onboarding to learn which tools the owner uses for each business function. Present questions conversationally in the order they appear. For functions marked required=true, do not proceed to pipeline configuration until the owner has answered. Record the chosen tool id(s) in the org's connection config and flag any credentials that still need to be stored via setup_creds. Reads are always free; any write path requires an approval card from the owner.",
+ "functions": [
+  {
+   "id": "lead_intake",
+   "ask": "Where do new leads or inquiries first show up — a contact form on your website, an email inbox, a booking platform, or somewhere else?",
+   "why": "Sage needs to detect new leads within minutes so the intro touchpoint and intake flow fire before the lead goes cold.",
+   "examples": ["HoneyBook", "Typeform", "Website contact form", "Gmail", "Instagram DM", "Facebook Lead Ads"],
+   "required": true
+  },
+  {
+   "id": "crm",
+   "ask": "Where do you track clients and projects after first contact — do you use a CRM or booking platform like HoneyBook or Dubsado, a spreadsheet, or something else?",
+   "why": "Sage reads the pipeline to know each project's stage, what is outstanding, and when to trigger the next step automatically.",
+   "examples": ["HoneyBook", "Dubsado", "HubSpot", "Jobber", "Google Sheets", "Notion"],
+   "required": true
+  },
+  {
+   "id": "calendar",
+   "ask": "What calendar do you use to track bookings, service dates, and meetings?",
+   "why": "Sage checks availability before confirming any date and adds new events when a booking is locked in.",
+   "examples": ["Google Calendar", "Apple Calendar (via Calendly or Acuity)", "Outlook Calendar"],
+   "required": true
+  },
+  {
+   "id": "mail",
+   "ask": "Which email address or addresses do you use for client and business correspondence?",
+   "why": "Sage reads your inbox for new messages and drafts replies; all sends require your approval before anything goes out.",
+   "examples": ["Gmail (Google Workspace)", "Gmail (personal)", "Outlook / Microsoft 365"],
+   "required": true
+  },
+  {
+   "id": "text_phone",
+   "ask": "Do you text clients directly from your personal phone, and would you like Sage to prepare those texts for you to review and send?",
+   "why": "Sage can draft and hand off short client touchpoints such as intro messages, reminders, and check-ins so they feel personal and arrive on time.",
+   "examples": ["iMessage on iPhone (via Apple Shortcut)", "OpenPhone", "Google Voice"],
+   "required": true
+  },
+  {
+   "id": "payments_invoicing",
+   "ask": "How do you send invoices and collect payments — through your booking platform, a separate payment tool, or something else?",
+   "why": "Sage drafts invoices and flags overdue payments; the owner always approves before any invoice goes out.",
+   "examples": ["HoneyBook", "Stripe", "Square", "QuickBooks Online", "Dubsado"],
+   "required": true
+  },
+  {
+   "id": "contracts_esign",
+   "ask": "How do clients sign contracts — through your booking platform, a separate e-sign tool, or a PDF you email manually?",
+   "why": "Sage tracks contract status and flags any unsigned agreements as a booked date approaches.",
+   "examples": ["HoneyBook", "Dubsado", "DocuSign", "Dropbox Sign (HelloSign)", "PandaDoc"],
+   "required": false
+  },
+  {
+   "id": "scheduling_booking",
+   "ask": "Do you use a self-scheduling link so clients or prospects can book calls or consultations directly?",
+   "why": "Sage watches for new bookings and triggers the right follow-up or prep flow automatically without you having to do anything.",
+   "examples": ["Calendly", "Acuity Scheduling", "HoneyBook scheduler", "Dubsado scheduler", "Squarespace scheduling"],
+   "required": false
+  },
+  {
+   "id": "file_storage",
+   "ask": "Where do you store documents, contracts, shot lists, or other project files — Google Drive, Dropbox, or somewhere else?",
+   "why": "Sage can watch for new files and ingest them into the knowledge base so they are searchable and can trigger follow-up actions.",
+   "examples": ["Google Drive", "Dropbox", "OneDrive", "Notion"],
+   "required": false
+  },
+  {
+   "id": "team_chat",
+   "ask": "Do you use a team messaging app for internal coordination with staff or contractors?",
+   "why": "Sage uses the team channel to post approval cards, updates, and action requests; choosing one gives you a single place to tap approvals.",
+   "examples": ["Google Chat (Workspace)", "Slack", "iMessage group chat"],
+   "required": false
+  },
+  {
+   "id": "accounting",
+   "ask": "Do you use accounting software or a spreadsheet to track income and expenses for the business?",
+   "why": "Sage reads financial data for cash-flow snapshots and overdue invoice alerts; it never makes payments or modifies the ledger without approval.",
+   "examples": ["QuickBooks Online", "FreshBooks", "Wave Accounting", "Google Sheets"],
+   "required": false
+  },
+  {
+   "id": "social",
+   "ask": "Do you post to social media for the business, and would you like Sage to draft posts for your approval?",
+   "why": "Sage can draft and queue social content based on your recent work; all posts require your approval before anything is published.",
+   "examples": ["Instagram", "Facebook Business", "Google Business Profile", "TikTok"],
+   "required": false
+  },
+  {
+   "id": "automation",
+   "ask": "Do you use any automation tools like Zapier or Make to connect your apps, or would you like Sage to suggest automations as it learns your workflow?",
+   "why": "Sage can use existing automation hooks as event sensors or action paths, and can propose new automations for you to approve over time.",
+   "examples": ["Zapier", "Make (Integromat)", "native platform workflow automation"],
+   "required": false
+  },
+  {
+   "id": "banking",
+   "ask": "Would you like Sage to have read-only visibility into your business bank account for cash-flow tracking, using Plaid or SimpleFIN?",
+   "why": "A read-only bank feed lets Sage show a cash-flow snapshot and flag timing risks; Sage never initiates transfers or payments.",
+   "examples": ["Plaid", "SimpleFIN Bridge"],
+   "required": false
+  }
+ ],
+ "tracks": {
+  "ask": "What are the things your business keeps track of, in your own words? (the people you serve and the pieces of work, e.g. clients and jobs, patients and appointments, tenants and units)",
+  "why": "Each one becomes a kind of page in the wiki, with its own folder, so what the agent learns about it is filed where you would look for it. More kinds are added later as they come up.",
+  "examples": ["clients and projects", "customers and orders", "jobs and sites", "patients and appointments", "students and classes", "tenants and units", "products and bookings"]
+ }
+}

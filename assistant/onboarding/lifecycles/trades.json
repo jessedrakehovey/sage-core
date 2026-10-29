@@ -1,0 +1,113 @@
+{
+ "id": "trades",
+ "name": "Trades and Home Services",
+ "_doc": "A lifecycle skeleton defines the ordered stages of a client journey for this business type. Each stage here is a scaffold only. During onboarding the owner must fill in six fields per stage: trigger (the event that starts this stage), actor (Sage, owner, or client), channel (which tool or surface handles it), template (which message or document template to use), clock (how long after the trigger before Sage flags a stall), and verifier (how Sage confirms the stage is complete). None of those fields are pre-filled here; they are set during the onboarding conversation and stored in the org's lifecycle config.",
+ "fits": "Field-service businesses dispatching technicians or crews to client locations — contractors, plumbers, electricians, landscapers, cleaners, pest control, and similar trades.",
+ "stages": [
+  {
+   "id": "inquiry",
+   "name": "Inquiry",
+   "what": "A new service request arrives by phone, contact form, or booking platform.",
+   "typical_trigger": "Inbound call, website form submission, or platform lead",
+   "typical_channel": "lead_intake tool or text_phone"
+  },
+  {
+   "id": "estimate",
+   "name": "Estimate",
+   "what": "The owner or technician assesses the scope; Sage drafts the quote for the owner to approve and send.",
+   "typical_trigger": "Owner marks the inquiry as needing an estimate in the CRM",
+   "typical_channel": "crm + mail"
+  },
+  {
+   "id": "schedule",
+   "name": "Schedule Job",
+   "what": "The client accepts the estimate and a job date is confirmed in the calendar.",
+   "typical_trigger": "Estimate accepted and deposit received if applicable",
+   "typical_channel": "calendar + scheduling_booking"
+  },
+  {
+   "id": "prep",
+   "name": "Pre-Job Prep",
+   "what": "Sage sends a day-before reminder to the client and prepares the technician's job sheet.",
+   "typical_trigger": "T-1 day before the scheduled job",
+   "typical_channel": "text_phone + team_chat"
+  },
+  {
+   "id": "on-site",
+   "name": "On-Site Active Job",
+   "what": "The technician is on site performing the work; any status updates or scope changes flow back.",
+   "typical_trigger": "Technician checks in or job status set to in-progress in the field tool",
+   "typical_channel": "crm or team_chat"
+  },
+  {
+   "id": "invoice",
+   "name": "Invoice",
+   "what": "The job is marked complete; Sage drafts the invoice for the owner to approve and send.",
+   "typical_trigger": "Job marked complete in the CRM or field tool",
+   "typical_channel": "payments_invoicing + mail"
+  },
+  {
+   "id": "follow-up",
+   "name": "Post-Job Follow-up",
+   "what": "Sage checks that the client is satisfied and flags any warranty or punch-list items.",
+   "typical_trigger": "T+2 days after job completion",
+   "typical_channel": "text_phone or mail"
+  },
+  {
+   "id": "review-referral",
+   "name": "Review and Referral Ask",
+   "what": "Sage drafts a review request for the owner to approve and send.",
+   "typical_trigger": "Client confirms satisfaction or T+7 days after job completion",
+   "typical_channel": "mail or text_phone"
+  }
+ ],
+ "wiki": {
+  "_doc": "The first custom wiki vocabulary for this business type (agent/schema_growth.py seed): a page type per core noun the stages act on, with the owner's likely words for it; tags from the stage names; the folder each type routes to. Written into Schema/schema.md once, after Discovery and Training.",
+  "types": [
+   {
+    "type": "job",
+    "what": "One note per job: the scope, the site, the crew, the dates, what was quoted and invoiced, what is open.",
+    "words": [
+     "work-order",
+     "service-call",
+     "ticket",
+     "callout"
+    ]
+   },
+   {
+    "type": "estimate",
+    "what": "One note per estimate: the scope assessed, the price basis, when it went out, the answer.",
+    "words": [
+     "bid",
+     "quote",
+     "proposal"
+    ]
+   },
+   {
+    "type": "site",
+    "what": "One note per place the business works at: access, parking, hazards, equipment on site, history.",
+    "words": [
+     "property",
+     "address",
+     "location",
+     "premises"
+    ]
+   }
+  ],
+  "tags": [
+   "inquiry",
+   "estimate",
+   "scheduled",
+   "prep",
+   "on-site",
+   "invoice",
+   "follow-up",
+   "review-referral"
+  ],
+  "folders": {
+   "job": "Jobs",
+   "estimate": "Estimates",
+   "site": "Sites"
+  }
+ }
+}

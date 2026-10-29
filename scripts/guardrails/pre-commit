@@ -1,0 +1,36 @@
+#!/bin/sh
+# Send-gate tripwire (pre-commit). Blocks any commit that weakens an autonomous
+# cron's allow/deny lists, removes the no-skip-permissions invariant, or breaks
+# the gmail send-gate hook. This is what makes the "forbidden list dreaming can't
+# touch" real: the 6:30 AM dreaming cron commits its own self-edits, and this hook
+# runs on THAT commit too, so a weakened gate cannot land unattended.
+#
+# Install (run once, from the wedding folder root):
+#   cp scripts/guardrails/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# After a LEGITIMATE, reviewed change to a gate, re-freeze and commit the baseline:
+#   python scripts/guardrails/check_gates.py --freeze
+#
+# Fail-open: if python is unavailable, print a warning and allow the commit through.
+# This prevents the hook from blocking commits in minimal environments (e.g. cron
+# running on a machine without python in PATH). The health-check cron will still
+# catch regressions at runtime.
+root=$(git rev-parse --show-toplevel)
+if ! command -v python >/dev/null 2>&1; then
+  echo "WARNING: python not found -- send-gate pre-commit check SKIPPED (fail-open)."
+  echo "Install python or ensure it is in PATH to enable gate enforcement on commit."
+  exit 0
+fi
+out=$(python "$root/scripts/guardrails/check_gates.py" 2>&1)
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "$out"
+  echo ""
+  echo "COMMIT BLOCKED by scripts/guardrails/check_gates.py: a send/UI gate was weakened."
+  echo "If this change is legitimate and reviewed:"
+  echo "    python scripts/guardrails/check_gates.py --freeze"
+  echo "then 'git add scripts/guardrails/gate_baseline.json' and commit again."
+  exit 1
+fi
+exit 0

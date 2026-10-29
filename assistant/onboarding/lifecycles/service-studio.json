@@ -1,0 +1,114 @@
+{
+ "id": "service-studio",
+ "name": "Service Studio",
+ "_doc": "A lifecycle skeleton defines the ordered stages of a client journey for this business type. Each stage here is a scaffold only. During onboarding the owner must fill in six fields per stage: trigger (the event that starts this stage), actor (Sage, owner, or client), channel (which tool or surface handles it), template (which message or document template to use), clock (how long after the trigger before Sage flags a stall), and verifier (how Sage confirms the stage is complete). None of those fields are pre-filled here; they are set during the onboarding conversation and stored in the org's lifecycle config.",
+ "fits": "Creative service businesses that sell time and skill — photographers, videographers, designers, copywriters, and similar studios where the deliverable is produced after booking.",
+ "stages": [
+  {
+   "id": "lead",
+   "name": "Lead Received",
+   "what": "A new inquiry arrives from the website, a referral, or a booking platform.",
+   "typical_trigger": "New form submission, email, or CRM lead created",
+   "typical_channel": "lead_intake tool (form, email, or platform)"
+  },
+  {
+   "id": "qualify",
+   "name": "Qualify",
+   "what": "Sage checks availability and package fit; the owner reviews and approves the response.",
+   "typical_trigger": "Lead stage set to new in the CRM",
+   "typical_channel": "crm or mail"
+  },
+  {
+   "id": "quote",
+   "name": "Quote Sent",
+   "what": "The owner approves and Sage sends the pricing or package details to the lead.",
+   "typical_trigger": "Owner approval card tapped",
+   "typical_channel": "crm or mail"
+  },
+  {
+   "id": "book",
+   "name": "Booking Confirmed",
+   "what": "Contract is signed and retainer is received; the date is locked in the calendar.",
+   "typical_trigger": "Contract signed and deposit payment confirmed in CRM",
+   "typical_channel": "contracts_esign + payments_invoicing + calendar"
+  },
+  {
+   "id": "prep",
+   "name": "Pre-Service Prep",
+   "what": "Sage sends prep materials, confirms logistics, and runs the pre-session checklist with the client.",
+   "typical_trigger": "T-14 days before the service date",
+   "typical_channel": "mail or text_phone"
+  },
+  {
+   "id": "deliver",
+   "name": "Delivery",
+   "what": "The completed work is delivered to the client and the final invoice is issued.",
+   "typical_trigger": "Work marked complete in the CRM or project tool",
+   "typical_channel": "mail + payments_invoicing"
+  },
+  {
+   "id": "follow-up",
+   "name": "Post-Delivery Follow-up",
+   "what": "Sage checks in on the client's experience and flags any outstanding revision requests.",
+   "typical_trigger": "T+7 days after delivery",
+   "typical_channel": "mail or text_phone"
+  },
+  {
+   "id": "review-referral",
+   "name": "Review and Referral Ask",
+   "what": "Sage drafts a review request and referral prompt for the owner to approve and send.",
+   "typical_trigger": "Client confirms satisfaction or T+14 days after delivery",
+   "typical_channel": "mail or crm"
+  }
+ ],
+ "wiki": {
+  "_doc": "The first custom wiki vocabulary for this business type (agent/schema_growth.py seed): a page type per core noun the stages act on, with the owner's likely words for it; tags from the stage names; the folder each type routes to. Written into Schema/schema.md once, after Discovery and Training.",
+  "types": [
+   {
+    "type": "lead",
+    "what": "One note per inquiry that has not booked yet: who asked, what for, where it came from, where it stands.",
+    "words": [
+     "inquiry",
+     "enquiry",
+     "prospect"
+    ]
+   },
+   {
+    "type": "booking",
+    "what": "One note per booked piece of work: the date, what was agreed, what is owed, what is delivered.",
+    "words": [
+     "job",
+     "session",
+     "appointment",
+     "engagement",
+     "project"
+    ]
+   },
+   {
+    "type": "deliverable",
+    "what": "One note per thing handed to a client: what it is, when it was promised, when it went out, revisions.",
+    "words": [
+     "final",
+     "gallery",
+     "file",
+     "delivery"
+    ]
+   }
+  ],
+  "tags": [
+   "lead",
+   "qualify",
+   "quote",
+   "booked",
+   "prep",
+   "delivered",
+   "follow-up",
+   "review-referral"
+  ],
+  "folders": {
+   "lead": "Leads",
+   "booking": "Bookings",
+   "deliverable": "Deliverables"
+  }
+ }
+}

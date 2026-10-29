@@ -1,0 +1,32 @@
+{
+ "id": "zapier",
+ "name": "Zapier",
+ "functions": ["automation"],
+ "tiers": [
+  {
+   "tier": 3,
+   "path": "webhook",
+   "how": "Sage receives events from Zapier via webhook triggers (Zapier POSTs to a Sage endpoint) and can push events to Zapier via Webhook action steps (Sage POSTs to a Zapier Catch Hook URL). The owner configures Zaps in the Zapier dashboard and provides the webhook URLs. A public HTTPS endpoint is required for inbound Zapier webhooks; use Tailscale Funnel or a VPS.",
+   "reads": ["any data Zapier's trigger step includes in its POST body"],
+   "writes": ["any data Sage sends in a POST to a Zapier Catch Hook URL, which then executes the Zap's action steps"],
+   "always_tap": ["enabling any Zap that sends a message, creates an invoice, modifies data, or takes an irreversible action"],
+   "status": "known"
+  },
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage can manage Zaps programmatically via the Zapier REST API (API key authentication). The owner must generate an API key in Zapier account settings and store it via setup_creds. This allows Sage to read Zap configurations and run history, and to enable or disable specific Zaps.",
+   "reads": ["Zap configurations", "Zap run history and error logs"],
+   "writes": ["enable or disable specific Zaps"],
+   "always_tap": ["enabling a Zap that sends messages, moves money, or takes any irreversible action", "deleting a Zap"],
+   "status": "unverified"
+  }
+ ],
+ "gotchas": [
+  "Zapier is an automation glue layer; the owner is responsible for reviewing and approving what each Zap does before it is enabled.",
+  "Multi-step Zaps that include sends or financial actions must be reviewed and approved by the owner before being enabled by Sage.",
+  "Free Zapier plans have monthly task limits; monitor for quota exhaustion.",
+  "Zapier Zaps that trigger on webhooks may retry on failure; implement idempotency checks to prevent duplicate processing."
+ ],
+ "notes": "Zapier is an automation connector used to receive events from tools without direct integrations and to trigger actions in third-party apps."
+}

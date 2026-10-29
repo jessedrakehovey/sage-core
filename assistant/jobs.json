@@ -1,0 +1,28 @@
+{
+  "_what": "Local jobs an owner may run NOW or AT A TIME from chat (scripts/jobs.py, the `job` tool). Each is a fixed command with named values; Sage posts a card (exec kind `local`, op = the key, send_at = the time) and the owner's tap runs it through drain. The registry is the allow-list: nothing outside it can be launched. Add a job here, never in code. {placeholders} come from `vars` or the job's `args`; `options` are appended only when that value is given.",
+  "vars": {
+    "resolve_python": "C:/Users/owner1/AppData/Local/Programs/Python/Python312/python.exe"
+  },
+  "jobs": [
+    {
+      "key": "handoff_build",
+      "name": "Editor handoff build",
+      "lane": "wedding",
+      "what": "package a wedding for the remote editor (editor-handoff skill): 1080p proxies, audio, reference render, READ ME, straight into Dropbox; hours of rendering, best overnight",
+      "cmd": ["{resolve_python}", "editor/handoff.py", "build", "{couple}"],
+      "args": {"couple": "the couple as the Resolve project names them, e.g. example"},
+      "options": {"editor": ["--editor", "{editor}"]},
+      "aliases": ["handoff", "editor handoff", "handoff build", "package for example", "example handoff", "build the handoff", "export for example"]
+    },
+    {
+      "key": "handoff_return",
+      "name": "Editor handoff return",
+      "lane": "wedding",
+      "what": "bring the editor's returned Resolve project back: every clip online, his timelines added to the live project under his name",
+      "cmd": ["{resolve_python}", "editor/handoff.py", "return", "{couple}", "{drp}"],
+      "args": {"couple": "the couple as the Resolve project names them", "drp": "full path of the .drp he sent back"},
+      "options": {"media": ["--media", "{media}"], "editor": ["--editor", "{editor}"]},
+      "aliases": ["handoff return", "example sent the project back", "bring example's edit in", "import example's drp", "editor return"]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+ "_doc": "What the doer's computer lane (assistant/doer/computer.py) may run on this PC. Enforced by computer_policy.py as a PreToolUse hook on every Bash / Write / Edit call of the headless turn, so the tier is decided by code, not by the model. Tier A: read-only -> run. Tier B: a write inside write_roots, a copy, a folder, a tool script that passes the scan -> run and report. Tier C: a delete or move outside write_roots, a write outside write_roots, installing software, killing a process, anything that sends over the network, git commit/push -> the hook refuses and the model must post a checkpoint card; the owner's tap re-runs the exact command (sha-bound) once. NEVER: refused outright, no card can unlock it. Paths are matched after ~ and relative paths are resolved; all patterns are case-insensitive regexes over the whole command text.",
+ "write_roots": [
+  "assistant/out/doer",
+  "assistant/doer/tools",
+  "~/AppData/Local/Temp",
+  "~/Downloads/Sage",
+  "~/Videos/Sage Inbox"
+ ],
+ "footage_roots": [],
+ "footage_exts": ["mov", "mp4", "braw", "mxf", "r3d", "crm", "cr3", "arw", "dng", "wav", "aif", "aiff", "m4a", "mts", "m2ts", "insv", "lrv", "srt_raw"],
+ "footage_markers": ["(^|[\\\\/])Video([\\\\/]|$)", "(^|[\\\\/])Audio([\\\\/]|$)", "[\\\\/]Card \\d+([\\\\/]|$)", "[\\\\/]DCIM([\\\\/]|$)", "[\\\\/]PRIVATE[\\\\/](M4ROOT|AVCHD)", "[\\\\/]CLIPS?[\\\\/]"],
+ "vault_protected": ["Raw", "Memory", "Schema", ".git", ".claude", "assistant/data", "scripts/guardrails", "scripts/card_ingest", "assistant/agent", "assistant/scripts", "assistant/doer", "assistant/config.json", "CLAUDE.md"],
+ "secret_paths": [
+  "\\.kdbx", "agent\\.kdbx", "\\.example-mail", "boundary", "\\.ssh[\\\\/]", "id_rsa", "id_ed25519", "Login Data", "Web Data", "Cookies$", "\\.credentials", "credentials\\.json", "token\\.json", "gchat\\.local\\.json", "google\\.json", "(^|[\\\\/])\\.env($|\\.)", "\\.pem$", "\\.p12$", "\\.pfx$", "pw-wv-cli-profile", "pw-leases", "owner1'?s Vault", "example"
+ ],
+ "never": [
+  "\\bformat(\\.com|\\.exe)?\\s+[a-z]:", "\\bdiskpart\\b", "\\bmkfs", "\\bdd\\b.*\\bof=", "\\b(clear|initialize)-disk\\b", "\\bremove-partition\\b", "\\bcipher\\s+/w", "\\bsdelete\\b",
+  "\\bshutdown\\b", "\\b(restart|stop)-computer\\b", "\\blogoff\\b", "\\brundll32\\b",
+  "\\breg(\\.exe)?\\s+(add|delete|import|restore)\\b", "\\b(new|set|remove)-itemproperty\\b.*\\bhk(lm|cu|cr|u)\\b", "\\bregedit\\b",
+  "\\bschtasks\\b", "\\b(register|unregister|set|disable|enable)-scheduledtask\\b", "\\bnetsh\\b", "\\bset-executionpolicy\\b", "\\bnet\\s+(user|localgroup|share)\\b", "\\bbcdedit\\b", "\\bdism\\b", "\\bsfc\\b", "\\bset-mppreference\\b", "\\bdisable-(windowsdefender|computerrestore|firewall)", "\\b(new|set|remove)-netfirewallrule\\b", "\\bgpupdate\\b", "\\bwmic\\b", "\\bpowercfg\\b.*(/h|hibernate)", "\\bcontrol\\b.*\\.cpl",
+  "\\bcmdkey\\b", "vault\\.py\\s+(add|key|import-chrome|remove|init)\\b", "setup_creds\\.py", "win32cred|keyring|pykeepass|CredRead|CredEnumerate", "CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN", "\\bclaude(\\.cmd)?\\s+setup-token\\b",
+  "cards\\.py\\s+(answer|undo)\\b", "\\bdrain\\.py\\b", "\\bemail_send\\.py\\b", "\\bexec_store\\.py\\b", "\\bhb_exec\\.py\\b", "check_gates\\.py\\s+--freeze", "gate_baseline", "\\bimessage|phone_bridge\\.py", "collection_autosend\\.py",
+  "owner1'?s Vault|example|example|example",
+  "git\\s+push\\b.*(--force|\\s-f\\b)", "git\\s+reset\\s+--hard", "git\\s+clean\\b.*-[a-z]*f", "git\\s+branch\\s+-D\\b", "git\\s+checkout\\s+--\\s", "git\\s+restore\\b", "git\\s+add\\s+(-A|--all|\\.)(\\s|$)", "git\\s+(rebase|filter-branch|reflog\\s+expire|gc\\s+--prune)", "git\\s+stash\\s+(drop|clear)",
+  "\\b(change|reset|rotate)\\b.{0,30}\\bpassword\\b", "\\b(disable|turn off|remove)\\b.{0,20}\\b(2fa|two.?factor|mfa)\\b",
+  "frombase64string|base64\\s+(-d|--decode)|(powershell|pwsh)(\\.exe)?\\b[^|;&]*\\s-e(nc|ncodedcommand|c)?(?=\\s)|\\biex\\b|invoke-expression|\\beval\\s*\\(|\\bexec\\s*\\(|\\bcompile\\s*\\(|__import__|importlib\\.import_module|getattr\\s*\\(\\s*(os|subprocess|shutil)",
+  "--dangerously-skip-permissions", "\\bclaude(\\.cmd)?\\s+(-p|--print)\\b", "\\bclaude(\\.cmd)?\\s+mcp\\s+(add|remove)",
+  "\\b(smtplib|socket|ssl|paramiko|ftplib|telnetlib|pyautogui|pynput|winreg|ctypes|win32api|win32con|win32gui|pywinauto|comtypes)\\b",
+  "\\bmsg\\s+\\*|\\bnet\\s+send\\b"
+ ],
+ "checkpoint_destructive": [
+  "(^|[\\s;&|(])(rm|del|erase|rmdir|rd)\\s", "\\bremove-item\\b", "shutil\\.rmtree|os\\.remove|os\\.unlink|os\\.rmdir|os\\.removedirs|\\.unlink\\(|\\.rmdir\\(|send2trash|\\.rglob\\(.*\\)\\.unlink",
+  "(^|[\\s;&|(])(mv|move|ren|rename)\\s", "\\b(move|rename)-item\\b", "shutil\\.move|os\\.rename|os\\.replace|os\\.renames|\\.rename\\(|\\.replace\\("
+ ],
+ "checkpoint": [
+  "\\bpip3?\\s+(install|uninstall)\\b", "python[0-9.]*\\s+-m\\s+pip\\b", "\\bnpm\\s+(i|install|uninstall|rm|update)\\b", "\\bnpx\\b", "\\bwinget\\b", "\\bchoco\\b", "\\bscoop\\b", "\\bmsiexec\\b", "\\.msi\\b", "setup\\.exe", "\\binstall-(module|package|script)\\b", "\\bconda\\s+(install|remove)",
+  "\\btaskkill\\b", "\\bstop-process\\b", "(^|[\\s;&|(])kill\\s", "\\bpkill\\b", "os\\.kill|\\.terminate\\(|\\.kill\\(",
+  "\\bcurl\\b.*(\\s-d\\b|--data|\\s-X\\s*(post|put|delete|patch)|\\s-F\\b|\\s-T\\b|--upload-file)", "\\bwget\\b.*--post", "invoke-(restmethod|webrequest)\\b.*-method\\s+(post|put|delete|patch)", "requests\\.(post|put|delete|patch)\\(|httpx\\.(post|put|delete|patch)\\(|urlopen\\([^)]*data=", "\\bsendmail\\b", "\\bscp\\b", "\\brsync\\b", "\\bssh\\b", "\\bsftp\\b", "\\bftp\\b",
+  "git\\s+(commit|push|merge|tag|cherry-pick|revert)\\b", "\\bgh\\s+(pr|issue|release|repo|gist)\\s+(create|comment|merge|edit|close|delete|review)", "\\b(gcloud|aws|az|vercel|netlify|firebase|heroku|fly|wrangler)\\s",
+  "\\b(start|stop|restart|set)-service\\b", "\\bsc(\\.exe)?\\s+(start|stop|config|delete|create)\\b", "\\bnet\\s+(start|stop)\\b", "\\battrib\\b", "\\bicacls\\b", "\\btakeown\\b", "\\bchmod\\b", "\\bchown\\b",
+  "python[0-9.]*\\s+-m\\s+http\\.server", "\\bnc\\b|\\bncat\\b|\\bnetcat\\b", "\\bssh-keygen\\b",
+  "\\bstart\\s+(ms-settings|microsoft-edge):|\\bms-settings:", "\\b(start|start-process)\\b.*\\.(exe|msi|bat|cmd|ps1|vbs|js)\\b",
+  "\\bsetx?\\s+[A-Z_]+=|\\[environment\\]::setenvironmentvariable|\\$env:[A-Z_]+\\s*=",
+  "\\bosascript\\b|\\bopen\\s+-a\\b"
+ ],
+ "write_hints": [
+  "(^|[^>])>{1,2}(?!&)", "\\btee\\b", "(^|[\\s;&|(])(cp|copy|xcopy|robocopy|mkdir|md|touch)\\s", "\\b(copy|new)-item\\b", "\\b(set|add)-content\\b", "\\bout-file\\b", "\\bexport-csv\\b", "git\\s+add\\b", "\\bpython[0-9.]*\\s", "\\bpy\\s", "\\bnode\\s", "\\bffmpeg\\b", "\\bmagick\\b", "\\bconvert\\b", "write_text|write_bytes|open\\([^)]*['\"][wax]"
+ ],
+ "script_never_imports": ["smtplib", "socket", "ssl", "paramiko", "ftplib", "telnetlib", "pyautogui", "pynput", "winreg", "ctypes", "win32api", "win32con", "win32gui", "win32cred", "pywinauto", "comtypes", "keyring", "pykeepass", "pexpect", "psutil"],
+ "max_minutes": 15,
+ "max_tool_lines": 400
+}

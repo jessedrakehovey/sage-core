@@ -1,0 +1,56 @@
+{
+ "_doc": "Everything particular to THIS agent lives here, in people.json, prompt.md and state/. The code in this folder carries no household or business specifics, so a new agent is a copy of the folder with these files rewritten.",
+ "name": "Sage",
+ "slug": "sage",
+ "household": "owner1 and owner6 example (home in example; business example-org, wedding videography in example)",
+ "claude_account": "max5x",
+ "claude_account_fallback": "max20x",
+ "home_space": "spaces/AAQA6LAmbsA",
+ "model": "sonnet",
+ "dream_model": "opus",
+ "max_turns": 30,
+ "turn_timeout_s": 600,
+ "asks_per_day_max": 150,
+ "quiet_hours": [
+  21,
+  7
+ ],
+ "routines": {
+  "max_active": 25,
+  "llm_runs_per_day_max": 12,
+  "min_every_hours": 1
+ },
+ "dream": {
+  "rules_add": 3,
+  "rules_retire": 3,
+  "memory_upsert": 10,
+  "memory_retire": 6,
+  "notes": 3,
+  "routines": 1,
+  "skills": 2,
+  "build_requests": 2
+ },
+ "read_roots": [
+  "Wiki",
+  "Memory/memory.md",
+  "Context",
+  "assistant/README.md",
+  "assistant/learnings",
+  "scripts/projects/project_state.json",
+  "assistant/agent/skills"
+ ],
+ "extra_protected": "",
+ "followups": {
+  "window": [
+   "08:00",
+   "20:30"
+  ],
+  "weekdays_only": false
+ },
+ "burst": {
+  "_doc": "A Google Chat line waits until its sender has been quiet settle_s seconds, so a burst of lines gets ONE answer; a slow typist's lines wait pace_factor x their largest gap; no group waits past max_wait_s. Local channel and slash commands never wait.",
+  "settle_s": 20,
+  "max_wait_s": 120,
+  "pace_factor": 1.5
+ }
+}

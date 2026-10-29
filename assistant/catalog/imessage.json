@@ -1,0 +1,24 @@
+{
+ "id": "imessage",
+ "name": "iMessage / SMS",
+ "functions": ["text_phone"],
+ "tiers": [
+  {
+   "tier": 3,
+   "path": "device",
+   "how": "Texts go out from the owner's iPhone through an Apple Shortcut that polls an outbox file managed by `assistant/scripts/phone_bridge.py`. The owner must install and enable the Shortcut on their iPhone; no API key or app password is needed. Once a text is placed in the outbox it is treated as sent, because the phone never sends an acknowledgment back to Sage.",
+   "reads": ["nothing; iMessage cannot be read programmatically on iOS without a Mac bridge"],
+   "writes": ["outbound SMS or iMessage to any number placed in the outbox"],
+   "always_tap": ["any outbound text to a lead or client that is not on the standing-text allowlist"],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "The phone never acknowledges delivery; once a text enters the outbox it is treated as sent.",
+  "Verify receipt only through a client reply, never through a system confirmation.",
+  "The four-hour chase window applies: do not re-send a text on 'unconfirmed' status alone.",
+  "A Mac-only alternative via AppleScript to Messages.app exists but requires the Mac to be awake and logged in.",
+  "Standing client texts (intro, collection-sent, questionnaire reminder, check-in, day-before, Finishing Touches) go out without an approval card; all others require one."
+ ],
+ "notes": "iMessage is used for quick personal client touchpoints; it is fragile device automation and should not be the sole channel for any critical communication."
+}

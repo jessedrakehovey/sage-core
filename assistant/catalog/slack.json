@@ -1,0 +1,23 @@
+{
+ "id": "slack",
+ "name": "Slack",
+ "functions": ["team_chat"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Slack via the official Slack Web API using a Bot Token (OAuth 2.0). The owner must create a Slack App at api.slack.com, add the required scopes (channels:history, chat:write, im:write), install the app to the workspace, and store the Bot Token via setup_creds. Event subscriptions require a public HTTPS endpoint for the request URL.",
+   "reads": ["messages in channels and DMs the bot is invited to", "channel listings", "thread replies", "user directory"],
+   "writes": ["messages to channels or DMs the bot is a member of", "thread replies"],
+   "always_tap": ["any message posted to a client-facing or external channel", "any direct message to a client or external party"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Bot tokens require workspace re-authorization (app reinstall) if scopes change after initial installation.",
+  "Slack's free plan limits message history to 90 days; older messages are inaccessible via the API.",
+  "Event subscriptions for incoming messages require a publicly reachable HTTPS endpoint; use Tailscale Funnel or a VPS.",
+  "Rate limits vary by API method tier; implement burst-safe retry with exponential backoff."
+ ],
+ "notes": "Slack is an internal team communication tool; Sage uses it for team coordination and does not send client-facing messages through it."
+}

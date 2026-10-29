@@ -1,0 +1,84 @@
+{
+  "_what": "Jobs the owners may turn on or off, or run now, from chat (switches.py, the `switch` tool). A job names a true/false field in one config file and/or the Windows Scheduled Task registered from this repository (the registry is the allow-list; the bridge enables, disables or starts it, nothing more). Add a job here, never in code.",
+  "jobs": [
+    {
+      "key": "youtube-scout",
+      "name": "YouTube Scout",
+      "what": "nightly at 1:30 AM: one YouTube video of 30 minutes or more, fact-checked into the wiki, ideas as cards",
+      "config": "scripts/yt_scout/config.json",
+      "field": "enabled",
+      "task": "example YouTube Scout",
+      "aliases": ["youtube scout", "youtube", "yt scout", "nightly youtube", "the scout", "video scout"]
+    },
+    {
+      "key": "dreaming",
+      "name": "Dreaming",
+      "what": "6:30 AM daily: memory consolidation from the day's logs, self-improvement, wiki ingest",
+      "task": "example-org",
+      "aliases": ["dream", "memory consolidation", "nightly dreaming", "wedding dreaming"]
+    },
+    {
+      "key": "day-spine",
+      "name": "Day Spine",
+      "what": "every 10 minutes 06:00-23:30: the standing jobs that keep the day moving (follow-ups, reminders, sentinels, builds)",
+      "task": "example-org",
+      "aliases": ["spine", "the spine", "example day spine"]
+    },
+    {
+      "key": "comms-probe",
+      "name": "Comms Probe",
+      "what": "every minute 07:00-21:30: wakes the operator within a minute of a text, email, lead or tap",
+      "task": "example-org",
+      "aliases": ["comms probe", "probe", "the probe"]
+    },
+    {
+      "key": "operator-tick",
+      "name": "Operator (tick)",
+      "what": "every 30 minutes 07:45-21:45: the operator works its ticket queue",
+      "task": "example-org",
+      "aliases": ["operator", "the operator tick", "assistant operator", "operator tick"]
+    },
+    {
+      "key": "morning-brief",
+      "name": "Morning brief",
+      "what": "7:15 AM: the operator's morning brief",
+      "task": "example-org",
+      "aliases": ["brief", "the morning brief", "operator morning brief"]
+    },
+    {
+      "key": "drive-to-wiki",
+      "name": "Drive to Wiki",
+      "what": "hourly 06:20-23:20: new Google Drive documents from both accounts into Raw/Drive and the wiki",
+      "task": "example Drive to Wiki",
+      "aliases": ["drive ingest", "drive to wiki", "drive sync", "google drive ingest"]
+    },
+    {
+      "key": "ad-scout",
+      "name": "Ad Scout",
+      "what": "7:30 AM daily: Google Ads stats and leads in, the weekly budget proposal and challenger ads (proposal only, never spends)",
+      "task": "example-org",
+      "aliases": ["ad scout", "ads scout", "the ad scout", "ads"]
+    },
+    {
+      "key": "optimization-scout",
+      "name": "Optimization Scout",
+      "what": "3:30 AM nightly: read-only scout for ways to improve the system",
+      "task": "example-org",
+      "aliases": ["optimization scout", "optimizer", "the optimizer"]
+    },
+    {
+      "key": "sharegrid-tracker",
+      "name": "ShareGrid Tracker",
+      "what": "weekly: gear rental price tracking on ShareGrid",
+      "task": "example ShareGrid Tracker (weekly)",
+      "aliases": ["sharegrid", "sharegrid tracker", "rental tracker"]
+    },
+    {
+      "key": "youtube-ingest",
+      "name": "YouTube Ingest",
+      "what": "the older YouTube transcript ingest pipeline (dormant unless switched on)",
+      "task": "Wedding YouTube Ingest",
+      "aliases": ["youtube ingest", "yt ingest", "video ingest"]
+    }
+  ]
+}

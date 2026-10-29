@@ -1,0 +1,73 @@
+{
+ "_doc": "The comms law: who gets answered how fast, per thread class (ported in shape from the property OS's scripts/comms/law.json, 2026-10-06). Read by comms_state.py (SLA + state) and the operator prompt. Hours are wall-clock. A class is picked by the thread's lane and the party: a number or address that came through the Package Finder quiz or a HoneyBook lead is a lead; a booked couple is a couple; owner's lane is her own; everything else is personal (recorded, triaged, never auto-drafted).",
+ "classes": {
+  "lead": {
+   "sla_h": 0.25,
+   "chase_h": 1,
+   "draft": true,
+   "voice": "owner1",
+   "_why": "Speed wins on quiz leads (the owner 2026-10-05): a text within 15 minutes, a card to the owner within 5."
+  },
+  "couple": {
+   "sla_h": 2,
+   "chase_h": 12,
+   "draft": true,
+   "voice": "owner1"
+  },
+  "vendor": {
+   "sla_h": 24,
+   "chase_h": 48,
+   "draft": true,
+   "voice": "owner1"
+  },
+  "owner6": {
+   "sla_h": 4,
+   "chase_h": 24,
+   "draft": true,
+   "voice": "owner6"
+  },
+  "personal": {
+   "sla_h": 1,
+   "chase_h": null,
+   "draft": true,
+   "voice": "owner1",
+   "_why": "the owner (2026-10-06): every personal text gets a reply card in his voice, with the thread as context, so he only taps Send / Edit & send in Chat. Noise (codes, marketing, tapbacks, the example-SEND nudge) is still dropped."
+  }
+ },
+ "hard_rails": [
+  "Nothing reaches a client, vendor or anyone outside the household without an owner's tap on a card showing the exact words and recipient.",
+  "No price, discount, delivery date or turnaround is promised to a couple without an owner's approval.",
+  "A text is under 320 characters, first names, one question back, no greeting line, no sign-off.",
+  "A draft is not a send: a thread is 'awaiting them' only after the phone acked the send or Sent mail shows it.",
+  "Verification codes, short-code and automated texts, marketing, reactions: closed, never drafted."
+ ],
+ "wake": {
+  "kinds": [
+   "imessage_in",
+   "email",
+   "inquiry_new",
+   "card_answer",
+   "owner1_request"
+  ],
+  "lanes": [
+   "wedding",
+   "owner6",
+   "personal",
+   "home",
+   "money"
+  ],
+  "min_gap_min": 3,
+  "max_age_min": 30,
+  "window": [
+   "07:00",
+   "21:30"
+  ],
+  "burst_texts": 3,
+  "settle_min": 8,
+  "_burst": "3+ texts waiting and the newest under 8 min old = a group chat still moving: hold the wake until it settles (the owner 2026-10-07)"
+ },
+ "chase": {
+  "digest_local_time": "08:20",
+  "per_day": 1
+ }
+}

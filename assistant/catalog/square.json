@@ -1,0 +1,23 @@
+{
+ "id": "square",
+ "name": "Square",
+ "functions": ["payments_invoicing", "scheduling_booking"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Square via the Square Connect v2 REST API using an access token stored in the OS credential store. The owner must create a Square developer application in the Square Developer Dashboard, grant the required API permissions, and store the production access token via setup_creds. Reads are free; writes require approval.",
+   "reads": ["payments", "invoices", "customers", "appointments", "catalog items", "locations"],
+   "writes": ["invoices", "appointments", "customer records"],
+   "always_tap": ["any invoice send or payment request to a client", "any appointment booking on behalf of a client", "any refund"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Square's Appointments API requires the APPOINTMENTS_WRITE permission scope; verify it is enabled in the developer dashboard.",
+  "Production and sandbox tokens are distinct; confirm which environment is configured.",
+  "Webhooks for payment events must be registered in the Square developer dashboard and the signature verified on receipt.",
+  "Some Square features (Appointments, Invoices) require specific Square account subscription tiers."
+ ],
+ "notes": "Square suits businesses that combine in-person payments with scheduling; its Appointments feature overlaps with dedicated scheduling tools."
+}

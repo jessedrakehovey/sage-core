@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "proposals_per_night": 5,
+  "max_turns": 100,
+  "firecrawl": true
+}

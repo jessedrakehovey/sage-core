@@ -1,0 +1,40 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "travel-dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8899",
+        "-d",
+        "travel/web"
+      ],
+      "port": 8899
+    },
+    {
+      "name": "rentals-dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8898",
+        "-d",
+        "rentals"
+      ],
+      "port": 8898
+    },
+    {
+      "name": "example-palette",
+      "runtimeExecutable": "C:\\Users\\owner1\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "runtimeArgs": [
+        "editor/palette_server.py",
+        "--no-browser",
+        "--port",
+        "8765"
+      ],
+      "port": 8765
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+ "_doc": "Human-readable description of the catalog entry schema. Each sibling file in this directory describes one integration tool available to Sage. Fields: id (machine-readable kebab-case, matches the filename without .json), name (display name shown to the owner), functions (one or more of the 14 function types listed below), tiers (list of connection paths ordered best-first: lowest tier number is most reliable and preferred), gotchas (short strings describing known failure modes or caveats), notes (one sentence summarising the tool's role in the Sage setup). Function types: lead_intake, crm, calendar, mail, text_phone, payments_invoicing, contracts_esign, scheduling_booking, file_storage, team_chat, accounting, social, automation, banking. Tier meanings: 1=official MCP connector or OAuth/API (most reliable), 2=official CLI tool, 3=export/import/mail-forwarding/webhooks/device automation, 4=Playwright browser automation on the vendor's site (last resort: fragile, may breach vendor terms). Status values within a tier: built=the code exists and runs in this repository, known=a real public API or CLI is confirmed to exist, unverified=existence or coverage is uncertain and should be verified. Safety invariant encoded in every entry: Sage never sends, pays, deletes, or publishes without an approval card from the owner; reads are always free.",
+ "fields": {
+  "id": "machine-readable kebab-case string, matches the filename without .json",
+  "name": "human display name for the owner",
+  "functions": "array of one or more of the 14 function type strings",
+  "tiers": "array of tier objects ordered best-first (see tier_schema below)",
+  "gotchas": "array of short strings describing known failure modes or caveats",
+  "notes": "one sentence summarising the tool's role in the Sage setup"
+ },
+ "function_types": [
+  "lead_intake",
+  "crm",
+  "calendar",
+  "mail",
+  "text_phone",
+  "payments_invoicing",
+  "contracts_esign",
+  "scheduling_booking",
+  "file_storage",
+  "team_chat",
+  "accounting",
+  "social",
+  "automation",
+  "banking"
+ ],
+ "tier_schema": {
+  "tier": "integer 1 through 4; see Tier meanings above",
+  "path": "one of: mcp, api, cli, export, forwarding, webhook, browser, device",
+  "how": "2-4 sentences describing how Sage connects, what the owner must do to set it up, and where credentials or tokens are stored",
+  "reads": "array of strings describing what Sage can read from this tool",
+  "writes": "array of strings describing what Sage can write to this tool",
+  "always_tap": "array of action descriptions that always require an owner approval card before Sage proceeds",
+  "status": "one of: built (code exists in repo and runs), known (confirmed public API or CLI), unverified (uncertain; verify before building)"
+ }
+}

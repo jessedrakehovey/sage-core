@@ -1,0 +1,126 @@
+{
+  "generated": "2026-10-28",
+  "window_days": 21,
+  "skills_indexed": 26,
+  "sessions_scanned": 40,
+  "sessions_uncovered": 29,
+  "candidate_count": 4,
+  "dismissed_active": 0,
+  "candidates": [
+    {
+      "key": "sr-4af1570c",
+      "label": "assistant / session / shared / jobs",
+      "occurrences": 2,
+      "days": [
+        "2026-10-15",
+        "2026-10-16"
+      ],
+      "sessions": [
+        "3a44b2eb",
+        "3a44b2eb"
+      ],
+      "top_terms": [
+        "assistant",
+        "session",
+        "shared",
+        "jobs",
+        "message",
+        "mining"
+      ],
+      "sample_prompts": [
+        "Another Claude session sent a message: <cross-session-message from=\"local_615b6795-5138-40bf-ad80-d4f110f79b68\" name=\"Sage life management system\"> Two other sessions are editing this same checkout ri",
+        "Another Claude session sent a message: <cross-session-message from=\"local_615b6795-5138-40bf-ad80-d4f110f79b68\" name=\"Sage life management system\"> example says try again: the usage limit reset at 18:50"
+      ],
+      "nearest_skill": {
+        "name": "improve-loop",
+        "score": 0.06
+      }
+    },
+    {
+      "key": "sr-36bf0645",
+      "label": "task-id / summary / event / task-notification",
+      "occurrences": 2,
+      "days": [
+        "2026-10-15",
+        "2026-10-16"
+      ],
+      "sessions": [
+        "397634a0",
+        "397634a0"
+      ],
+      "top_terms": [
+        "task-id",
+        "summary",
+        "event",
+        "task-notification",
+        "tool-use-id",
+        "status"
+      ],
+      "sample_prompts": [
+        "Story canidates audio not mixed well I can't even hear some of them fix it so that never happens again",
+        "<task-notification> <task-id>byfh8gtd3</task-id> <summary>Monitor event: \"STORY candidates v8 build progress\"</summary> <event>levelling 384 line renders ...</event> If this event is something the use"
+      ],
+      "nearest_skill": {
+        "name": "improve-loop",
+        "score": 0.05
+      }
+    },
+    {
+      "key": "sr-da625052",
+      "label": "assistant / plaid / example / sage",
+      "occurrences": 2,
+      "days": [
+        "2026-10-15",
+        "2026-10-16"
+      ],
+      "sessions": [
+        "29f95d5c",
+        "29f95d5c"
+      ],
+      "top_terms": [
+        "assistant",
+        "plaid",
+        "example",
+        "sage",
+        "tracking",
+        "readme"
+      ],
+      "sample_prompts": [
+        "Background (from the session that started this one): example's personal assistant Sage lives in {{ORG_ROOT}}\\assistant (read assistant/README.md, assistant/agent/README.md and ",
+        "Your response above was cut off mid-stream. Resume directly from where it stops — no apology, no recap. If none of it survived, answer the request from the start."
+      ],
+      "nearest_skill": {
+        "name": "card-ingest",
+        "score": 0.05
+      }
+    },
+    {
+      "key": "sr-ffe81116",
+      "label": "money / session / plaid / read-only",
+      "occurrences": 2,
+      "days": [
+        "2026-10-15",
+        "2026-10-16"
+      ],
+      "sessions": [
+        "4c7f1dec",
+        "4c7f1dec"
+      ],
+      "top_terms": [
+        "money",
+        "session",
+        "plaid",
+        "read-only",
+        "message",
+        "feed"
+      ],
+      "sample_prompts": [
+        "Another Claude session sent a message: <cross-session-message from=\"local_c82a57d0-aef7-47f9-a51c-b0d9b3c116e9\" name=\"Money lane: SimpleFIN bank feed + categorizer + quarterlies\"> Resume now: the usag"
+      ],
+      "nearest_skill": {
+        "name": "card-ingest",
+        "score": 0.06
+      }
+    }
+  ]
+}

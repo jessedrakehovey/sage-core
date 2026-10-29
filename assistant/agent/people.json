@@ -1,0 +1,73 @@
+{
+ "_doc": "Who the agent answers. Anyone not listed is never answered. chat_user is the Google Chat user id (users/NNN), filled in by the bridge the first time that person's email is seen. owner is a full equal (the owner, 2026-10-05). Roles (2026-10-24): owner = everything; staff = a team member (a team member) limited to the lanes in the role (wedding), can ask, hand a wedding task on for an owner's tap and file a wedding wiki note, nothing else; sees NONE of the other lanes: no long-term memory outside kind business, no rules, no routines, no texts, mail or calendars, no Read/Glob/Grep over the vault, vault_search only under the role's paths; cards from a staff ask go to the owners' space, never the staff DM.",
+ "roles": {
+  "owner": {
+   "can": [
+    "ask",
+    "teach",
+    "note",
+    "schedule",
+    "task",
+    "undo",
+    "approve"
+   ]
+  },
+  "guest": {
+   "can": []
+  },
+  "staff": {
+   "can": [
+    "ask",
+    "task",
+    "note"
+   ],
+   "lanes": [
+    "wedding"
+   ],
+   "paths": [
+    "Wiki/Couples/",
+    "Wiki/Vendors/",
+    "Wiki/Venues/",
+    "Wiki/Packages/",
+    "Wiki/Post-Production/",
+    "Wiki/Operations/",
+    "Wiki/Integrations/"
+   ],
+   "about": "wedding business only, admin-level, never owner-level; no personal, home, money or owner6 lane"
+  }
+ },
+ "users": {
+  "owner1": {
+   "name": "owner1",
+   "role": "owner",
+   "emails": [
+    "owner4@example.invalid",
+    "owner3@example.invalid"
+   ],
+   "chat_user": "",
+   "phone": "+1555-038-0038"
+  },
+  "owner6": {
+   "name": "owner6",
+   "role": "owner",
+   "emails": [
+    "p08d678@example.invalid",
+    "owner6@example.invalid"
+   ],
+   "chat_user": "",
+   "phone": "+1555-010-6110"
+  },
+  "staff1": {
+   "name": "staff1",
+   "role": "staff",
+   "emails": [
+    "owner1@example.invalid",
+    "owner2@example.invalid"
+   ],
+   "chat_user": "",
+   "phone": "+1555-094-4994",
+   "added": "2026-10-24",
+   "why": "owner1 2026-10-24: 'Allow him permission to do wedding business tasks limited to that of an admin and not an owner. [He] should have zero access to my personal life information.'"
+  }
+ }
+}

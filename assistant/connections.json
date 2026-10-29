@@ -1,0 +1,690 @@
+{
+ "_doc": "Connection registry for the personal OS (roadmap: CONNECTIONS.md). One row per external connection: what it is, where its credential lives BY NAME ONLY (never a value), how conn_check.py proves it alive, and how it is renewed. `check.type` is one of: imap, ics, status_file, env, cmd, cmd_output, cmd_match (output regexes `live` / `missing`), http, mcp, meta_ads, json_fields, manual. `owner` says who can renew it: the owner (a password, an OAuth click, a sign-in) or claude. States written to data/connections_status.json: live, dead, not_configured, manual. Add a row here in the same change that adds a connection (plus boundary.json and the gate baseline when it can send). Optional `setup` block = the button on Mission Control's Setup page (scripts/setup_actions.py): kind terminal|env|window|signin|open_url|mcp|text, with label/argv/url/name/also_url/how; without one the recipe is derived from the check type and the renew text.",
+ "connections": [
+  {
+   "id": "claude-token",
+   "name": "Claude subscription token",
+   "lane": "system",
+   "mechanism": "User env var, read by every headless cron",
+   "credential": "User env CLAUDE_CODE_OAUTH_TOKEN",
+   "check": {
+    "type": "env",
+    "name": "CLAUDE_CODE_OAUTH_TOKEN"
+   },
+   "renew": "run `claude setup-token` in a terminal and reset the User env var",
+   "owner": "owner1"
+  },
+  {
+   "id": "honeybook",
+   "name": "HoneyBook connector",
+   "lane": "wedding",
+   "mechanism": "honeybook MCP (HTTP, OAuth); read headless through hb_snapshot.py",
+   "credential": "OAuth grant held by the connector (Google sign-in; never scripted)",
+   "check": {
+    "type": "status_file",
+    "path": "vault:dashboard/data/honeybook.json",
+    "ts_field": "ts",
+    "max_age_h": 14,
+    "error_path": "data:hb_snapshot_status.json",
+    "error_field": "error"
+   },
+   "renew": "re-authorise the honeybook connector from a session in this folder (owner1 clicks the Google consent)",
+   "owner": "owner1",
+   "setup": {
+    "kind": "mcp",
+    "label": "How to reconnect",
+    "how": "The HoneyBook connector is re-authorised from a Claude Code session in this folder: open one, say 'reconnect HoneyBook', and click the Google consent when it appears."
+   },
+   "auth_errors": "unauthori[sz]ed|\\b401\\b|\\b403\\b|forbidden|re-?auth|oauth|consent|not (logged|signed) in|needs?[- ]auth|invalid_grant|token (expired|revoked)|authenticat",
+   "fault_renew": "nothing for owner1: the refresher's code broke (not a sign-in). Fix hb_snapshot.py in a Claude session (find_action shows the current SDK names)"
+  },
+  {
+   "id": "hb-browser",
+   "name": "HoneyBook browser sign-in",
+   "lane": "wedding",
+   "mechanism": "~/.claude/wv_hb_profile, kept warm by Day Spine hb-keepalive (Google one-click re-login)",
+   "credential": "Google + HoneyBook cookies in ~/.claude/wv_hb_profile (owner1 signs in once; never a stored password)",
+   "check": {
+    "type": "status_file",
+    "path": "data:hb_browser_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 9,
+    "error_field": "error"
+   },
+   "renew": "sign in with Google as owner3@example.invalid in the HoneyBook window that opens on the PC by itself (or run scripts/honeybook/hb_signin_window.py --open hb)",
+   "owner": "owner1"
+  },
+  {
+   "id": "hb-doer",
+   "name": "HoneyBook in the doer's browser",
+   "lane": "wedding",
+   "mechanism": "~/.claude/pw-wv-cli-profile (doer + playwright-cli), checked hourly by Day Spine hb-keepalive via hb_signin_window.py --check doer",
+   "credential": "HoneyBook cookies in ~/.claude/pw-wv-cli-profile (owner1 signs in by hand; never a stored password)",
+   "check": {
+    "type": "status_file",
+    "path": "data:hb_doer_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 9,
+    "error_field": "error"
+   },
+   "renew": "sign in to HoneyBook as owner3@example.invalid in the window that opens on the PC by itself (or run scripts/honeybook/hb_signin_window.py --open doer)",
+   "owner": "owner1"
+  },
+  {
+   "id": "typeform",
+   "name": "Typeform (Package Finder quiz)",
+   "lane": "wedding",
+   "mechanism": "Typeform Responses API, polled by sense_typeform.py",
+   "credential": "User env TYPEFORM_TOKEN",
+   "check": {
+    "type": "status_file",
+    "path": "data:typeform_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 3,
+    "error_field": "error"
+   },
+   "renew": "create a personal token at admin.typeform.com and set the User env var",
+   "owner": "owner1",
+   "setup": {
+    "kind": "env",
+    "name": "TYPEFORM_TOKEN",
+    "label": "Enter token",
+    "also_url": "https://admin.typeform.com/user/tokens",
+    "how": "Make a personal token at admin.typeform.com (Open page), then Enter token: a console asks for it hidden and stores it for the sensor."
+   }
+  },
+  {
+   "id": "mail-personal",
+   "name": "Mail: owner4@example.invalid",
+   "brief_name": "your personal Gmail (owner4@example.invalid)",
+   "lane": "personal",
+   "mechanism": "IMAP read + Drafts append, SMTP send through email_send.py",
+   "credential": "Credential Manager owner1-assistant / imap:personal",
+   "check": {
+    "type": "imap",
+    "account": "personal"
+   },
+   "renew": "python assistant/scripts/setup_creds.py mail personal",
+   "owner": "owner1"
+  },
+  {
+   "id": "mail-example",
+   "name": "Mail: owner3@example.invalid",
+   "lane": "wedding",
+   "mechanism": "IMAP read + Drafts append, SMTP send through email_send.py",
+   "credential": "Credential Manager owner1-assistant / imap:example",
+   "check": {
+    "type": "imap",
+    "account": "example"
+   },
+   "renew": "python assistant/scripts/setup_creds.py mail example",
+   "owner": "owner1"
+  },
+  {
+   "id": "mail-owner6",
+   "name": "Mail: owner6",
+   "lane": "owner6",
+   "mechanism": "IMAP read + Drafts append",
+   "credential": "Credential Manager owner1-assistant / imap:owner6",
+   "check": {
+    "type": "imap",
+    "account": "owner6"
+   },
+   "renew": "python assistant/scripts/setup_creds.py mail owner6",
+   "owner": "owner1"
+  },
+  {
+   "id": "calendar-personal",
+   "name": "Calendar (read)",
+   "brief_name": "your personal calendar",
+   "lane": "personal",
+   "mechanism": "secret iCal feed, read by sense_local.py",
+   "credential": "Credential Manager owner1-assistant / ics:personal",
+   "check": {
+    "type": "ics",
+    "feed": "personal"
+   },
+   "renew": "python assistant/scripts/setup_creds.py calendar personal",
+   "owner": "owner1"
+  },
+  {
+   "id": "mcp-mail-personal",
+   "name": "Gmail in sessions (personal)",
+   "lane": "personal",
+   "mechanism": "example-mail-personal MCP, local scope for this folder",
+   "credential": "~/.example-mail/personal/ (OAuth files)",
+   "check": {
+    "type": "mcp",
+    "server": "example-mail-personal",
+    "cred_dir": "~/.example-mail/personal"
+   },
+   "renew": "Google OAuth client under the personal account, one consent, then `claude mcp add` (CONNECTIONS.md phase C2)",
+   "owner": "owner1"
+  },
+  {
+   "id": "mcp-mail-films",
+   "name": "Gmail in sessions (example-org)",
+   "lane": "wedding",
+   "mechanism": "example-mail-films MCP, local scope for this folder",
+   "credential": "~/.example-mail/films/ (OAuth files)",
+   "check": {
+    "type": "mcp",
+    "server": "example-mail-films",
+    "cred_dir": "~/.example-mail/films"
+   },
+   "renew": "same OAuth client as the personal connector, one consent for owner3@example.invalid",
+   "owner": "owner1"
+  },
+  {
+   "id": "meta-ads",
+   "name": "Meta Ads",
+   "lane": "wedding",
+   "mechanism": "Graph API, read by ads/scripts/ingest.py",
+   "credential": "env META_ADS_TOKEN or ads/secrets.json; ids in ads/config.json",
+   "check": {
+    "type": "meta_ads"
+   },
+   "renew": "System User token with ads_read in Business Manager; fill meta.ad_account_id and meta.page_id",
+   "owner": "owner1",
+   "setup": {
+    "kind": "text",
+    "how": "Not in use: ads run on Google Ads (owner1, 2026-10-04). Leave this unconfigured."
+   }
+  },
+  {
+   "id": "google-ads",
+   "name": "Google Ads",
+   "lane": "wedding",
+   "mechanism": "Google Ads API (or CSV import mode)",
+   "credential": "ads/secrets.json GOOGLE_ADS_*; google.customer_id in ads/config.json",
+   "check": {
+    "type": "json_fields",
+    "path": "vault:ads/config.json",
+    "fields": [
+     "google.customer_id"
+    ]
+   },
+   "renew": "developer token + OAuth client + refresh token, or stay in CSV mode",
+   "owner": "owner1"
+  },
+  {
+   "id": "mission-control",
+   "name": "Mission Control server",
+   "lane": "system",
+   "mechanism": "mc_server.py on 127.0.0.1:9019, Tailscale Serve :9443",
+   "credential": "none (tailnet only)",
+   "check": {
+    "type": "http",
+    "url": "http://127.0.0.1:9019/"
+   },
+   "renew": "powershell -File assistant/scripts/mc_server.ps1 -Restart",
+   "owner": "claude"
+  },
+  {
+   "id": "tailscale",
+   "name": "Tailscale",
+   "lane": "system",
+   "mechanism": "tailnet + Serve (phone access to Mission Control)",
+   "credential": "Tailscale login owner4@",
+   "check": {
+    "type": "cmd",
+    "argv": [
+     "tailscale",
+     "status"
+    ]
+   },
+   "renew": "sign in from the Tailscale tray app",
+   "owner": "owner1"
+  },
+  {
+   "id": "github",
+   "name": "GitHub CLI",
+   "lane": "system",
+   "mechanism": "gh, account owner4",
+   "credential": "Credential Manager gh:github.com",
+   "check": {
+    "type": "cmd",
+    "argv": [
+     "gh",
+     "auth",
+     "status"
+    ]
+   },
+   "renew": "gh auth login",
+   "owner": "owner1"
+  },
+  {
+   "id": "github-mirror",
+   "name": "GitHub mirror of this repo",
+   "lane": "system",
+   "mechanism": "private remote `origin` (off-machine rescue copy)",
+   "credential": "uses the gh login",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "git",
+     "remote"
+    ]
+   },
+   "renew": "gh repo create owner4/wedding-video-os --private --source . --remote origin --push",
+   "owner": "owner1",
+   "setup": {
+    "kind": "terminal",
+    "label": "Create mirror",
+    "argv": [
+     "gh",
+     "repo",
+     "create",
+     "owner4/wedding-video-os",
+     "--private",
+     "--source",
+     ".",
+     "--remote",
+     "origin",
+     "--push"
+    ],
+    "how": "Creates the private off-machine mirror and pushes master. Needs GitHub CLI live first."
+   }
+  },
+  {
+   "id": "cloud-storage",
+   "name": "Cloud storage for finals",
+   "lane": "wedding",
+   "mechanism": "rclone remote (which cloud is still a CLAUDE.md TODO)",
+   "credential": "%APPDATA%/rclone/rclone.conf",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "rclone",
+     "listremotes"
+    ]
+   },
+   "renew": "rclone config (one browser consent)",
+   "owner": "owner1",
+   "setup": {
+    "kind": "terminal",
+    "label": "Configure cloud",
+    "argv": [
+     "rclone",
+     "config"
+    ],
+    "how": "A console runs rclone config; pick the cloud and finish its browser consent there."
+   }
+  },
+  {
+   "id": "pw-profiles",
+   "name": "Playwright wedding profiles (Google sign-in)",
+   "lane": "system",
+   "mechanism": "pw-wv-cli-profile / pw-wv-desktop-profile",
+   "credential": "browser cookies in ~/.claude/pw-wv-*-profile (signed in by hand, about 30 days)",
+   "check": {
+    "type": "manual"
+   },
+   "renew": "owner1 signs in to Google in the profile window; never scripted",
+   "owner": "owner1",
+   "setup": {
+    "kind": "signin",
+    "url": "https://accounts.google.com/",
+    "label": "Sign in to Google",
+    "how": "The agent's browser opens on the PC at Google sign-in; sign in as owner3@example.invalid there once."
+   }
+  },
+  {
+   "id": "claude-in-chrome",
+   "name": "Claude in Chrome",
+   "lane": "system",
+   "mechanism": "browser extension in owner1's real Chrome (route for Google-SSO sites)",
+   "credential": "owner1's own Chrome sessions",
+   "check": {
+    "type": "manual"
+   },
+   "renew": "open Chrome with the extension signed in",
+   "owner": "owner1",
+   "setup": {
+    "kind": "text",
+    "how": "Open Chrome on the PC with the Claude extension signed in; nothing to run here."
+   }
+  },
+  {
+   "id": "notebooklm",
+   "name": "NotebookLM",
+   "lane": "system",
+   "mechanism": "notebooklm MCP + nlm CLI at ~/.venvs/notebooklm-mcp/Scripts/ (not on PATH)",
+   "credential": "nlm profile for owner4@example.invalid",
+   "check": {
+    "type": "manual"
+   },
+   "renew": "~/.venvs/notebooklm-mcp/Scripts/nlm login",
+   "owner": "owner1",
+   "setup": {
+    "kind": "terminal",
+    "label": "Sign in",
+    "argv": [
+     "C:/Users/owner1/.venvs/notebooklm-mcp/Scripts/nlm.exe",
+     "login"
+    ],
+    "how": "A console runs nlm login; finish the Google sign-in in the browser it opens."
+   }
+  },
+  {
+   "id": "vercel",
+   "name": "Vercel CLI",
+   "lane": "system",
+   "mechanism": "vercel CLI (travel/lots static dashboards)",
+   "credential": "vercel login (currently example: confirm which identity)",
+   "check": {
+    "type": "manual"
+   },
+   "renew": "vercel login",
+   "owner": "owner1"
+  },
+  {
+   "id": "agent-bridge",
+   "name": "Sage (the household agent) - chat loop",
+   "lane": "personal",
+   "mechanism": "assistant/agent/bridge.py --loop, kept alive by the Day Spine job agent-bridge",
+   "credential": "none of its own (model turns use the Claude subscription token)",
+   "check": {
+    "type": "cmd",
+    "argv": [
+     "python",
+     "assistant/agent/bridge.py",
+     "--health"
+    ]
+   },
+   "renew": "python assistant/agent/bridge.py --ensure (from a terminal or the spine, never from inside a Claude session)",
+   "owner": "claude",
+   "setup": {
+    "kind": "terminal",
+    "label": "Restart",
+    "argv": [
+     "python",
+     "assistant/agent/bridge.py",
+     "--ensure"
+    ],
+    "how": "Starts the chat bridge if it is down (the Day Spine does this every 10 minutes by itself)."
+   }
+  },
+  {
+   "id": "google-owner1-personal",
+   "name": "Google calendar + mail (read): owner4@example.invalid",
+   "lane": "personal",
+   "mechanism": "Google API over OAuth (gmail.readonly, calendar.events), read by the agent through assistant/agent/gmcp.py",
+   "credential": "~/.example-mail/google/owner1-personal.json (OAuth token); client in ~/.example-mail/google/client_secret.json",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "python",
+     "assistant/agent/google_api.py",
+     "health",
+     "owner1-personal"
+    ]
+   },
+   "renew": "python assistant/agent/google_api.py auth owner1-personal  (the owner signs in and consents; see assistant/agent/GOOGLE_SETUP.md)",
+   "owner": "owner1"
+  },
+  {
+   "id": "google-owner1-films",
+   "name": "Google calendar + mail (read) + pricing sheet (card-gated write): owner3@example.invalid",
+   "lane": "wedding",
+   "mechanism": "Google API over OAuth (gmail.readonly, calendar.events; spreadsheets since 2026-10-18), read by the agent through assistant/agent/gmcp.py; Sheets cells written ONLY by drain.py running a card-approved sheet_set ticket (google_api.sheet_set, RAW values)",
+   "credential": "~/.example-mail/google/owner1-films.json (OAuth token); client in ~/.example-mail/google/client_secret.json",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "python",
+     "assistant/agent/google_api.py",
+     "health",
+     "owner1-films"
+    ]
+   },
+   "renew": "python assistant/agent/google_api.py auth owner1-films  (the owner signs in and consents; see assistant/agent/GOOGLE_SETUP.md)",
+   "owner": "owner1"
+  },
+  {
+   "id": "google-sheets-films",
+   "name": "Pricing sheet by API (Sheets scope on owner3@example.invalid)",
+   "lane": "wedding",
+   "mechanism": "the google-owner1-films OAuth token with the spreadsheets scope (google.json extra_scopes); sheet_fix.py reads the tabs and posts ONE card, drain.py writes the approved cells (exec kind sheet_set: before-check, RAW, read-back)",
+   "credential": "~/.example-mail/google/owner1-films.json (the same OAuth token; its stored scopes list says whether Sheets was consented)",
+   "check": {
+    "type": "cmd_match",
+    "argv": [
+     "python",
+     "assistant/agent/google_api.py",
+     "scopes",
+     "owner1-films"
+    ],
+    "live": "\"sheets\": true",
+    "missing": "SHEET_SCOPE_MISSING",
+    "missing_detail": "Sheets not consented yet: python assistant/agent/google_api.py auth owner1-films (one click)"
+   },
+   "renew": "python assistant/agent/google_api.py auth owner1-films  (owner1 signs in as owner3@example.invalid and allows the Sheets scope once; the mail + calendar scopes stay as they were)",
+   "owner": "owner1",
+   "setup": {
+    "kind": "terminal",
+    "label": "Allow Sheets access",
+    "argv": [
+     "python",
+     "assistant/agent/google_api.py",
+     "auth",
+     "owner1-films"
+    ],
+    "how": "A console runs the Google consent for owner3@example.invalid with the Sheets scope added; sign in and allow in the browser it opens, then tap Check. Within 30 minutes the spine posts the pricing-sheet card."
+   }
+  },
+  {
+   "id": "google-owner6",
+   "name": "Google calendar + mail (read): p08d678@example.invalid",
+   "brief_name": "owner6's Google account",
+   "lane": "personal",
+   "mechanism": "Google API over OAuth (gmail.readonly, calendar.events), read by the agent through assistant/agent/gmcp.py",
+   "credential": "~/.example-mail/google/owner6.json (OAuth token); client in ~/.example-mail/google/client_secret.json",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "python",
+     "assistant/agent/google_api.py",
+     "health",
+     "owner6"
+    ]
+   },
+   "renew": "python assistant/agent/google_api.py auth owner6  (the owner signs in and consents; see assistant/agent/GOOGLE_SETUP.md)",
+   "owner": "owner6"
+  },
+  {
+   "id": "agent-gchat",
+   "name": "Sage in Google Chat",
+   "lane": "personal",
+   "mechanism": "Chat app -> Pub/Sub pull subscription -> assistant/agent/gchat.py; posts with the app's service account",
+   "credential": "~/.example-mail/google/agent_sa.json (service account key); assistant/agent/gchat.local.json (project id, subscription)",
+   "check": {
+    "type": "manual"
+   },
+   "renew": "assistant/agent/GOOGLE_SETUP.md part 2, then python assistant/agent/gchat.py --test",
+   "owner": "owner1",
+   "setup": {
+    "kind": "text",
+    "how": "Google Chat is set up once by hand (assistant/agent/GOOGLE_SETUP.md part 2). Test from a terminal: python assistant/agent/gchat.py --test"
+   }
+  },
+  {
+   "id": "doer-vault",
+   "name": "Doer login vault (agent.kdbx)",
+   "lane": "personal",
+   "mechanism": "assistant/doer/vault.py - a KeePass file holding only the logins owner1 chose; login_fill.py types them into the doer's browser, the model never sees them",
+   "credential": "assistant/data/doer/agent.kdbx + its key in Credential Manager (owner1-assistant / kdbx:agent)",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "python",
+     "assistant/doer/vault.py",
+     "status"
+    ]
+   },
+   "renew": "python assistant/doer/vault.py init | import-chrome <csv> | add <title> --url --username [--totp]",
+   "owner": "owner1"
+  },
+  {
+   "id": "doer-browser",
+   "name": "Doer browser profile (signed-in sites)",
+   "lane": "personal",
+   "mechanism": "assistant/doer/browser.py - Chromium on ~/.claude/pw-wv-cli-profile with a CDP port; the playwright-doer MCP and login_fill.py share it",
+   "credential": "site cookies in ~/.claude/pw-wv-cli-profile (owner1 signs in once per site; about 30 days)",
+   "check": {
+    "type": "cmd_output",
+    "argv": [
+     "python",
+     "assistant/doer/browser.py",
+     "--probe-profile"
+    ]
+   },
+   "renew": "python assistant/doer/browser.py --show, sign in to the site, close the window",
+   "owner": "owner1"
+  },
+  {
+   "id": "doer-sessions",
+   "name": "Doer site sessions (daily warm pass)",
+   "lane": "personal",
+   "mechanism": "assistant/doer/login_fill.py --warm (spine job doer-warm, daily 06:00-08:00): signs in to every playbook flagged warm=true",
+   "credential": "the vault (doer-vault) + cookies in ~/.claude/pw-wv-cli-profile",
+   "check": {
+    "type": "status_file",
+    "path": "data:doer/sites_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 30,
+    "error_field": "error"
+   },
+   "renew": "python assistant/doer/login_fill.py --test <site> (then set warm:true in sites.json); a captcha site is signed in by hand in browser.py --show",
+   "owner": "owner1",
+   "setup": {
+    "kind": "text",
+    "how": "Sign-in playbooks are learned from use. A site that keeps logging out: tell the agent in chat and sign in once on the Setup row for that service."
+   }
+  },
+  {
+   "id": "bank-simplefin",
+   "name": "Bank feed (SimpleFIN Bridge, read-only)",
+   "lane": "money",
+   "mechanism": "scripts/money/simplefin.py GETs {access_url}/accounts a few times a day -> data/money/ledger.json; the protocol has no write endpoint and the script refuses anything but that GET",
+   "credential": "Credential Manager owner1-assistant / simplefin:access_url (banks are linked on SimpleFIN's site; no bank password on this PC)",
+   "check": {
+    "type": "status_file",
+    "path": "data:money/simplefin_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 30,
+    "error_field": "error"
+   },
+   "renew": "python assistant/scripts/setup_creds.py money simplefin   (a new setup token from beta-bridge.simplefin.org; $15/yr there)",
+   "owner": "owner1",
+   "setup": {
+    "kind": "terminal",
+    "label": "Enter setup token",
+    "argv": [
+     "python",
+     "assistant/scripts/setup_creds.py",
+     "money",
+     "simplefin"
+    ],
+    "also_url": "https://beta-bridge.simplefin.org/",
+    "how": "Open page: sign up at SimpleFIN Bridge ($15/yr), link your banks there, then New App -> copy the setup token. Enter setup token: a console asks for it hidden, claims the read-only access URL and stores it. Relay is not on SimpleFIN (Plaid only); link your other banks and cards.",
+    "chat": {
+     "_doc": "Chat setup (assistant/scripts/connect.py, 2026-10-16): the owner says one of ask_words and gets these steps with links in chat; a message holding something that matches `paste` is claimed by code, stored, and scrubbed from the chat record. No model turn anywhere in this flow.",
+     "ask_words": "\\b(set ?up|connect|link|hook ?up|add)\\b.{0,40}\\b(simplefin|bank feed|my banks?|bank accounts?|bank connection)\\b|\\bsimplefin\\b.{0,30}\\b(set ?up|steps|how)\\b",
+     "_defer_doc": "A general bank ask that never says SimpleFIN gets defer_to's steps instead (Relay via Plaid, the business bank) while either bank feed is not working, plus one line pointing back here (the owner 2026-10-17: the Relay feed was the one down and he got only SimpleFIN steps).",
+     "defer_to": "bank-plaid",
+     "own_words": "\\bsimplefin\\b",
+     "steps": [
+      "Open https://beta-bridge.simplefin.org/ and create an account (about $15 a year).",
+      "Tap Connect a bank and sign in to each bank or card you want tracked. Your logins stay with SimpleFIN; nothing is typed here. Relay is not on SimpleFIN, that one is a separate Plaid step.",
+      "Back on the SimpleFIN main page tap New App (or Setup Token) and copy the token, a long block of letters.",
+      "Paste the token here as its own message. I will claim it, store it read-only on the PC, remove it from this chat record, and pull your accounts."
+     ],
+     "paste": {
+      "what": "SimpleFIN setup token",
+      "kind": "base64_url",
+      "url_contains": "simplefin",
+      "handler": "simplefin",
+      "min_len": 40
+     }
+    }
+   }
+  },
+  {
+   "id": "bank-plaid",
+   "name": "Bank feed: Relay via Plaid (read-only)",
+   "brief_name": "the Relay bank feed (Plaid)",
+   "lane": "money",
+   "mechanism": "scripts/money/plaid.py POSTs /transactions/sync + /accounts/balance/get a few times a day -> data/money/ledger.json (same ledger as SimpleFIN); the allow-list is asserted on every call and no endpoint that moves money or changes an item exists in the module",
+   "credential": "Credential Manager owner1-assistant / plaid:client_id + plaid:secret (from dashboard.plaid.com) and plaid:access_token:<item> written by the Link flow; the Relay login is typed only inside Plaid's own Link window",
+   "check": {
+    "type": "status_file",
+    "path": "data:money/plaid_status.json",
+    "ts_field": "last_ok",
+    "max_age_h": 30,
+    "error_field": "error"
+   },
+   "renew": "python assistant/scripts/money/plaid.py setup   (re-link; add --update <item_id> after an ITEM_LOGIN_REQUIRED error)",
+   "owner": "owner1",
+   "setup": {
+   "kind": "terminal",
+   "label": "Enter keys + link Relay (PC console)",
+   "argv": [
+    "python",
+    "assistant/scripts/setup_creds.py",
+    "money",
+    "plaid"
+   ],
+   "also_url": "https://dashboard.plaid.com/",
+   "how": "Easiest: tap 'Connect from this phone' (or say 'set up Plaid' in chat): a three-step page creates the Plaid account (your sign-up; skipped once keys are stored), takes the two keys straight into the PC's Credential Manager, and opens Plaid Link right there so you sign in to Relay inside Plaid's window, then again for each other bank (Connect another bank). The console button does the same from the PC.",
+   "page": "/setup/plaid",
+   "page_label": "Connect from this phone",
+   "chat": {
+    "_doc": "Chat setup (assistant/scripts/connect.py, 2026-10-16): the owner says one of ask_words and gets these steps in chat. Plaid's keys are long-lived secrets, so there is NO paste block: they are typed on the /setup/plaid page (the owner's own PC answering over the tailnet), never in chat. {mc_url} is filled in from Mission Control's address.",
+    "say": "set up plaid",
+    "ask_words": "\\b(set ?up|connect|link|hook ?up|add)\\b.{0,40}\\b(plaid|relay)\\b|\\b(plaid|relay)\\b.{0,30}\\b(set ?up|steps|how|connect)\\b",
+    "state": "money/plaid_wizard.py",
+    "steps": [
+     "On your phone, open {mc_url}/setup/plaid (the same place as your cards). Everything below is a tap on that page or in your phone's browser; nothing is opened or run on the PC.",
+     {"if": "!keys", "text": "Tap Open Plaid sign-up and make your Plaid account with your own email (free tier, a couple of screens). Then tap Open Keys page (https://dashboard.plaid.com/developers/keys) and tap the copy icon next to client_id."},
+     {"if": "!keys", "text": "Back on the page, tap Paste to paste the client id. Then on the Keys page tap the eye next to the production secret, copy it, and tap Paste by the secret box. Tap Store and verify: they go straight into the PC's Credential Manager; I never see them in chat."},
+     {"if": "keys", "text": "Your Plaid account and keys are already stored in the PC's Credential Manager, so the page opens straight at Connect."},
+     {"if": "!items", "text": "Tap Connect Relay. Plaid's own window opens right there on your phone; sign in to Relay inside it and pick Operating, Tax and Savings."},
+     {"if": "items", "text": "Already linked: {linked}."},
+     "Then tap Connect another bank for each other bank or card you want on the feed; Plaid's window opens again each time. Repeat until every bank is listed on the page.",
+     "I pull the first year of transactions for each bank and tell you here what I can see. Read-only: I cannot move money.",
+     "Every step works from your phone, nothing needs the PC. A bank that signs you in on its own site (Chase, Amex, Capital One...) sends you back to the page by itself once the page's address is allowed in Plaid: the page gives you a Copy address button and an Open API page link for that one-time tap. If a bank needs you to sign in again, tap Re-sign-in on the page."
+    ]
+   }
+  }
+  },
+  {
+   "id": "next-insurance",
+   "name": "NEXT Insurance (general liability) sign-in",
+   "brief_name": "the NEXT Insurance login",
+   "lane": "money",
+   "mechanism": "the doer signs in from its vault (login_fill.py) to read the policy, billing and the cancellation notices; nothing is paid or changed without a card",
+   "credential": "doer vault agent.kdbx entry for login.nextinsurance.com (never in chat, never in config)",
+   "check": {
+    "type": "cmd_match",
+    "argv": [
+     "python",
+     "assistant/doer/vault.py",
+     "has",
+     "https://login.nextinsurance.com/"
+    ],
+    "live": "^ENTRY ",
+    "missing": "^NO_ENTRY ",
+    "missing_detail": "no login in the doer vault for login.nextinsurance.com"
+   },
+   "renew": "python assistant/doer/vault.py add \"NEXT Insurance\" --url https://login.nextinsurance.com/ --username <email>   (or sign in once in `python assistant/doer/browser.py --show`)",
+   "owner": "owner1",
+   "setup": {
+    "kind": "signin",
+    "url": "https://login.nextinsurance.com/",
+    "label": "Sign in",
+    "how": "The agent's browser opens on screen at NEXT's sign-in page; sign in there once and close the window. The session persists; add the login to the vault with vault.py add if it keeps signing out."
+   }
+  }
+ ]
+}

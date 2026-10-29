@@ -1,0 +1,32 @@
+{
+ "id": "housecall-pro",
+ "name": "Housecall Pro",
+ "functions": ["crm", "scheduling_booking", "payments_invoicing"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Housecall Pro offers a REST API (API key authentication). The owner must locate their API key in Housecall Pro account settings and store it via setup_creds. Documented coverage includes customers, jobs, and estimates for reads; write coverage varies — verify each endpoint against the current API docs before relying on it.",
+   "reads": ["customers", "jobs", "estimates", "invoices", "technicians", "schedule"],
+   "writes": ["job notes", "estimate updates"],
+   "always_tap": ["any invoice send to a client", "any job dispatch to a technician", "any payment collection"],
+   "status": "unverified"
+  },
+  {
+   "tier": 4,
+   "path": "browser",
+   "how": "For operations not covered by the API, Sage drives Housecall Pro in a signed-in Playwright browser. The owner must keep the browser profile logged in. This path may break with UI updates and should be treated as a fallback only.",
+   "reads": ["anything visible in the Housecall Pro web UI"],
+   "writes": ["any action available in the web UI"],
+   "always_tap": ["any send to a client", "any invoice or payment action"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Housecall Pro's public API has limited documentation; verify endpoint coverage before planning any integration.",
+  "Housecall Pro is optimised for mobile field technicians; some features may lag on the web UI.",
+  "Do not confuse with Jobber; both target field-service businesses but Housecall Pro's API maturity differs.",
+  "API access may require a specific Housecall Pro subscription tier; check with support."
+ ],
+ "notes": "Housecall Pro is a mobile-first field-service platform; verify API endpoint coverage carefully before building integrations beyond basic reads."
+}

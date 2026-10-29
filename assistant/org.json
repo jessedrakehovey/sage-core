@@ -1,0 +1,18 @@
+{
+ "_doc": "The organization's own values the CODE needs (assistant/orgcfg.py, WP5 2026-10-24). Protected core: send_identities and phone_accounts are what the send gate guards; a property-management address can never appear here (the owner 2026-09-28). What the agent LEARNS about the business lives in agent/state/org.json, not here. new_org.py writes a fresh one for a new organization.",
+ "name": "example-org",
+ "vault_name": "example-org",
+ "send_identities": ["owner4@example.invalid", "owner3@example.invalid", "p08d678@example.invalid"],
+ "phone_accounts": {"owner6-iphone": {"lane": "owner6", "owner": "owner6"}, "owner1-iphone": {"lane": "personal", "owner": "owner1"}},
+ "default_phone_account": "owner6-iphone",
+ "mission_control_url": "https://this-pc.tailnet.ts.net:9443",
+ "watched_tasks": ["example-org", "example-org", "example-org", "example-org", "example-org", "example-org", "example-org", "example-org", "example-org", "example-org"],
+ "internal_emails": ["owner2@example.invalid", "owner3@example.invalid", "owner4@example.invalid"],
+ "alert_from": "owner3@example.invalid",
+ "alert_to": ["owner2@example.invalid", "owner3@example.invalid"],
+ "phone_send_shortcut": "example-org",
+ "phone_nudge_mark": "example-SEND",
+ "phone_token_header": "X-example-Token",
+ "chat_reader": "owner3@example.invalid",
+ "semantic_python": "~/.venvs/vault-mem/Scripts/python.exe"
+}

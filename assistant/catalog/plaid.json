@@ -1,0 +1,23 @@
+{
+ "id": "plaid",
+ "name": "Plaid",
+ "functions": ["banking"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage reads bank transactions and balances via the Plaid API using `assistant/scripts/money/plaid.py`. The owner must complete the Plaid Link flow once per financial institution to obtain an access token, which is stored in the OS credential store via setup_creds. Token refresh is automatic. This path is strictly read-only; the money lane never initiates payments or transfers.",
+   "reads": ["account balances", "transactions (historical and recent)", "pending transactions", "account metadata and institution details"],
+   "writes": ["nothing; Plaid is read-only in this integration"],
+   "always_tap": ["re-linking a bank account (owner completes the Plaid Link UI themselves; Sage does not drive it)"],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "Plaid access tokens expire or require re-authentication when the bank changes its login flow; monitor for ITEM_LOGIN_REQUIRED errors and prompt the owner to re-link.",
+  "Plaid's free development tier limits the number of supported institutions; upgrade to a paid plan for production use.",
+  "Sage never initiates transfers, payments, or any write operation to a financial institution through Plaid.",
+  "Plaid Link must be completed by the owner in a browser; Sage cannot drive this UI flow."
+ ],
+ "notes": "Plaid is a read-only bank feed used for cash-flow visibility; Sage reads transaction history and balances but never initiates any financial action."
+}

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>example comms probe - every minute 07:00-21:30: rebuilds the comms substrate (thread states + SLAs) and, when a human message / lead / tap is waiting, starts one operator run at once (assistant/scripts/comms_probe.py). Zero LLM itself; never sends.</Description>
+    <URI>\the organization</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{{USER_SID}}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT3M</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <Hidden>true</Hidden>
+  </Settings>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-10-06T07:00:00-07:00</StartBoundary>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+      <Repetition>
+        <Interval>PT1M</Interval>
+        <Duration>PT14H30M</Duration>
+        <StopAtDurationEnd>true</StopAtDurationEnd>
+      </Repetition>
+    </CalendarTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Users\the owner\.venvs\wedding-web\Scripts\pythonw.exe</Command>
+      <Arguments>"{{ORG_ROOT}}\assistant\scripts\comms_probe.py"</Arguments>
+      <WorkingDirectory>{{ORG_ROOT}}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

@@ -1,0 +1,31 @@
+{
+ "id": "dubsado",
+ "name": "Dubsado",
+ "functions": ["crm", "scheduling_booking", "payments_invoicing", "contracts_esign"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Dubsado offers a REST API using API key authentication. The owner must locate their API key in Dubsado account settings and store it via setup_creds. The API covers projects, contacts, invoices, and forms, but coverage is limited and partially underdocumented; verify each endpoint against the current docs before relying on it.",
+   "reads": ["projects", "contacts", "invoices", "forms and questionnaires", "workflow stages"],
+   "writes": ["project notes", "invoice updates", "form sends"],
+   "always_tap": ["any outbound email or message to a client", "any invoice or contract send", "any payment request"],
+   "status": "unverified"
+  },
+  {
+   "tier": 4,
+   "path": "browser",
+   "how": "For actions not covered by the API, Sage drives Dubsado in a signed-in Playwright browser. The owner must keep the browser profile logged in to Dubsado. This path is slower and more fragile than an API integration and may break with UI updates.",
+   "reads": ["anything visible in the Dubsado web UI"],
+   "writes": ["any action available in the web UI"],
+   "always_tap": ["any send to a client", "any invoice or contract action"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Dubsado's public API is limited and underdocumented; verify every endpoint against current docs before building.",
+  "Browser automation on Dubsado may break with UI updates; monitor for errors and have a re-login fallback.",
+  "Dubsado is a direct alternative to HoneyBook; do not run both simultaneously in the same business without clear data-boundary rules."
+ ],
+ "notes": "Dubsado is a CRM and client-management platform popular with creative service businesses; verify API endpoints carefully before building deep integrations."
+}

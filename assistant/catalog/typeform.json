@@ -1,0 +1,23 @@
+{
+ "id": "typeform",
+ "name": "Typeform",
+ "functions": ["lead_intake"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage polls for new Typeform responses using `assistant/scripts/sense_typeform.py` with a personal API token stored in the OS credential store via `assistant/scripts/setup_creds.py`. The owner must create a Typeform account, build the lead intake form, and paste the API token into setup_creds. New responses trigger the lead intake flow automatically.",
+   "reads": ["form responses", "respondent metadata", "form field values by question id"],
+   "writes": ["nothing; Typeform polling is strictly read-only"],
+   "always_tap": [],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "Typeform's free plan may rate-limit the API at high polling frequencies; upgrade to a paid plan for production use.",
+  "A new API token must be re-pasted into the credential store if the Typeform account password changes or the token is revoked.",
+  "Deduplication of repeated responses is handled inside `sense_typeform.py`; do not rely on Typeform itself to prevent duplicates.",
+  "Form field question IDs change if the form is restructured; update the field mapping in sense_typeform.py after any form edit."
+ ],
+ "notes": "Typeform is a lead-intake sensor; new quiz or contact-form responses are a primary trigger for the lead routing and intro-text flow."
+}

@@ -1,0 +1,23 @@
+{
+ "id": "stripe",
+ "name": "Stripe",
+ "functions": ["payments_invoicing"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Stripe via its official REST API using a secret key stored in the OS credential store. The owner must create a Stripe account, generate an API key in the Stripe dashboard, and store it via setup_creds. Reads are unrestricted; any write (invoice, payment link, refund) requires an approval card before execution.",
+   "reads": ["charges", "customers", "invoices", "payment intents", "account balance", "subscription status"],
+   "writes": ["invoices (draft and finalized)", "payment links", "customer records"],
+   "always_tap": ["any invoice send to a client", "any refund", "any payment link creation", "any charge to a customer"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Use a restricted key with read-only scopes for Sage's reads and a separate key for executor sends to limit blast radius.",
+  "Test mode and live mode use completely different keys; confirm which is configured before any write.",
+  "Webhooks can push real-time payment events to Sage; verify the webhook signing secret to prevent spoofed events.",
+  "Finalizing and sending an invoice is irreversible without a credit note; always tap before sending."
+ ],
+ "notes": "Stripe is a payments-first tool; Sage reads financial state and drafts invoices but never initiates a charge without owner approval."
+}

@@ -1,0 +1,23 @@
+{
+ "id": "hubspot",
+ "name": "HubSpot",
+ "functions": ["crm", "lead_intake", "mail", "automation"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to HubSpot via the HubSpot v3 REST API using a Private App token stored in the OS credential store. The owner must create a Private App in HubSpot Settings, grant the required scopes (contacts, deals, emails), and store the token via setup_creds. Private App tokens do not expire. Reads are free; writes require approval.",
+   "reads": ["contacts", "deals", "companies", "email thread history", "pipeline stages", "form submissions"],
+   "writes": ["contact records", "deal stage changes", "email drafts", "task creation"],
+   "always_tap": ["any outbound email or sequence enrollment", "any deal close or deletion", "any contact merge or permanent deletion"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "Private App tokens do not expire but scopes are fixed at creation; delete and recreate the app to add new scopes.",
+  "HubSpot's email send API (Marketing Hub) requires a Marketing Hub subscription; verify the account tier before building email sends.",
+  "HubSpot's API rate limit is 110 requests per 10 seconds per app; batch reads where possible.",
+  "HubSpot's free CRM and paid Marketing/Sales Hubs have different API surface areas; confirm which features are available on the account tier."
+ ],
+ "notes": "HubSpot is a full-featured CRM and marketing platform best suited to businesses with a structured sales pipeline and email marketing needs."
+}

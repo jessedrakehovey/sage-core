@@ -1,0 +1,107 @@
+{
+ "_doc": "The money lane (assistant/scripts/money/). Everything an organization tunes lives here; the code only interprets it. READ-ONLY on every bank: the lane never pays, transfers or enters credentials. Rulings 14-15 in assistant/TRACKING_DESIGN.md. Tax tables are the owner's responsibility to re-check every January (sources noted per block). feeds: one block per bank-feed adapter (simplefin.py, plaid.py), every one read-only.",
+ "feeds": [
+  {
+    "_doc": "SimpleFIN Bridge (https://beta-bridge.simplefin.org, $15/yr, link banks on their site, a read-only access URL here). Relay is NOT reachable through SimpleFIN (Relay supports Plaid only, 2026-10-15): that is the plaid row below.",
+    "provider": "simplefin",
+    "secret": "simplefin:access_url",
+    "initial_days": 365,
+    "overlap_days": 5,
+    "window_days": 60,
+    "include_pending": true,
+    "max_pulls_per_day": 6
+  },
+  {
+   "_doc": "Plaid, for Relay (Operating / Tax / Savings). READ-ONLY: plaid.py allows only /accounts/balance/get and /transactions/sync, plus /link/token/create and /item/public_token/exchange inside the one-time Link flow (the owner signs in to the bank in Plaid's own window; nothing is typed here). Keys from dashboard.plaid.com (free Trial / Limited Production tier) via setup_creds.py money plaid. env: production | sandbox. redirect_uri only if the bank needs OAuth: register http://localhost:<link_port>/ under Team Settings > API in the Plaid dashboard and put it here. days_requested = history asked for at Link time (max 730).",
+   "provider": "plaid",
+   "env": "production",
+   "secrets": {"client_id": "plaid:client_id", "secret": "plaid:secret", "access_token_prefix": "plaid:access_token:"},
+   "client_name": "Sage money lane (read-only)",
+   "country_codes": ["US"],
+   "language": "en",
+   "products": ["transactions"],
+   "days_requested": 730,
+   "link_port": 8765,
+   "link_timeout_s": 900,
+   "redirect_uri": "",
+   "sync_count": 500,
+   "max_pulls_per_day": 6
+  }
+ ],
+ "accounts": {
+  "_doc": "How an account's NAME maps to a kind. Relay names its buckets ('Operating', 'Tax', 'Savings'); a personal checking or card falls through to 'personal'. kinds: operating | tax | savings | personal | card | unknown. side = whose money it is for the readback.",
+  "kinds": [
+   {"match": "operat", "kind": "operating", "side": "business"},
+   {"match": "\\btax", "kind": "tax", "side": "business"},
+   {"match": "saving|reserve|emergency", "kind": "savings", "side": "business"},
+   {"match": "example|relay|business|biz", "kind": "operating", "side": "business"},
+   {"match": "credit|visa|mastercard|amex|card", "kind": "card", "side": "personal"},
+   {"match": "checking|chequing", "kind": "personal", "side": "personal"}
+  ],
+  "overrides": {
+   "_doc": "account id -> kind/side when the name is ambiguous. Filled from the weekly unknowns answers or by hand."
+  }
+ },
+ "relay": {
+  "_doc": "Relay auto-splits every deposit into buckets by percentage (the owner, 2026-10-15). null = not confirmed yet; the set-aside card then only states the estimate. Report only: the lane never moves money.",
+  "splits_pct": {"tax": null, "savings": null, "operating": null}
+ },
+ "categorize": {
+  "unknowns_day": "fri",
+  "unknowns_after": "15:00",
+  "unknowns_max_rows": 12,
+  "min_abs_amount": 1.0,
+  "transfer_window_days": 3,
+  "learn_to": "assistant/learnings/money.md"
+ },
+ "forecast": {
+  "horizon_days": 35,
+  "min_occurrences": 3,
+  "periods": {"weekly": [7, 2], "monthly": [30, 5], "quarterly": [91, 8], "yearly": [365, 20]},
+  "price_jump_pct": 0.1,
+  "price_jump_min": 2.0,
+  "low_balance_days": 7,
+  "warn_latch_days": 7,
+  "post_hours": ["08:00", "20:30"]
+ },
+ "quarterly": {
+  "_doc": "Estimated-tax checkpoints. federal shares are 25% each; CA front-loads 30/40/0/30 (FTB). Due dates roll to the next business day in real life; T-10d reminders make that moot. method: 'annualize' projects YTD profit over the full year; 'ytd' taxes only what has landed.",
+  "method": "annualize",
+  "remind_days_before": 10,
+  "due": [
+   {"n": 1, "month": 4, "day": 15, "federal_share": 0.25, "ca_share": 0.30},
+   {"n": 2, "month": 6, "day": 15, "federal_share": 0.25, "ca_share": 0.40},
+   {"n": 3, "month": 9, "day": 15, "federal_share": 0.25, "ca_share": 0.00},
+   {"n": 4, "month": 1, "day": 15, "federal_share": 0.25, "ca_share": 0.30, "next_year": true}
+  ],
+  "set_aside_pct_floor": 0.25,
+  "set_aside_pct_cap": 0.40,
+  "other_income_annual": 0,
+  "prior_year_total_tax": null,
+  "filing_status": "single"
+ },
+ "tax_tables": {
+  "_doc": "Single filer. Federal 2026 from Rev. Proc. 2025-32 (Oct 2025). California: 2025 tables (FTB publishes the next year's in late summer; re-check). Brackets are [upper_bound, rate]; the last upper bound is null.",
+  "year": 2026,
+  "federal": {
+   "standard_deduction": 16100,
+   "brackets": [[12400, 0.10], [50400, 0.12], [105700, 0.22], [201775, 0.24], [256225, 0.32], [640600, 0.35], [null, 0.37]],
+   "se_rate": 0.153,
+   "se_base_factor": 0.9235,
+   "ss_wage_base": 184500,
+   "ss_rate": 0.124,
+   "medicare_rate": 0.029,
+   "qbi_pct": 0.20
+  },
+  "california": {
+   "standard_deduction": 5540,
+   "brackets": [[10756, 0.01], [25499, 0.02], [40245, 0.04], [55866, 0.06], [70606, 0.08], [360659, 0.093], [432787, 0.103], [721314, 0.113], [null, 0.123]]
+  }
+ },
+ "monthly": {
+  "day": 1,
+  "after": "08:00",
+  "to": "owner1",
+  "top_n": 3
+ }
+}

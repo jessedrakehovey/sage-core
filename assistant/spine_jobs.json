@@ -1,0 +1,749 @@
+{
+ "_doc": "Day Spine job list (assistant/scripts/spine.py). Every job is zero-LLM except hb-snapshot (model as transport only) and doer-tick (a real model turn, only when an agent_run ticket waits). `cmd` is argv ('python' = this interpreter), `every_min` the minimum cadence, `window` an optional [start_hour, end_hour) local window, `timeout_s` the kill time. The spine task fires every 10 min 06:00-23:30; jobs run when due. Disable a job with enabled:false rather than deleting it.",
+ "jobs": [
+  {
+   "name": "sense-typeform",
+   "cmd": [
+    "python",
+    "assistant/scripts/sense_typeform.py"
+   ],
+   "every_min": 10,
+   "timeout_s": 180,
+   "_what": "new Package Finder quiz leads straight from Typeform -> priced HoneyBook draft ticket + inquiry ticket + card (runs before drain)"
+  },
+  {
+   "name": "text-confirm",
+   "cmd": [
+    "python",
+    "assistant/scripts/text_confirm.py"
+   ],
+   "every_min": 10,
+   "timeout_s": 60,
+   "_what": "a text in from a number whose approved text was handed to the phone but never acked proves it went out: mark it sent + close its 'text unconfirmed' card (mc_server does this on every inbound; this is the safety net)"
+  },
+  {
+   "name": "client-texts",
+   "cmd": [
+    "python",
+    "assistant/scripts/client_texts.py",
+    "tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "window": [
+    7,
+    21
+   ],
+   "_what": "the owner's standing client texts (2026-10-17): releases texts held overnight at 09:00 (runs before drain); the day-before reminder for every booked client meeting / call / shoot (HoneyBook scheduler + our holds); the other kinds fire from their sensors and the follow-ups engine"
+  },
+  {
+   "name": "comms-state",
+   "cmd": [
+    "python",
+    "assistant/scripts/comms_state.py"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "the comms substrate (thread states + SLAs + breach tickets); the 1-min probe task rebuilds it too, this is the safety net"
+  },
+  {
+   "name": "hb-snapshot",
+   "cmd": [
+    "python",
+    "assistant/scripts/hb_snapshot.py",
+    "--min-age-min",
+    "100"
+   ],
+   "every_min": 120,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 280,
+   "_what": "refresh dashboard/data/honeybook.json through the READ-ONLY HoneyBook connector (the one job that uses a model, as a transport only: haiku, one tool, fixed program; the script parses and validates the result). Feeds sense_honeybook, the Desk, ads/hb_match, couples sync"
+  },
+  {
+   "name": "team-on-projects",
+   "cmd": [
+    "python",
+    "assistant/scripts/team_on_projects.py"
+   ],
+   "every_min": 30,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "the owner's standing rule 2026-10-24: every open HoneyBook project gets the team members in config honeybook.team_on_projects (a team member) - mints hb_add_team_member tickets for the ones still missing, a few per run, drain writes them"
+  },
+  {
+   "name": "hb-keepalive",
+   "cmd": [
+    "C:/Users/owner1/.venvs/wedding-web/Scripts/python.exe",
+    "scripts/honeybook/hb_login.py",
+    "--keepalive"
+   ],
+   "every_min": 60,
+   "window": [
+    6,
+    23
+   ],
+   "timeout_s": 330,
+   "_what": "keep the HoneyBook browser lane (~/.claude/wv_hb_profile) signed in: off-screen real Chrome, re-login via Google one-click (never a password), reap orphan Chromes -> data/hb_browser_status.json (connection hb-browser). Signed out -> an on-screen sign-in window that waits with no time limit (hb_signin_window.py, the owner 2026-10-08); then the same check on the doer/playwright-cli profile -> data/hb_doer_status.json (connection hb-doer)"
+  },
+  {
+   "name": "cards-sweep",
+   "cmd": [
+    "python",
+    "assistant/scripts/cards.py",
+    "sweep"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "expire dead cards, harvest the owner's answers (free text / edits -> tickets + learnings)",
+   "expect": "SWEEP"
+  },
+  {
+   "name": "reflex",
+   "cmd": [
+    "python",
+    "assistant/agent/reflex.py",
+    "tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 600,
+   "_what": "the reflex (assistant/agent/reflex.py, 2026-10-27): reads the stores this system already writes for faults (a spine job failing in a row, questions held on a usage limit with an account idle, a doer job staged on a limit, a built-but-unlanded build, a build request nobody picked up, a switched-off line that still posted), fixes each by code one step a pass, verifies within the hour, escalates once; binds owner rules to the code that posts lines",
+   "expect": "RESULT REFLEX"
+  },
+  {
+   "name": "projects",
+   "cmd": [
+    "python",
+    "assistant/agent/projects.py",
+    "tick"
+   ],
+   "every_min": 30,
+   "timeout_s": 180,
+   "_what": "long-running problems (assistant/agent/projects.py, 2026-10-27): every project whose next step is due is run through the existing hands (a doer job, an operator card, a build request, one line to the owner, a decision card, a wait); outcomes are read back from the tickets, the builder and the cards; a failed step moves to the next untried approach, never the same one; out of ways -> one line to the owners, once. Zero-LLM; the bridge's minute tick runs the planning turns",
+   "expect": "RESULT PROJECTS"
+  },
+  {
+   "name": "outcomes-settle",
+   "cmd": [
+    "python",
+    "assistant/scripts/outcomes.py",
+    "settle"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "the outcome ledger (outcomes.py, 2026-10-24): re-run the verifier of every claim that is due (a text waits for its reply/ack, a doer job for its evidence), ask the owner ONCE about one that cannot be confirmed, close what is proven; the card marks and ticket closes read from it",
+   "expect": "RESULT"
+  },
+  {
+   "name": "cards-digest",
+   "cmd": [
+    "python",
+    "assistant/scripts/digest.py",
+    "tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "the weekly approvals digest (the owner 2026-10-20): once the slot (config cards.digest_day/hour) has passed, ONE drop-down Chat message with every held card; nothing between digests except urgent cards"
+  },
+  {
+   "name": "send-hold",
+   "cmd": [
+    "python",
+    "assistant/scripts/send_hold.py"
+   ],
+   "every_min": 10,
+   "timeout_s": 60,
+   "_what": "a timed send approved with a condition ('text him at 4 if they haven't replied') is held, never sent, when the person already wrote (texts, mail, HoneyBook); one line in the card's thread says what came in. Runs right before drain",
+   "group": "long",
+   "expect": "SEND_HOLD"
+  },
+  {
+   "name": "drain",
+   "cmd": [
+    "python",
+    "assistant/scripts/drain.py"
+   ],
+   "every_min": 10,
+   "timeout_s": 600,
+   "_what": "run approved exec tickets through registered scripts (email_send etc.); quiet hours enforced inside",
+   "group": "long",
+   "expect": "DRAIN"
+  },
+  {
+   "name": "sheet-fix",
+   "cmd": [
+    "python",
+    "assistant/scripts/sheet_fix.py",
+    "--auto"
+   ],
+   "every_min": 30,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "the pending edits to the pricing sheet (pricing/sheet_edits.json) as ONE card, before-values read live over the Sheets API (agent/google_api.py, account the owner-films): waits for the owner's one-time Sheets consent, posts nothing while a card is open or a sheet_set ticket is queued, and stops for good once the sheet holds every edit (data/sheet_fix_state.json) or the owner tapped Skip. Zero-LLM, never writes a cell itself (drain does, after the tap). Added 2026-10-18 after the doer could not drive the Sheets UI."
+  },
+  {
+   "name": "doer-tick",
+   "cmd": [
+    "python",
+    "assistant/doer/doer.py",
+    "--tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 1000,
+   "_what": "the doer (assistant/doer): if an agent_run ticket is waiting (Sage's `do`), run ONE browser task in a headless model turn (sonnet) on the shared signed-in profile; irreversible steps stop at a checkpoint card. Sage wakes this at once when it queues a task; the spine is the backstop. Zero tokens when nothing waits",
+   "group": "long"
+  },
+  {
+   "name": "learn-tick",
+   "cmd": [
+    "python",
+    "assistant/doer/learn.py",
+    "--tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "the doer's self-learning engine (assistant/doer/learn.py, zero-LLM): harvest the turns' lesson.json into skills, score tools, turn repeated hand-done jobs into 'build a tool' tickets and failed tools into 'repair' tickets. Self-paced: it decides inside whether a tick is due (10 min when hot, 6 h when idle) and how many jobs a day it may queue"
+  },
+  {
+   "name": "learn-digest",
+   "cmd": [
+    "python",
+    "assistant/doer/learn.py",
+    "--digest"
+   ],
+   "every_min": 60,
+   "window": [
+    19,
+    22
+   ],
+   "timeout_s": 60,
+   "_what": "one plain line to the owner's chat with Sage in the evening when the engine learned something today (skills kept, tools touched, repairs waiting); silent otherwise"
+  },
+  {
+   "name": "doer-warm",
+   "cmd": [
+    "python",
+    "assistant/doer/login_fill.py",
+    "--warm"
+   ],
+   "every_min": 1440,
+   "window": [
+    6,
+    8
+   ],
+   "timeout_s": 900,
+   "_what": "sign the doer's browser in to every site whose playbook says warm=true (assistant/data/doer/sites.json), off-screen, so sessions never go cold; captchas / codes / failures land in sites_status.json (connection doer-sessions). Zero LLM"
+  },
+  {
+   "name": "mc-keepalive",
+   "cmd": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "assistant/scripts/mc_server.ps1"
+   ],
+   "every_min": 10,
+   "timeout_s": 20,
+   "_what": "start the Mission Control server if :9019 is not answering (the launcher exits at once when it is)"
+  },
+  {
+   "name": "followups-tick",
+   "cmd": [
+    "python",
+    "assistant/scripts/followups.py",
+    "tick"
+   ],
+   "every_min": 30,
+   "timeout_s": 120,
+   "_what": "fire due follow-ups into the queue (also runs inside the operator tick; here it is the backstop)"
+  },
+  {
+   "name": "conn-check",
+   "cmd": [
+    "python",
+    "assistant/scripts/conn_check.py"
+   ],
+   "every_min": 60,
+   "timeout_s": 240,
+   "_what": "prove every connection in assistant/connections.json alive (IMAP login, iCal fetch, sensor status files, CLIs, MCP registration) -> data/connections_status.json; sentinels turn a dead one into a finding (runs before sentinels)"
+  },
+  {
+   "name": "sentinels",
+   "cmd": [
+    "python",
+    "assistant/scripts/sentinels.py"
+   ],
+   "every_min": 60,
+   "timeout_s": 120,
+   "_what": "stuck-work watchdog -> one latched digest ticket",
+   "expect": "SENTINELS"
+  },
+  {
+   "name": "heartbeat",
+   "cmd": [
+    "python",
+    "scripts/monitoring/heartbeat.py"
+   ],
+   "every_min": 120,
+   "timeout_s": 120,
+   "_what": "cron liveness (dreaming, graphify, ...) -> alert once, deduped"
+  },
+  {
+   "name": "gate-health",
+   "cmd": [
+    "python",
+    "scripts/guardrails/gate_health_check.py"
+   ],
+   "every_min": 360,
+   "timeout_s": 120,
+   "_what": "send-gate tripwire re-proved mechanically"
+  },
+  {
+   "name": "graphify",
+   "cmd": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "scripts/graphify_cron.ps1"
+   ],
+   "every_min": 420,
+   "window": [
+    8,
+    20
+   ],
+   "timeout_s": 900,
+   "_what": "wikilink-graph staleness watch + rebuild"
+  },
+  {
+   "name": "log-rotate",
+   "cmd": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "scripts/lib/rotate_logs.ps1"
+   ],
+   "every_min": 720,
+   "timeout_s": 120,
+   "_what": "rotate oversized cron logs"
+  },
+  {
+   "name": "rescue-kit",
+   "cmd": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "assistant/scripts/rescue.ps1"
+   ],
+   "every_min": 1440,
+   "window": [
+    21,
+    24
+   ],
+   "timeout_s": 900,
+   "_what": "mirror the repo + runtime state to I:\\VAULT_RESCUE and L:\\VAULT_RESCUE (local only; GitHub mirror is the owner's call)"
+  },
+  {
+   "name": "agent-bridge",
+   "cmd": [
+    "python",
+    "assistant/agent/bridge.py",
+    "--ensure"
+   ],
+   "every_min": 10,
+   "timeout_s": 30,
+   "_what": "keep the conversational agent's loop alive (assistant/agent: chat channels -> read-only brain -> SUGGEST writers -> reply; also fires the agent's own schedules every minute). Starts it detached if it is not running; exits at once when it is"
+  },
+  {
+   "name": "agent-dream",
+   "cmd": [
+    "python",
+    "assistant/agent/dream.py",
+    "nightly"
+   ],
+   "every_min": 1440,
+   "window": [
+    6,
+    7
+   ],
+   "timeout_s": 900,
+   "_what": "the agent's nightly learning pass over its own conversations (one read-only opus turn; validated, capped, evidence-cited changes to rules / memory / wiki notes / schedules), hands the transcript to Memory/Daily_Logs for the 06:30 dreaming, posts the daily digest with undo ids, commits assistant/agent/state"
+  },
+  {
+   "name": "agent-dream-day",
+   "cmd": [
+    "python",
+    "assistant/agent/dream.py",
+    "pass"
+   ],
+   "every_min": 180,
+   "window": [
+    9,
+    22
+   ],
+   "timeout_s": 900,
+   "_what": "daytime learning passes while the agent is new (the owner 2026-10-05): the same review as the nightly dream over what is new since the last one, so lessons become rules / memory / wiki notes / schedules within hours. Skips with fewer than 6 new lines from people; posts only what it changed, with undo ids. Set enabled:false to go back to nightly only"
+  },
+  {
+   "name": "agent-builder",
+   "cmd": [
+    "python",
+    "assistant/agent/builder.py",
+    "kick"
+   ],
+   "every_min": 60,
+   "window": [
+    7,
+    23
+   ],
+   "timeout_s": 60,
+   "_what": "Sage's builder (the owner 2026-10-07: 'full hands off'): when a wiki build note or a 'needs a code change' dream-ask is open, starts ONE detached builder run (git worktree, headless opus with edit tools + tests only; verify protected paths, tests vs baseline, gate check; commit; fast-forward master; Chat note with git revert ids). kick returns at once; max 4 runs a day, 60 min apart"
+  },
+  {
+   "name": "agent-pending",
+   "cmd": [
+    "python",
+    "assistant/agent/pending.py",
+    "tick"
+   ],
+   "every_min": 10,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "The owners' approval queue (Memory/skill-suggestions.md ## Pending, the owner 2026-10-18): folds repeats, closes the builder's dropped requests, ages out asks unanswered for 7 days, and puts each remaining entry in Google Chat as a card with action buttons (max 3 open at once; the tap is done by code in cards.sweep). Zero-LLM"
+  },
+  {
+   "name": "dashboard-rebuild",
+   "cmd": [
+    "python",
+    "assistant/scripts/dashboard.py"
+   ],
+   "every_min": 30,
+   "timeout_s": 120,
+   "_what": "refresh the static mission-control page (the server rebuilds on request too)"
+  },
+  {
+   "name": "tracking-drift",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/drift.py",
+    "run"
+   ],
+   "every_min": 180,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 240,
+   "_what": "record-drift detectors (assistant/tracking.json -> drift): the delivery ledger vs the editor, HoneyBook stage vs a wedding that passed, reminders still armed after 'paid', past calendar events with nothing logged -> data/tracking/drift.json for the weekly card. Zero LLM, read-only"
+  },
+  {
+   "name": "tracking-chase",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/chase.py"
+   ],
+   "every_min": 60,
+   "window": [
+    7,
+    21
+   ],
+   "timeout_s": 120,
+   "_what": "Sage's per-lane chaser (example's shape, ruling 1 2026-10-15): one nudge card per lane per day about what waits on the owner (stale open cards, staged tickets, fired follow-ups), re-asked after a day, parked after 3; posted in the owner's measured active hours (rhythm.py); taps harvested every run"
+  },
+  {
+   "name": "tracking-weekly",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/weekly.py"
+   ],
+   "every_min": 60,
+   "window": [
+    9,
+    20
+   ],
+   "timeout_s": 300,
+   "_what": "the Friday readback to the shared space + ONE weekly record-check card whose approve mints a tracking_fix ticket (internal writes only); gated inside to tracking.json -> weekly.readback_day/readback_after, once per week"
+  },
+  {
+   "name": "tracking-mining",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/mining.py"
+   ],
+   "every_min": 30,
+   "window": [
+    7,
+    21
+   ],
+   "timeout_s": 180,
+   "_what": "thread mining (ruling 3, 2026-10-15): dates beside commitment words in new texts / mail / HoneyBook messages / the owners' chat -> ONE calendar_hold card per date; money senders' due / renewal / action-required dates -> ONE tracking_fix card that arms the reminders. Vocabulary in assistant/mining.json; never silent, never sends"
+  },
+  {
+   "name": "tracking-scheduling",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/scheduling.py"
+   ],
+   "every_min": 15,
+   "window": [
+    7,
+    21
+   ],
+   "timeout_s": 120,
+   "_what": "meeting scheduling (ruling 12): reads replies to the call-times cards; a picked slot -> the confirmation message card + a calendar_hold card; unanswered offers expire after tracking.json -> scheduling.proposal_ttl_days. Proposals themselves are made by the operator / Sage (scheduling.py propose)"
+  },
+  {
+   "name": "tracking-probation",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/probation.py",
+    "tick"
+   ],
+   "every_min": 720,
+   "window": [
+    9,
+    20
+   ],
+   "timeout_s": 120,
+   "_what": "the 20-right-in-a-row tally (ruling 9) per class from the card answers + exec ledger; at the bar ONE 'Make it automatic?' card. The code never flips a gate (README 'Probation')"
+  },
+  {
+   "name": "money-pull",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/simplefin.py"
+   ],
+   "every_min": 240,
+   "window": [
+    6,
+    23
+   ],
+   "timeout_s": 180,
+   "_what": "READ-ONLY bank feed: SimpleFIN GET /accounts (the protocol's only data call) -> data/money/ledger.json, incremental; ~4 pulls a day of SimpleFIN's 24 (feed.max_pulls_per_day caps it). NOT_CONFIGURED until the owner stores the token from /setup"
+  },
+  {
+   "name": "money-pull-plaid",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/plaid.py"
+   ],
+   "every_min": 240,
+   "window": [
+    6,
+    23
+   ],
+   "timeout_s": 180,
+   "_what": "READ-ONLY bank feed for Relay: Plaid /transactions/sync (cursor) + /accounts/balance/get -> the same data/money/ledger.json; ~4 pulls a day (feeds[plaid].max_pulls_per_day caps it). NOT_CONFIGURED / NOT_LINKED until the owner enters the keys and links Relay from /setup"
+  },
+  {
+   "name": "money-categorize",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/categorize.py"
+   ],
+   "every_min": 60,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "money_rules.json over the ledger (business Schedule C buckets vs personal, Relay buckets by name, own-account transfers paired); harvests the owner's typed answers on the weekly unknowns card into learned rules; posts that ONE card on money.json -> categorize.unknowns_day"
+  },
+  {
+   "name": "money-forecast",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/forecast.py"
+   ],
+   "every_min": 180,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "recurring charges -> upcoming bills armed as followups money/bill-due (T-3d reminder; no new reminder path); ONE latched card when a week's bills exceed the paying account's balance or a subscription price jumps. Never pays"
+  },
+  {
+   "name": "money-quarterly",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/quarterly.py"
+   ],
+   "every_min": 180,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "running Schedule C profit -> federal + CA estimate (money.json -> tax_tables), the next due date armed as followups money/quarterly-estimate (T-10d), data/money/quarterly.json for whoever works the ticket; ONE set-aside card after HoneyBook payments land (nets out Relay's split when relay.splits_pct is filled). Report only"
+  },
+  {
+   "name": "money-monthly",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/monthly.py"
+   ],
+   "every_min": 60,
+   "window": [
+    8,
+    20
+   ],
+   "timeout_s": 120,
+   "_what": "the 1st-of-month money readback (income, spend by bucket, business profit vs last month, balances, where the next quarterly stands) to the owners' shared space via agent/bridge.post; gated inside to money.json -> monthly.day/after, once per month"
+  },
+  {
+   "name": "tracking-chains",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/chains.py"
+   ],
+   "every_min": 60,
+   "window": [
+    8,
+    20
+   ],
+   "timeout_s": 180,
+   "_what": "next-step chains (assistant/chains.json, ruling 4 2026-10-15): shoot / edit / lead / money gates walked against the ledger, HoneyBook, the editor, calendar, follow-ups, tickets, sends and the owners' own words; a gate up next with no evidence by its ask time -> ONE card (Booked / Book it for me / Not yet / Drop), max 2 per lane per day; 'Book it for me' mints a chain_book ticket, never a send. Zero LLM"
+  },
+  {
+   "name": "tracking-entities",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/entities.py"
+   ],
+   "every_min": 60,
+   "window": [
+    6,
+    23
+   ],
+   "timeout_s": 180,
+   "_what": "the world model (ruling 11): one row per lead / couple / edit / money obligation / person / trip / appointment with stage, next action, deadline, days overdue, scored by the priority brain (ruling 10: dollars + who waits + hard dates x urgency, Eisenhower quadrant) -> data/tracking/entities.json for the Friday Q2 nudges and the day plan. Zero LLM, read-only"
+  },
+  {
+   "name": "tracking-dayplan",
+   "cmd": [
+    "python",
+    "assistant/scripts/tracking/dayplan.py"
+   ],
+   "every_min": 10,
+   "window": [
+    18,
+    22
+   ],
+   "timeout_s": 60,
+   "_what": "tomorrow lined up the evening before (ruling 6): at tracking.json -> dayplan.plan_at, once a day, ONE plain message to the shared space when tomorrow has 3+ timed items (events, calls, deadlines, reminders, chases due back), owner's line only on days she has items; otherwise silence. Zero LLM"
+  },
+  {
+   "name": "hb-send-selftest",
+   "cmd": [
+    "python",
+    "assistant/scripts/hb_exec.py",
+    "selftest",
+    "--quiet"
+   ],
+   "every_min": 1440,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 300,
+   "_what": "daily read-only preflight of every HoneyBook write kind (hb_exec.py KIND_FUNCS): typeof each connector function the templates call, through the read-only action only (haiku as transport). Writes data/hb_exec_status.json; cards.post refuses an hb_* card whose kind is dead (HB_PATH_DEAD). Added 2026-10-18 after Emery's approved follow-up died twice on comms.createCommunication (SDK pin 0.20.6). --quiet: the chat line on a change is said by the non-quiet run; the spine's daily run only records"
+  },
+  {
+   "name": "meeting-guests",
+   "cmd": [
+    "python",
+    "assistant/scripts/meeting_guests.py"
+   ],
+   "every_min": 120,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "standing guests (config.json -> meetings.guests, e.g. a team member) on every upcoming client video call that is also on the owner's Google calendar: Calendar API PATCH attendees with sendUpdates=none (nobody emailed; guest joins the Meet without knocking). A HoneyBook-only Meet is said once in chat (co-host needs a HoneyBook team seat: the owner's call). Added 2026-10-18."
+  },
+  {
+   "name": "builds-requeue",
+   "cmd": [
+    "python",
+    "assistant/scripts/builds_requeue.py"
+   ],
+   "every_min": 30,
+   "window": [
+    7,
+    23
+   ],
+   "timeout_s": 60,
+   "_what": "puts builds back in the queue whose failure was not the build's: a 'protected core' hit on a file the test run regenerates (meta.json false positives, 2026-10-17/18), or a session-limit error once the reset time named in it has passed (the owner 2026-10-18: 'Build it another way', no builder.py edit). Zero-LLM; merge-saves builds.json so an owner's tap is never clobbered."
+  },
+  {
+   "name": "triage-drain",
+   "cmd": [
+    "python",
+    "assistant/scripts/triage_next.py",
+    "drain"
+   ],
+   "every_min": 10,
+   "timeout_s": 240,
+   "_what": "files the couple-page notes triage_next.py queued when an inbound text/email carried a contact, a finished questionnaire or a lost lead (wiki writes lint + commit, too slow for the sensor's own pass). Zero-LLM. Added 2026-10-18."
+  },
+  {
+   "name": "whois-harvest",
+   "cmd": [
+    "python",
+    "assistant/scripts/whois.py",
+    "harvest"
+   ],
+   "every_min": 60,
+   "timeout_s": 90,
+   "_what": "names every text thread the people index is sure about (contacts, memory, the wiki, HoneyBook, the leads, the texts themselves; whois.py, 2026-10-23) so cards, the comms board and Sage show who it is"
+  },
+  {
+   "name": "graduation",
+   "cmd": [
+    "python",
+    "assistant/scripts/graduation.py",
+    "tick"
+   ],
+   "every_min": 1440,
+   "window": [
+    9,
+    20
+   ],
+   "timeout_s": 120,
+   "expect": "RESULT",
+   "_what": "WP6: offer 'Make it automatic?' for an action class approved unchanged enough times (tracking.json -> graduation); demote a granted kind on its first failed outcome"
+  },
+  {
+   "name": "core-sync",
+   "cmd": [
+    "python",
+    "assistant/core_sync.py",
+    "run"
+   ],
+   "every_min": 30,
+   "timeout_s": 600,
+   "expect": "CORE_SYNC",
+   "_what": "every commit here flows on to the sage-core checkout (assistant/core_sync.json core_root), organization-free: prose and comments scrubbed, a working line about this business holds the file + files a build request; zero LLM (2026-10-28)"
+  }
+ ]
+}

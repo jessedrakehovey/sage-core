@@ -1,0 +1,32 @@
+{
+ "id": "website-form",
+ "name": "Website Contact Form",
+ "functions": ["lead_intake"],
+ "tiers": [
+  {
+   "tier": 3,
+   "path": "webhook",
+   "how": "Website form submissions are routed to Sage via a webhook POST to a public HTTPS endpoint (Tailscale Funnel or a VPS reverse proxy). The owner must configure the form's submission action or notification URL to point to the webhook endpoint and set a shared secret in the POST body or a header that Sage verifies on receipt. No API key is needed on the form side.",
+   "reads": ["form field values", "submission timestamp and basic metadata"],
+   "writes": ["nothing; webhook receipt is strictly read-only"],
+   "always_tap": [],
+   "status": "known"
+  },
+  {
+   "tier": 3,
+   "path": "forwarding",
+   "how": "If the website platform sends a notification email on each form submission, that email can be forwarded to Sage's Gmail ingest address. The owner configures the form's notification settings to CC or BCC the ingest address. This path is lower-fidelity than a webhook but requires no public endpoint.",
+   "reads": ["form field values extracted from the notification email body"],
+   "writes": ["nothing"],
+   "always_tap": [],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "A webhook endpoint must be publicly reachable; Tailscale Funnel or a VPS with a reverse proxy is required.",
+  "Email forwarding loses structured data and may have variable field parsing; prefer the webhook path for reliable field extraction.",
+  "Always validate the shared secret on every webhook call to prevent spoofed or replayed lead submissions.",
+  "Different website builders (Squarespace, Webflow, WordPress, Wix) have different webhook or email-notification capabilities; verify before building."
+ ],
+ "notes": "Website contact forms are a primary lead source; the webhook path is preferred over email forwarding for reliable structured data."
+}

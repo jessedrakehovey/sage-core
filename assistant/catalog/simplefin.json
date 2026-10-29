@@ -1,0 +1,23 @@
+{
+ "id": "simplefin",
+ "name": "SimpleFIN",
+ "functions": ["banking"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage reads bank transactions and balances via the SimpleFIN Bridge API using `assistant/scripts/money/simplefin.py`. The owner must create a SimpleFIN Bridge account at bridge.simplefin.org, connect their financial institutions through the Bridge web UI, and store the access URL in the OS credential store via setup_creds. No re-authentication is needed once linked. This path is strictly read-only.",
+   "reads": ["account balances", "transactions", "account metadata"],
+   "writes": ["nothing; SimpleFIN is read-only in this integration"],
+   "always_tap": [],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "SimpleFIN uses a simpler authentication model than Plaid but covers fewer financial institutions; verify that the owner's bank is supported before setting it up.",
+  "Transaction data may lag 1-2 days depending on the institution's feed refresh schedule.",
+  "Sage never initiates transfers, payments, or any write operation to a financial institution through SimpleFIN.",
+  "SimpleFIN Bridge is an independent service; verify its current institution coverage and pricing before recommending it."
+ ],
+ "notes": "SimpleFIN is a lightweight read-only bank feed alternative to Plaid; simpler to set up but with narrower institution coverage."
+}

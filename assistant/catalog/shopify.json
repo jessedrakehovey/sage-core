@@ -1,0 +1,23 @@
+{
+ "id": "shopify",
+ "name": "Shopify",
+ "functions": ["payments_invoicing", "crm", "lead_intake"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Shopify via the Admin GraphQL API (preferred) or the REST Admin API using an Admin API access token stored in the OS credential store. The owner must create a Custom App in the Shopify store admin under Settings > Apps and sales channels > Develop apps, grant the required API access scopes, and store the access token via setup_creds.",
+   "reads": ["orders", "customers", "products", "draft orders", "abandoned checkouts", "transactions"],
+   "writes": ["draft orders", "customer notes", "order fulfillment updates", "refunds"],
+   "always_tap": ["any order cancellation or refund", "any product price or inventory change", "any direct message to a customer"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "The GraphQL Admin API is the preferred path for new integrations; the REST Admin API is in maintenance mode.",
+  "Shopify's API rate limits use a leaky-bucket model (40 points/second for REST, 1000 points/second for GraphQL); implement retry with backoff.",
+  "The Storefront API (customer-facing reads) uses a different Storefront Access Token, distinct from the Admin API token.",
+  "Admin API tokens grant broad access; generate scoped tokens and store them separately from other credentials."
+ ],
+ "notes": "Shopify is primarily suited to product-based retail businesses; service businesses with simple booking needs may find a CRM-first tool more appropriate."
+}

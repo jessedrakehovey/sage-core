@@ -1,0 +1,112 @@
+{
+ "id": "consultancy",
+ "name": "Consultancy and Coaching",
+ "_doc": "A lifecycle skeleton defines the ordered stages of a client journey for this business type. Each stage here is a scaffold only. During onboarding the owner must fill in six fields per stage: trigger (the event that starts this stage), actor (Sage, owner, or client), channel (which tool or surface handles it), template (which message or document template to use), clock (how long after the trigger before Sage flags a stall), and verifier (how Sage confirms the stage is complete). None of those fields are pre-filled here; they are set during the onboarding conversation and stored in the org's lifecycle config.",
+ "fits": "Knowledge-based service businesses selling expertise in structured engagements — business consultants, coaches, advisors, trainers, and strategists.",
+ "stages": [
+  {
+   "id": "inquiry",
+   "name": "Inquiry",
+   "what": "A prospect reaches out to learn about services.",
+   "typical_trigger": "Website contact form, email, or referral introduction",
+   "typical_channel": "lead_intake or mail"
+  },
+  {
+   "id": "discovery-call",
+   "name": "Discovery Call",
+   "what": "A short introductory call to assess fit and understand the prospect's goals.",
+   "typical_trigger": "Owner or Sage sends a scheduling link after qualifying the inquiry",
+   "typical_channel": "scheduling_booking + calendar"
+  },
+  {
+   "id": "proposal",
+   "name": "Proposal",
+   "what": "Sage drafts a scoped proposal; the owner reviews, approves, and sends it.",
+   "typical_trigger": "Discovery call completed and marked qualified in the CRM",
+   "typical_channel": "mail + crm"
+  },
+  {
+   "id": "contract-sign",
+   "name": "Contract and Deposit",
+   "what": "The prospect signs the engagement agreement and pays the first invoice.",
+   "typical_trigger": "Proposal accepted verbally or in writing",
+   "typical_channel": "contracts_esign + payments_invoicing"
+  },
+  {
+   "id": "onboard",
+   "name": "Onboarding",
+   "what": "Sage sends the onboarding packet, intake questionnaire, and sets up the project in the CRM.",
+   "typical_trigger": "Contract signed and deposit payment confirmed",
+   "typical_channel": "mail + file_storage"
+  },
+  {
+   "id": "deliver",
+   "name": "Active Engagement",
+   "what": "Sessions, deliverables, and check-ins happen according to the agreed schedule.",
+   "typical_trigger": "Engagement start date reached",
+   "typical_channel": "calendar + mail + file_storage"
+  },
+  {
+   "id": "review",
+   "name": "Engagement Review",
+   "what": "Sage drafts a progress check-in or end-of-engagement summary for the owner to send.",
+   "typical_trigger": "Midpoint milestone or final session completed",
+   "typical_channel": "mail"
+  },
+  {
+   "id": "renew-refer",
+   "name": "Renewal and Referral",
+   "what": "Sage drafts a renewal offer or referral ask for the owner to approve and send.",
+   "typical_trigger": "T-14 days before engagement end or T+7 days after completion",
+   "typical_channel": "mail or crm"
+  }
+ ],
+ "wiki": {
+  "_doc": "The first custom wiki vocabulary for this business type (agent/schema_growth.py seed): a page type per core noun the stages act on, with the owner's likely words for it; tags from the stage names; the folder each type routes to. Written into Schema/schema.md once, after Discovery and Training.",
+  "types": [
+   {
+    "type": "engagement",
+    "what": "One note per engagement: the scope, the dates, the deposit and terms, deliverables, renewal.",
+    "words": [
+     "retainer",
+     "contract",
+     "matter",
+     "mandate"
+    ]
+   },
+   {
+    "type": "proposal",
+    "what": "One note per proposal: what was proposed, the price basis, when it went out, the answer.",
+    "words": [
+     "statement-of-work",
+     "sow",
+     "pitch"
+    ]
+   },
+   {
+    "type": "meeting",
+    "what": "One note per meeting worth remembering: who, what was decided, what each side owes next.",
+    "words": [
+     "call",
+     "discovery-call",
+     "workshop"
+    ]
+   }
+  ],
+  "tags": [
+   "inquiry",
+   "discovery-call",
+   "proposal",
+   "contract",
+   "onboarding",
+   "active",
+   "review",
+   "renewal"
+  ],
+  "folders": {
+   "engagement": "Engagements",
+   "proposal": "Proposals",
+   "meeting": "Meetings"
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "id": "notion",
+ "name": "Notion",
+ "functions": ["file_storage", "automation"],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage connects to Notion via the official Notion API using an Internal Integration Token stored in the OS credential store. The owner must create an integration at notion.so/my-integrations, share the target pages or databases explicitly with that integration, and store the token via setup_creds. Page creates and updates require an approval card.",
+   "reads": ["pages", "database rows", "block content", "user directory"],
+   "writes": ["page content blocks", "database rows", "comments"],
+   "always_tap": ["any page shared externally or published", "any database row deletion", "any permission change"],
+   "status": "known"
+  }
+ ],
+ "gotchas": [
+  "The integration must be explicitly shared with every page or database it needs to access; access is not inherited by default.",
+  "Notion's block API paginates at 100 blocks per request; large pages require multiple calls.",
+  "Notion does not have a native publish or share action; sharing a page link is always a manual owner step.",
+  "The Notion API version is specified in the request header; pin to a known stable version."
+ ],
+ "notes": "Notion is used for knowledge management and project wikis; Sage reads and writes notes internally but never publishes pages externally without owner approval."
+}

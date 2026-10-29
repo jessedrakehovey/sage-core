@@ -1,0 +1,11 @@
+# The Python packages the engine's jobs need in the interpreter org.json -> python names (sage doctor checks them).
+# Everything else in assistant/ is standard library.
+keyring>=25
+playwright>=1.50
+pykeepass>=4.1
+pyotp>=2.9
+google-auth>=2.30
+google-auth-oauthlib>=1.2
+requests>=2.32
+cryptography>=42
+# Optional extra: assistant/requirements-semantic.txt (fastembed + numpy for scripts/semantic.py, the local semantic search).

@@ -1,0 +1,322 @@
+{
+ "_doc": "Tracking and reminding (assistant/scripts/tracking/). Everything an organization tunes lives here; the code only interprets it. Lanes default to config.json -> lanes. Hours are local wall-clock. See assistant/TRACKING_DESIGN.md for the rulings behind each value.",
+ "chase": {
+  "_doc": "Per-lane chaser over items that wait on an owner (open cards, staged tickets, fired follow-ups). One ask per lane per calendar day; the same item is re-asked only after reask_hours of silence; after max_follow_ups unanswered asks it folds (fold_daily_line true: no more cards, one quiet line a day listing the folded items until park_days pass or the owner answers; false: parked in silence for park_days). 'Remind me tomorrow' never counts toward max_follow_ups and resets a folded item's count.",
+  "enabled": true,
+  "nudge": "line",
+  "_nudge_doc": "line (default, the owner 2026-10-17 evening): ONE plain chat line a day per owner listing what waits on them, no buttons; a nudge is never a card, little decisions do not get cards, the item's own card is the thing to tap. card: the old one-card-per-lane nudge.",
+  "fold_daily_line": true,
+  "chases_per_lane_per_day": 1,
+  "reask_hours": 24,
+  "max_follow_ups": 3,
+  "park_days": 14,
+  "stale_card_hours": 24,
+  "stale_ticket_days": 3,
+  "stale_followup_days": 2,
+  "post_hours": [
+   "08:00",
+   "20:30"
+  ],
+  "lane_owner": {
+   "owner6": "owner6"
+  },
+  "default_owner": "owner1",
+  "exclude_tickets": [
+   {
+    "kind": "stuck_work"
+   },
+   {
+    "kind": "sla_breach"
+   },
+   {
+    "lane": "personal",
+    "kind": "imessage_in"
+   },
+   {
+    "lane": "owner6",
+    "kind": "imessage_in"
+   }
+  ],
+  "_exclude_doc": "staged tickets never chased: a sentinel digest is itself a chase; personal texts stay out of the card stream (ruling 13)",
+  "exclude_cards": [
+   {
+    "header": "Stuck items"
+   },
+   {
+    "header": "Weekly record check"
+   }
+  ]
+ },
+ "drift": {
+  "_doc": "Record-drift detectors: the record says one thing, the evidence says another. Each is on/off here. Findings ride the weekly card (hygiene) unless listed in 'urgent_kinds'.",
+  "ledger_stage": {
+   "enabled": true,
+   "ledger": "scripts/projects/project_state.json",
+   "projects_root": "D:/WeddingEditor/projects",
+   "editing_marks": [
+    "edit",
+    "review",
+    "revisions"
+   ],
+   "post_event_stage": "ingest",
+   "event_grace_days": 2,
+   "max_days_past": 120
+  },
+  "crm_stage": {
+   "enabled": true,
+   "snapshot": "dashboard/data/honeybook.json",
+   "event_grace_days": 2,
+   "post_event_min_order": 13,
+   "manual": true,
+   "max_days_past": 120,
+   "booked_stage": "Proposal Signed",
+   "post_event_stage": "File Management",
+   "_fix_doc": "2026-10-18: a lagging stage is offered as a fix on the weekly card (hb_set_stage through the connector, read back). booked_stage = where a client still on a lead stage goes; post_event_stage = where a booked couple goes once the wedding is past. Stage NAMES as HoneyBook shows them."
+  },
+  "armed_reminder": {
+   "enabled": true,
+   "sops": [
+    "money",
+    "home"
+   ],
+   "settled_words": [
+    "payment received",
+    "thank you for your payment",
+    "has been paid",
+    "was paid",
+    "payment confirmation",
+    "delivered",
+    "was delivered",
+    "has been delivered"
+   ]
+  },
+  "past_event": {
+   "enabled": true,
+   "calendar": "assistant/data/calendar.json",
+   "min_days_past": 1,
+   "max_days_past": 4,
+   "skip_title_words": [
+    "birthday",
+    "reminder",
+    "delivery",
+    "flight"
+   ]
+  },
+  "urgent_kinds": [],
+  "_max_days_past_doc": "a wedding that passed more than max_days_past days ago is history, not this week's hygiene"
+ },
+ "weekly": {
+  "_doc": "The readback + hygiene card. readback_day is a weekday name; both go out once that day, after readback_after.",
+  "enabled": true,
+  "readback_day": "fri",
+  "readback_after": "15:00",
+  "hygiene_max_rows": 12,
+  "to": "both"
+ },
+ "rhythm": {
+  "_doc": "Measured, never set by hand: active hours from card answers + chat lines (last lookback_days); a chase kind with ignore_after unanswered asks and no answer in the window moves to the weekly card.",
+  "lookback_days": 30,
+  "min_share": 0.05,
+  "ignore_after": 3,
+  "quiet_hours": [
+   21,
+   7
+  ]
+ },
+ "scheduling": {
+  "_doc": "Ruling 12: Sage proposes 2-3 call slots in ONE card with the drafted message; the tap sends; when they pick one, a confirmation card and a calendar_hold card follow. Slots come from both owners' Google calendars (when connected) + the calendar file + HoneyBook meetings + our holds + times already offered. windows are local wall-clock per weekday; a weekday missing here is never offered.",
+  "enabled": true,
+  "google": true,
+  "windows": {
+   "mon": [
+    "10:00",
+    "17:00"
+   ],
+   "tue": [
+    "10:00",
+    "17:00"
+   ],
+   "wed": [
+    "10:00",
+    "17:00"
+   ],
+   "thu": [
+    "10:00",
+    "17:00"
+   ],
+   "fri": [
+    "10:00",
+    "16:00"
+   ]
+  },
+  "prefer_times": [
+   "10:00",
+   "14:00",
+   "16:00"
+  ],
+  "slots": 3,
+  "duration_min": 30,
+  "slot_step_min": 30,
+  "buffer_min": 30,
+  "min_lead_hours": 20,
+  "days_ahead": 7,
+  "proposal_ttl_days": 5,
+  "all_day_blocks": [
+   "wedding",
+   "shoot",
+   "elopement",
+   "ceremony",
+   "rehearsal"
+  ],
+  "hb_snapshot": "dashboard/data/honeybook.json",
+  "hold_title": "Call: {name}",
+  "ask_words": "\\b(hop on a (?:quick )?call|set ?up a (?:quick )?(?:call|meeting|time|zoom)|schedule a (?:quick )?(?:call|meeting|zoom|time|chat)|(?:quick|phone|video|intro|discovery) call|chat on the phone|talk (?:on|over) the phone|are you free to (?:talk|chat|call)|time to (?:talk|chat|connect)|a call (?:this|next) week|consultation|facetime|zoom (?:call|meeting)|when are you (?:free|available)|what times? works? for you|jump on a call|get on a call|give (?:you|me) a call)\\b",
+  "templates": {
+   "_doc": "{first} {name} {slots} {slots_lines} {n} {slot}. Keep texts under 320 chars (240 personal), one question, no dashes, no price / date / turnaround to a lead; draft_lint.py refuses otherwise.",
+   "lead_text": "Hi {first}! Would love to talk through your day with you. I have {slots} open for a quick call. Does one of those work?",
+   "personal_text": "I can do {slots} for a call. Which works for you?",
+   "email_subject": "A quick call about your wedding",
+   "personal_email_subject": "A quick call",
+   "email_body": "Hi {first},\n\nWould love to talk through your day with you. I have a few openings for a call:\n\n{slots_lines}\n\nDoes one of those work? If not, send me a couple of times that do.\n\nowner1\nexample-org",
+   "personal_email_body": "Hi {first},\n\nI can do {slots} for a call. Which works for you?\n\nowner1",
+   "honeybook_body": "Hi {first}!\n\nWould love to talk through your day with you. I have a few openings for a call:\n\n{slots_lines}\n\nDoes one of those work? If not, send me a couple of times that do.\n\nowner1",
+   "confirm_lead_text": "Perfect, {slot} it is. Talk to you then!",
+   "confirm_personal_text": "{slot} works. Talk then.",
+   "confirm_email_body": "Hi {first},\n\n{slot} is on my calendar. Talk to you then!\n\nowner1\nexample-org",
+   "confirm_honeybook_body": "Hi {first},\n\n{slot} is on my calendar. Talk to you then!\n\nowner1"
+  }
+ },
+ "probation": {
+  "_doc": "Ruling 9: a class of card may EARN automation after `threshold` as-is approvals in a row (an edit, a Skip, a typed note or an undo resets the run). At the threshold Sage posts ONE card asking; the code never flips a gate. How a flip is made by hand: README 'Probation'. A card belongs to a class when its exec kind is listed AND (for sends) its follow-up step or header matches.",
+  "enabled": true,
+  "threshold": 20,
+  "lookback_days": 180,
+  "classes": {
+   "record_write": {
+    "title": "internal record writes",
+    "exec_kinds": [
+     "tracking_fix",
+     "hb_note",
+     "hb_project_update",
+     "calendar_hold",
+     "local"
+    ],
+    "_what": "the weekly record check, mined dates, calendar holds, HoneyBook notes and field updates: nothing a person outside the household sees"
+   },
+   "routine_client_send": {
+    "title": "routine client sends",
+    "exec_kinds": [
+     "email_send",
+     "imessage_send",
+     "hb_message"
+    ],
+    "followup_steps": [
+     "wedding-lifecycle/thank-you",
+     "wedding-lifecycle/ingest-gate",
+     "inquiry/quote-followup-48h"
+    ],
+    "header_words": [
+     "thank-you",
+     "thank you",
+     "footage is safe",
+     "footage safe",
+     "proposal follow-up",
+     "quote follow-up",
+     "48h"
+    ],
+    "_what": "the post-wedding thank-you, the 'footage is safe' note, the 2-day quote follow-up"
+   }
+  }
+ },
+ "importance": {
+  "_doc": "Lane weights (and the simple kind x age form advice.score keeps for items without a deadline). Items that carry a deadline / waiting_kind / hard are scored by the priority brain below (ruling 10).",
+  "lane": {
+   "wedding": 3,
+   "money": 3,
+   "owner6": 2,
+   "home": 1.5,
+   "personal": 1
+  },
+  "kind": {
+   "card": 2,
+   "ticket": 1.5,
+   "followup": 1.2,
+   "drift": 1
+  }
+ },
+ "priority": {
+  "_doc": "The priority brain (scripts/tracking/priority.py, ruling 10): importance = lane weight x (1 + log10($ at stake) x dollar_weight + who waits + hard_bonus for a hard date); urgency from the deadline (1.0 at it, 3.0 deeply overdue); Eisenhower quadrant at important_at / urgent_at. Q2 (important, not urgent) items get q2_max_lines nudge lines in the Friday readback, never a card.",
+  "waiting": {
+   "client": 3,
+   "vendor": 2,
+   "admin": 1,
+   "household": 1.5,
+   "none": 0
+  },
+  "dollar_weight": 1.0,
+  "hard_bonus": 3.0,
+  "important_at": 4.0,
+  "urgent_at": 1.0,
+  "default_sla_days": 7,
+  "q2_max_lines": 4,
+  "q2_horizon_days": 45
+ },
+ "dayplan": {
+  "_doc": "Tomorrow lined up the evening before (scripts/tracking/dayplan.py, ruling 6): at plan_at, once per day, when tomorrow has min_timed_items or more timed items (calendar events with a time, calls, deadlines, reminders that fire, chases due back) -> ONE plain message to the shared space in these blocks; owner's items in their own line only on days she has any; otherwise silence. All-day events are listed but count only with count_all_day.",
+  "enabled": true,
+  "plan_at": "19:00",
+  "min_timed_items": 3,
+  "count_all_day": false,
+  "blocks": [
+   {
+    "label": "Morning",
+    "until": "12:00"
+   },
+   {
+    "label": "Afternoon",
+    "until": "17:00"
+   },
+   {
+    "label": "Evening",
+    "until": "24:00"
+   }
+  ],
+  "call_words": [
+   "call",
+   "zoom",
+   "meeting",
+   "consult",
+   "phone"
+  ],
+  "max_chars": 900
+ },
+ "chains": {
+  "_doc": "Next-step chains live in assistant/chains.json (ruling 4); their ask cadence is set there under 'ask'.",
+  "file": "chains.json",
+  "enabled": true
+ },
+ "routes": {
+  "_doc": "Route clocks (minutes; the property planner's max_wait): an outcome that has waited longer than its route allows is unverified and the owner is asked once (outcomes.settle), instead of waiting again. Keys are route classes (outcomes.ROUTE_OF maps each kind).",
+  "connector": 15,
+  "phone": 240,
+  "browser": 90,
+  "operator": 150,
+  "build": 1560,
+  "person": 2880,
+  "owner_card": 1440
+ },
+ "graduation": {
+  "_doc": "WP6 (2026-10-24, the property OS's followups/graduation.py): a card-gated action class is OFFERED for autonomy once min_samples resolved taps approved it unchanged (approve_min share, zero edits, zero undone, zero failed outcomes in window_days); the owner's tap grants it, one failed outcome demotes it. Sends, money, the doer's steps, prices and dates never graduate (graduation.FOREVER_GATED).",
+  "enabled": true,
+  "min_samples": 10,
+  "approve_min": 0.9,
+  "window_days": 90,
+  "classes": [
+   "hb_add_participant",
+   "hb_set_stage",
+   "sheet_set",
+   "hb_note",
+   "hb_project_update"
+  ]
+ }
+}

@@ -1,0 +1,5 @@
+# Optional: local semantic search over Wiki/ + Memory/ (scripts/semantic.py). Install into the interpreter
+# org.json -> semantic_python names (any venv; it may be the jobs one). Without these the wiki falls back to keyword
+# search (scripts/wiki_tool.py search) and `sage doctor` says so on its "semantic search" row.
+fastembed>=0.3
+numpy>=1.26

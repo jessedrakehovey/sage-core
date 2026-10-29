@@ -1,0 +1,40 @@
+{
+ "id": "google-calendar",
+ "name": "Google Calendar",
+ "functions": [
+  "calendar",
+  "scheduling_booking"
+ ],
+ "tiers": [
+  {
+   "tier": 1,
+   "path": "api",
+   "how": "Sage reads and writes calendar events through the Google Calendar API (scope calendar.events) via `assistant/agent/google_api.py`. The owner must complete the OAuth consent flow once; the refresh token is stored in the OS credential store. The same token covers Gmail and Calendar. Creating or modifying events always requires an approval card.",
+   "reads": [
+    "events",
+    "availability windows",
+    "booked dates",
+    "reminders",
+    "recurring schedules"
+   ],
+   "writes": [
+    "new calendar events",
+    "event updates",
+    "event deletions"
+   ],
+   "always_tap": [
+    "adding a booking date",
+    "deleting any calendar event",
+    "inviting any external attendee"
+   ],
+   "status": "built"
+  }
+ ],
+ "gotchas": [
+  "The same OAuth token covers Calendar and Gmail; revoking one revokes both.",
+  "Sage uses Calendar as the authoritative source for shoot-date availability checks before any booking confirmation.",
+  "Always confirm with the owner before adding a client shoot date; double-booking is irreversible.",
+  "Token refresh is automatic but requires the process to have network access."
+ ],
+ "notes": "Google Calendar is the single source of truth for booked dates and shoot-day timelines; always check it before confirming availability."
+}
