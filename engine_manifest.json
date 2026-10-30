@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+33864c0",
+  "version": "2026.10.30+aa26830",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T07:11:58"
+  "synced": "2026-10-30T09:19:07"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "016b56ee94178a63961ca43a94df750ace0d3e429089fc04a7c31241d75c5e8b",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
-  "assistant/agent/README.md": "35134a345ec4c53f4c2159e0ad73f3bf85ee8d8ae52548b50bdb2c8c768edf04",
+  "assistant/agent/README.md": "8e97b51d1928dfb9929e228a4d72f8f5e08da54c062b068f9b95391f37cff98d",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "7f3118ad2776b62656593f99ab44faf7478493e09464cceed75a9b43b0ce9069",

@@ -494,6 +494,8 @@ what each one needed:
   REFUSED with the earlier text quoted, unless the ask says resend / again / follow-up. The prompt says to
   tell the owner the earlier one went. 2026-10-29: a reply to a text they sent after ours passes by itself
   (`intents.wrote_since`), and a wanted second text sets `draft.resend`; a marker word in the body no longer counts.
+  A leading "resend" an old caller still writes is stripped (`actions.strip_marker`) before the card preview
+  and the send, so it never reaches the phone (a team member's card, 2026-10-29).
 - **CRM replies never sent (Delia x2 on 10-24, Emery x3 on 10-18).** The connector pauses every
   client message for an approval card only a live Claude window can show, so headless `createCommunication`
   is always "the member did not approve this change". The CRM connector's exec script now falls through to
