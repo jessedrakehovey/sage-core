@@ -284,7 +284,10 @@ guards apply at mint time as always.
   sends it as approved. The CRM checks are the plugin's (`crm.plugin.reply_watch` / `reply_baseline` /
   `reply_evidence`), so the engine file stays org-free. Tests: `test_send_hold.py`, `test_send_hold_crm.py`.
 - **A scheduled local job.** `assistant/jobs.json` is the allow-list of fixed commands with named values
-  (today: `handoff_build`, `handoff_return` - the editor-handoff skill). Sage's `job` tool
+  (today: `handoff_build`, `handoff_return` - the editor-handoff skill - and `vault_purge_banks`, 2026-10-30: one tap
+  deletes every bank login from the doer's vault, Recycle Bin too, by the job's own `match` / `keep` lists (Plaid, Venmo,
+  PayPal stay), then says in chat what went, how many are left and where plain copies sit, paths only;
+  `doer/vault_purge.py`, `test_vault_purge.py`). Sage's `job` tool
   (`{job, args, at?}`, JOBS YOU CAN RUN in its context from `jobs.render`) posts ONE card
   (`actions.job_card`: exec kind `local`, payload `{op, args}`, `send_at`); the tap mints the ticket;
   when due, `drain._exec_local` calls `jobs.launch`, which starts the command DETACHED through
@@ -1165,6 +1168,22 @@ CRM kind card whose kind the self-test found dead (`CRM_PATH_DEAD`), the connect
   clobbered (09:34 approvals were overwritten by the 09:23 run's save). `scripts/builds_requeue.py` (spine
   `builds-requeue`) re-queues builds that failed on a regenerated-file "protected core" hit or on the account's
   session limit once the reset time has passed (the owner: "Build it another way", no builder.py edit for that).
+- `scripts/form_ingest.py` (spine `form-ingest`, after the CRM snapshot job; 2026-10-30): the owner's standing rule
+  of 2026-10-29 ("it needs to be a standard operation whenever a form comes filled in") as code. The connector's
+  snapshot carries `answers` for every completed intake form (`crm.forms`); each one not yet filed goes onto the
+  client's page (`config.json -> wiki.client_pages`, matched on the page's CRM id) between
+  `<!-- form:<id>:begin/end -->` markers under Story and notes, and its plain facts into the ledger entry
+  (`project_state.json`): the organization's own question -> field map in `data/form_fields.json` first, then the
+  generic defaults (location, start time, headcount, day-of contact, coordinator), so drafters and team-facing
+  replies answer "where and when" from the record. A page that already carries a hand-written form section is left
+  alone and counted; the note is linted alone and reverted on failure; `data/form_ingest.json` keeps it idempotent.
+  Zero-LLM. Tests: test_form_ingest.
+- `mail.dismissed_by_rule` (`config.json -> mail.dismiss_rules`, 2026-10-30): an owner's standing "we don't use X"
+  as a sensor rule ({from substring, subject regex, why}); a matching mail never becomes a ticket, so nothing relays
+  it. `comms_state.is_automated`: a no-reply / notifications / concierge address is class `notification`, never a
+  vendor on an SLA (the CRM's reconnect-Zoom notice was relayed two days running and then chased as an unanswered
+  vendor email, after the owner had said every call is on Google Meet; rule r141 alone did not stop the sensors).
+  Tests: test_mail_rules, test_comms.
 - `scripts/meeting_guests.py` (spine `meeting-guests`, `config.json -> meetings.guests`): the standing guests
   (a team member) on every upcoming client video call that is also on the owner's Google calendar, by Calendar API with
   `sendUpdates=none` (they get the Meet on their calendar and join without knocking). A Meet that exists only

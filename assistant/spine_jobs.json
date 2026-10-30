@@ -44,17 +44,18 @@
    "_what": "the comms substrate (thread states + SLAs + breach tickets); the 1-min probe task rebuilds it too, this is the safety net"
   },
   {
-   "name": "questionnaire-ingest",
+   "name": "form-ingest",
    "cmd": [
     "python",
-    "assistant/scripts/questionnaire_ingest.py"
+    "assistant/scripts/form_ingest.py"
    ],
    "every_min": 120,
    "window": [
     7,
     22
    ],
-   "timeout_s": 150
+   "timeout_s": 150,
+   "_what": "the owner's standing rule 2026-10-29 ('it needs to be a standard operation whenever a form comes filled in'): every completed CRM intake form in the snapshot (the connector carries its answers) is filed once onto the client's page (config wiki.client_pages) and into the delivery ledger entry (data/form_fields.json map, then the generic location / start time / headcount / day-of contact / coordinator); zero-LLM, idempotent, linted, committed scoped"
   },
   {
    "name": "team-on-projects",

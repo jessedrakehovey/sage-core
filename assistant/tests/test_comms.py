@@ -176,5 +176,16 @@ check("burst: a thread that never goes quiet still runs after 15 min",
 check("burst: a single text never waits", not comms_probe.burst_settling(_w, [_tx(5)]))
 check("burst: an email in the batch is never held", not comms_probe.burst_settling(_w, _grp + [{"kind": "email", "created": zstamp(5)}]))
 
+# an automated sender is never a vendor on an SLA (2026-10-30: "Unanswered vendor email: the CRM Concierge (1440 min)"
+# chased the owner about a CRM's reconnect-Zoom notice he had already said to drop)
+check("automated: a CRM concierge address", comms_state.is_automated("concierge@crm.example.com"))
+check("automated: no-reply and notifications", comms_state.is_automated("no-reply@example.com") and comms_state.is_automated("notifications@code.example.org"))
+check("automated: a person's address is not", not comms_state.is_automated("maggie@photos.example.com") and not comms_state.is_automated("info@site.example.com"))
+check("automated: a phone number is a person", not comms_state.is_automated("+18055550101"))
+_biz = next(iter(comms_state.load_json(comms_state.VAULT / "assistant" / "config.json", {}).get("lanes") or ["business"]))
+check("classify: an automated business-lane sender is a notification, not a vendor",
+      comms_state.classify("concierge@crm.example.com", _biz, {}, {}) == ("notification", "")
+      and comms_state.classify("drew@planner.example.com", "", {}, {}) == ("personal", ""))
+
 print(f"\n{'ALL OK' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}  ({len(FAILS)} failures)")
 sys.exit(1 if FAILS else 0)

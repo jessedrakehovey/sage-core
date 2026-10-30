@@ -1,4 +1,8 @@
 {
+ "wiki": {
+  "client_pages": "Wiki/Couples",
+  "_doc": "form_ingest.py (and any engine script that writes client pages): the folder of client pages in this vault. A new organization gets Wiki/Clients; the organization keeps Wiki/Couples."
+ },
  "lanes": [
   "wedding",
   "personal",

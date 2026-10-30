@@ -253,6 +253,13 @@ computer.run_ticket(tickets._load()[t0["id"]])
 ok(len(CALLS) == 1 + int(doer.CFG.get("continues_max", 3)) and tickets._load()[t0["id"]]["status"] == "staged"
    and "times over" in DELIV[-1] and "It got as far as: Drives listed" in DELIV[-1], f"out of tries: staged, and the owner hears how far it got ({DELIV[-1][:80]})")
 
+# ---------------------------------------------------------------- 7b. the doer's own browser.py is not scanned (2026-10-30)
+# it talks CDP over a socket to bring the browser on screen; the scan read "import socket" and refused every --front,
+# so a hand-off window stayed hidden ("the browser is not open", three days running)
+ok(tier("python assistant/doer/browser.py --front") in ("A", "B"), "browser.py --front is allowed (the doer's own script is not scanned)")
+ok(tier("python assistant/doer/browser.py --status") in ("A", "B"), "browser.py --status is allowed")
+ok(tier("python C:/elsewhere/browser.py --front") == "NEVER", "a browser.py from elsewhere is still scanned (not found -> refused)")
+
 # ---------------------------------------------------------------- 8. gate shapes
 src = (ROOT / "doer" / "computer.py").read_text(encoding="utf-8")
 ok('ALLOWED = ",".join([' in src and 'DENIED = ",".join([' in src, "computer.py carries the two gate shapes")
