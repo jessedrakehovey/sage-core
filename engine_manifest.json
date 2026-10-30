@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+0dbfb55",
+  "version": "2026.10.30+c775cba",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T15:13:33"
+  "synced": "2026-10-30T15:51:16"
  },
  "modules": {
   "money": {
@@ -131,7 +131,7 @@
   "assistant/agent/place.py": "1a15e9619a29ac0256518795a80600e28f6c4df1e07ae46633df702d281b8290",
   "assistant/agent/profile.json": "a31f97a293ee212a010b9f177c81b3ad00eacf6306b95810c8e2494469d87188",
   "assistant/agent/projects.py": "7da12a7e83c2965d1193427eb91d5486131490766c62c5db2f5df943ffef0e19",
-  "assistant/agent/prompt.md": "cea2009bbe354c0a110e32ab67aac4739be0817b2fc5649b5edf43baa9ba3db0",
+  "assistant/agent/prompt.md": "e0f01c325942be48e7259c14d7ff1f49e58e727c7262b18a1dca6be5d099b0c2",
   "assistant/agent/receipts.py": "5a3755eb6e0ca1287b0597fbfc09fa623157519a4fe5c32d0d8a06e7add3930c",
   "assistant/agent/reflex.py": "da65bbd94ece78868d8ff1ea7d7e11977021ad823877b426e139aa18a22c7d0b",
   "assistant/agent/resources.py": "5cfeff4120c3a18d2a9c656adf7ed242eb43e3dcb8b45f31ef8134f06a7e34e4",
@@ -141,7 +141,7 @@
   "assistant/agent/space_reader.py": "579fb933a9018fca591a5e5b8c556389279c7216ac66b19e82ed59dfdad7f437",
   "assistant/agent/switches.json": "c23c02f0ddb924ed0f886c688138b5d583585499215daf761fbba116396a11f4",
   "assistant/agent/switches.py": "656943a1f359cb2639e4f797bc1225435637dce5dfa19fcf993e400bc65c67a4",
-  "assistant/agent/templates/prompt.generic.md": "4f7e97ce456c19a14f1ebebd473154b67a32f34dc10f39de18a72570f518a3e3",
+  "assistant/agent/templates/prompt.generic.md": "e2c2f51721d8c33966bd996ce269a3223ad27d56bcae2c78d5d085c3cf9fa4f7",
   "assistant/agent/templates/prompt.staff.md": "888fd437b3a82960a625a295f4a23667f67e9508b41ec053816ddf7fd8e26f31",
   "assistant/agent/templates/prompt.team.md": "99b295b4f46d273a6c3f4daac9f172f8e99d3d215824b4439d57be77fae7dcd4",
   "assistant/agent/voice.py": "70ef5b12df72dfabfc09db1245b36d64afb30016124898e39f900c6c9766099e",
@@ -367,7 +367,7 @@
   "assistant/tests/test_escalation.py": "d6204b3ebfcde4016a5b394fbd736e10acd70580e0baf113da63206029a7cb4a",
   "assistant/tests/test_held.py": "828ea2a7d2da5df688e32ae1a0ce8214cab0a6cd7e7ff66e4a862515eaf0a22f",
   "assistant/tests/test_installer.py": "b7ab409bb3db31ed452b83b45e870bc7cf1ab48d8690e606caf58c862308b6ac",
-  "assistant/tests/test_intents.py": "4785db6e4dc690e7db08b53bdd2591bdfd450ad5d2b1b72ac24b1531503d7e5a",
+  "assistant/tests/test_intents.py": "26579e2df16e774f3acfaaa5848aa2ef080a6937037b3c8de3ff287b74bff272",
   "assistant/tests/test_learn.py": "fbf67061a3a42235957a1e3ef4182eb86e8d3cc7ec5298ad18fbd14cd563825b",
   "assistant/tests/test_lifecycle.py": "0624b8bdb7908fe70e1502ca63ffba58aafd25ec6d33b0545a9c3e52c0aef37b",
   "assistant/tests/test_mail_arm.py": "841cfdbfc79032d35242c43781bcbefdf4765d9edb60d6724426212a7825f5d5",
