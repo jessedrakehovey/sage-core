@@ -14,11 +14,8 @@ Kinds (whitelist):
                  (handed to owner's iPhone outbox by phone_bridge.py; the phone's Shortcut sends it)
   calendar_hold  {title, date, time?, duration_min?, note?}                lane local   (own calendar, nobody notified)
   ads_apply      {proposal_id, total, steps[{op, target, amount?, desc}]}  lane ads     (Meta budget moves + pauses only)
-  hb_note        {workspace_id, title?, text}                              lane honeybook (internal note, not client-visible)
-  hb_project_update {project_id, fields{...}}                              lane honeybook (date/location/details/guest count)
-  hb_proposal_draft {response_token, quote{...}}                           lane honeybook (priced DRAFT of the collection file; never published)
-  hb_add_participant {workspace_id|project_id, email, name?, phone?}      lane honeybook (a partner/planner on the couple's project; HB mails the invite)
-  hb_set_stage   {workspace_id|project_id, stage, reason?}                lane honeybook (pipeline stage by name, or lost/archived with a reason)
+  <connector kinds> the organization's CRM connector adds its own (KIND_LANES / REQUIRED_KEYS / validate;
+                 assistant/CRM_CONTRACT.md): a note, a field update, a participant, a stage move, a message
   sheet_set      {account, spreadsheet_id, tab?, cells[{a1, value, before}], sheet_name?}  lane sheets
                  (Google Sheets cells by API, agent/google_api.sheet_set: RAW values, never a formula; drain re-reads
                  every cell and refuses the whole ticket if one no longer holds `before`)
@@ -53,7 +50,7 @@ KIND_LANES = {
     "email_send": "email",
     # iMessage from an owner's iPhone (2026-10-01): drain -> phone_bridge outbox -> the phone's Shortcut sends.
     "imessage_send": "phone",
-    # The organization's CRM kinds (this organization: HoneyBook, assistant/scripts/crm_honeybook.py) come from
+    # The organization's CRM kinds (its connector, assistant/CRM_CONTRACT.md) come from
     # the plugins named in config.json -> plugins.modules and are merged in below (sage-core, 2026-10-28).
     # Cells on a Google Sheet by API (2026-10-18: the pricing sheet, after the doer could not drive the Sheets
     # UI). Not outbound (nobody is notified) but a write, so it is card-gated: every cell and value sits
@@ -74,7 +71,7 @@ KIND_LANES = {
 OUTBOUND_KINDS = {"email_send", "imessage_send"}
 # The address of another business on this machine that must never be written to from this OS
 # (the owner 2026-09-28: "WE CAN NEVER LET THAT EMAIL CROSS OVER").
-FOREIGN_DOMAIN = "example.com"
+FOREIGN_DOMAIN = "other-business.invalid"
 
 
 def _alib():
@@ -109,7 +106,7 @@ def _owner_words() -> list:
     out = []
     for k, u in (_people().get("users") or {}).items():
         for w in (str(k), str((u or {}).get("name") or "").split(" ")[0]):
-            w = re.sub(r"[^A-Za-z]", "", w).upper()
+            w = re.sub(r"[^A-Za-z0-9]", "", w).upper()     # digits kept: a template's owner1 is a whole word
             if w and w not in out:
                 out.append(w)
     return out
@@ -119,7 +116,7 @@ def _owner_words() -> list:
 # per-item approval is the only entry path, so enqueue refuses any other value. No owners on record = nothing mints.
 APPROVER = (_owner_keys() or [""])[0]
 # A blank a drafter left for an owner ("[<OWNER>: confirm date]", "[TODO]", "{{name}}") must never
-# leave the machine. example, 2026-10-18: a card's "Edit & send" button was really the one-tap
+# leave the machine. Marisa, 2026-10-18: a card's "Edit & send" button was really the one-tap
 # approve, and the draft went to her with both owner-named blanks still in it.
 BLANK_RE = re.compile(r"\[\s*(?:" + "|".join(_owner_words() + ["OWNER", "TODO", "TBD", "TK", "FILL", "INSERT", "CONFIRM", "PLACEHOLDER", "YOUR", "ADD"])
                       + r")\b[^\]]*\]|\{\{[^{}]*\}\}|<<[^<>]*>>", re.I)
@@ -186,7 +183,7 @@ def due(t: dict, now=None) -> bool:
     nb = str(t.get("not_before") or "")
     return not nb or nb <= (now or datetime.now()).strftime(_NB_FMT)
 
-# The only identities this OS may ever send from. A example.com address can
+# The only identities this OS may ever send from. A other-business.invalid address can
 # never appear here (the owner 2026-09-28: "WE CAN NEVER LET THAT EMAIL CROSS OVER").
 
 def _orgcfg():

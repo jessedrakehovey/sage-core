@@ -204,7 +204,7 @@ the scan, the cards and the dispatch are tested end to end without the model.
 ## Evidence, and the jobs that come back (2026-10-15)
 
 the owner: "fix Sage so it can do the last few things I requested and when it has evidence of
-completion report back", after example's fixed SFX track could not be pulled from Gmail into the
+completion report back", after Corwin's fixed SFX track could not be pulled from Gmail into the
 the owner Beach timeline (the browser doer had no download right, the computer lane had no tool, and
 Resolve was closed). Three things changed:
 
@@ -226,7 +226,7 @@ Resolve was closed). Three things changed:
   run since 10-12 logged `learn failed: AttributeError` and recorded nothing. `doer._learn()` loads
   the doer's own file by path (`sys.modules["doer_learn"]`).
 
-Tests: `assistant/tests/test_mail_attach.py` (+ `test_hb_exec.py` for the HoneyBook message kind).
+Tests: `assistant/tests/test_mail_attach.py` (+ `test_crm_exec.py` for the CRM connector's message kind).
 
 ## The self-learning engine (learn.py, 2026-10-11)
 
@@ -269,14 +269,7 @@ python assistant/tests/test_learn.py
 
 ## The code checks for a connector; the doer never refuses on that ground (2026-10-20)
 
-HoneyBook and Google are reached through connectors the code already has (`hb_exec.py`: `hb_message`,
-`hb_add_participant`, `hb_set_stage`, `hb_note`, `hb_project_update`; `agent/google_api.py` for calendar
-events and guests), and Sage routes those kinds itself before a job is queued for the doer. From 2026-10-18
-to 10-20 `prompt.md` told the doer to stop with `DOER_BLOCKED: this is a connector job` when sent such a task;
-nothing re-routed those tickets (doer.py only stages them), so example-on-a-project was refused three times in
-a row and a team member-as-Vision-Meeting-host once, for settings no connector covers. The rule is gone: the prompt now
-says the code already checked, and `doer.py` re-queues ONE such refusal as `new` (note `wrong refusal`) so the
-next turn does the job. A control that times out
+The CRM connector and Google are reached through connectors the code already has (the CRM connector's exec module for its message, participant, stage, note and project-update kinds; `agent/google_api.py` for calendar events and guests), and Sage routes those kinds itself before a job is queued for the doer. From 2026-10-18 to 10-20 `prompt.md` told the doer to stop with `DOER_BLOCKED: this is a connector job` when sent such a task; nothing re-routed those tickets (doer.py only stages them), so Wren-on-a-project was refused three times in a row and a team member-as-Vision-Meeting-host once, for settings no connector covers. The rule is gone: the prompt now says the code already checked, and `doer.py` re-queues ONE such refusal as `new` (note `wrong refusal`) so the next turn does the job. A control that times out
 twice is forced once through `browser_evaluate` (a DOM click on the snapshot ref; allowed in `doer.py` since
 2026-10-19 for this only, `browser_run_code_unsafe` stays denied) and then given up with the page state, never
 looped on. Code holds that line: `click_guard.py` (a Pre/PostToolUse hook `run_turn` passes with

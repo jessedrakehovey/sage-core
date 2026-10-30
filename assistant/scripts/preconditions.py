@@ -1,6 +1,6 @@
 """preconditions.py - read the record before a lifecycle step fires (WP3 of the stand-alone proposal, 2026-10-24).
 
-Until this, every SOP step fired on time alone and its ticket told an LLM operator to "check HoneyBook first".
+Until this, every SOP step fired on time alone and its ticket told an LLM operator to "check the CRM first".
 The property OS has the same weakness (its world model only ranks). Here a step may carry
 `action.satisfied_when = {"check": <name>, ...}`; followups._fire asks this module first:
 
@@ -10,11 +10,11 @@ The property OS has the same weakness (its world model only ranks). Here a step 
   moot        the wedding is cancelled / lost              -> dismissed
 
 Checks (zero-LLM, read-only; `unit` is the ledger key in scripts/projects/project_state.json):
-  questionnaire_answered   a questionnaire smart file on the couple's HoneyBook project is completed
+  questionnaire_answered   a questionnaire smart file on the couple's CRM project is completed
   timeline_on_file         the couple's ledger entry or wiki page holds a timeline, or their questionnaire is completed
-  outbound_since           an email / HoneyBook message / text to the couple went out in the last `days` (default 3)
+  outbound_since           an email / CRM message / text to the couple went out in the last `days` (default 3)
                            or since `anchor` (the wedding date) when `since: "anchor"`
-  touches_sent             the Finishing Touches file went to them (an hb_touches_send ticket done)
+  touches_sent             the Finishing Touches file went to them (a CRM touches exec ticket done)
 
   python assistant/scripts/preconditions.py <check> <unit> [--days N]
 """
@@ -32,9 +32,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from alib import DATA, VAULT, load_json  # noqa: E402
+import crm
 
 PROJECTS = Path(os.environ.get("WV_PROJECT_STATE") or (VAULT / "scripts" / "projects" / "project_state.json"))
-SNAP = Path(os.environ.get("WV_HB_SNAPSHOT") or os.environ.get("HB_SNAPSHOT_FILE") or (VAULT / "dashboard" / "data" / "honeybook.json"))
 COUPLES = VAULT / "Wiki" / "Couples"
 TERMINAL = {"cancelled", "lost", "archived", "delivered"}
 
@@ -64,8 +64,8 @@ def _contacts(p: dict) -> tuple:
     return emails, phones
 
 
-def _hb_ids(p: dict, snap: dict) -> set:
-    ids = {str(p.get("honeybook_id") or "")} - {""}
+def _crm_ids(p: dict, snap: dict) -> set:
+    ids = {crm.project_id(p)} - {""}
     for e in snap.get("projects") or []:
         if isinstance(e, dict) and (str(e.get("id")) in ids or str(e.get("project_id")) in ids):
             ids |= {str(e.get("id") or ""), str(e.get("project_id") or "")} - {""}
@@ -73,16 +73,16 @@ def _hb_ids(p: dict, snap: dict) -> set:
 
 
 def questionnaire_answered(unit: str, p: dict, **kw) -> tuple:
-    snap = load_json(SNAP, {}) or {}
-    files = snap.get("questionnaires")
+    snap = crm.snapshot()
+    files = crm.forms(snap)
     if not isinstance(files, list):
-        return "unknown", "the HoneyBook snapshot lists no questionnaire files"
-    ids = _hb_ids(p, snap)
+        return "unknown", f"the {crm.name()} snapshot lists no questionnaire files"
+    ids = _crm_ids(p, snap)
     if not ids:
-        return "unknown", "no HoneyBook project id on the ledger entry"
+        return "unknown", f"no {crm.name()} project id on the ledger entry"
     mine = [f for f in files if isinstance(f, dict) and (str(f.get("workspace_id")) in ids or str(f.get("project_id")) in ids)]
     if any(str(f.get("status") or "").lower() in ("completed", "complete", "answered", "submitted") for f in mine):
-        return "satisfied", "the questionnaire on their HoneyBook project is completed"
+        return "satisfied", f"the questionnaire on their {crm.name()} project is completed"
     if mine:
         return "open", "their questionnaire file is sent and not completed"
     return "open", "no questionnaire file on their project"
@@ -118,14 +118,14 @@ def outbound_since(unit: str, p: dict, days: float = 3, since: str = "", **kw) -
         import exec_store as es
         import outcomes
         for t in es.fold().values():
-            if t.get("kind") not in ("email_send", "hb_message", "imessage_send", "hb_touches_send") or t.get("status") != "done":
+            if t.get("kind") not in ({"email_send", "imessage_send"} | crm.kinds("MESSAGE_KINDS") | crm.kinds("TOUCHES_KINDS")) or t.get("status") != "done":
                 continue
             if str(t.get("ts_done") or t.get("ts") or "") < cut:
                 continue
             pay = t.get("payload") or {}
             to = pay.get("to")
             tos = [str(x).lower() for x in (to if isinstance(to, (list, tuple)) else [to]) if x]
-            hit = any(x in emails for x in tos) or any(_digits(x) in phones for x in tos) or str(pay.get("workspace_id") or "") in {str(p.get("honeybook_id") or "")} - {""}
+            hit = any(x in emails for x in tos) or any(_digits(x) in phones for x in tos) or str(pay.get("workspace_id") or "") in ({crm.project_id(p)} - {""})
             if hit and outcomes.state_for_ticket(t["id"]) not in ("failed", "abandoned"):
                 return "satisfied", f"{t['kind'].replace('_', ' ')} to them on {str(t.get('ts_done') or t.get('ts'))[:10]}"
     except Exception as e:  # noqa: BLE001
@@ -136,16 +136,18 @@ def outbound_since(unit: str, p: dict, days: float = 3, since: str = "", **kw) -
 def touches_sent(unit: str, p: dict, **kw) -> tuple:
     try:
         import exec_store as es
-        wid = str(p.get("honeybook_id") or "")
+        wid = crm.project_id(p)
+        touches_kinds = crm.kinds("TOUCHES_KINDS")
         for t in es.fold().values():
-            if t.get("kind") == "hb_touches_send" and t.get("status") == "done":
-                pay = t.get("payload") or {}
-                if wid and wid in (str(pay.get("workspace_id") or ""), str(pay.get("project_id") or "")):
-                    return "satisfied", f"Finishing Touches file sent {str(t.get('ts_done') or '')[:10]}"
-                lead = pay.get("lead") or {}
-                emails, _ = _contacts(p)
-                if str(lead.get("email") or "").lower() in emails:
-                    return "satisfied", f"Finishing Touches file sent {str(t.get('ts_done') or '')[:10]}"
+            if t.get("kind") not in touches_kinds or t.get("status") != "done":
+                continue
+            pay = t.get("payload") or {}
+            if wid and wid in (str(pay.get("workspace_id") or ""), str(pay.get("project_id") or "")):
+                return "satisfied", f"Finishing Touches file sent {str(t.get('ts_done') or '')[:10]}"
+            lead = pay.get("lead") or {}
+            emails, _ = _contacts(p)
+            if str(lead.get("email") or "").lower() in emails:
+                return "satisfied", f"Finishing Touches file sent {str(t.get('ts_done') or '')[:10]}"
     except Exception as e:  # noqa: BLE001
         return "unknown", f"could not read the send ledger: {type(e).__name__}"
     return "open", "no Finishing Touches send on record"

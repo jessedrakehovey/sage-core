@@ -103,7 +103,7 @@ Read it first every tick; update it every tick.
   `grep -c $'\x08' <files>` and run the suites.
 - **Transport prompts: never wrap code in markdown fences.** A headless model told to pass
   "this code verbatim" inside ``` fences sends the fences too and the program dies at line 1
-  (hb_exec / hb_snapshot, seen live 2026-10-01). Use `<code>` tags and say so.
+  (the CRM connector's executor and snapshot job, seen live 2026-10-01). Use `<code>` tags and say so.
 - **A spine job `window` must sit inside the task's firing hours** (06:00-23:30). rescue-kit
   sat at 02-06 and never ran for its whole life; `spine.py --list` showing `last=-` is the tell.
 - **Scheduled-task XML is physically UTF-16** — Edit/Write save UTF-8 and silently break

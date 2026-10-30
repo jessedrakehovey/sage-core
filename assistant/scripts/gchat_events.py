@@ -248,7 +248,7 @@ def _taken(ev: dict, qid: str, option: str, person: dict, before) -> dict:
     """The reply to a second delivery of a tap that is already being (or has been) answered. Never {}:
     Chat shows an empty reply to a button as "Sage is unable to process your request", and when the
     relay delivers one tap twice that is the reply the phone may show while the first one is sending
-    (the owner 2026-10-25, example's email: the error at 5:36, the send at 5:40). So: the card as it stands."""
+    (the owner 2026-10-25, Corwin's email: the error at 5:36, the send at 5:40). So: the card as it stands."""
     import cards
     import chat_push
     card = cards._read(cards.LIVE / f"{qid}.json") or cards._read(cards.ARCHIVE / f"{qid}.json") or before
@@ -380,7 +380,7 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
         r = cards.answer(qid, approve, revised=revised, q_index=int(p.get("q") or 0), by=f"gchat:{person['key']}")
         log(f"click edit-submit {qid} by {person['key']}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''} revised={len(revised)} chars")
         if r.get("blanks") and card and late is None:
-            # a blank is still in the text: keep the dialog open with his words in it (example, 2026-10-18)
+            # a blank is still in the text: keep the dialog open with his words in it (Marisa, 2026-10-18)
             return _reply_dialog(ev, chat_push.edit_dialog(card, int(p.get("q") or 0), text=revised,
                                                            error=f"Not sent yet: {r['blanks'][0][:60]} is still a blank. Replace it with your words."))
         core.say(convo, person["name"], f"[edited and approved card {qid}: {revised[:200]}]", channel="gchat", meta={"click": True})

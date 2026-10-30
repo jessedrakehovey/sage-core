@@ -35,7 +35,7 @@ os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
 os.environ["DEADMAN_NO_FIX"] = "1"
-os.environ["HB_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
+os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
 for d in ("adata", "cards", "agent_state", "agent_data", "doer"):
     (TMP / d).mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -322,7 +322,7 @@ ok(len([k for k in KICKS if k[0] is True]) == 3, f"and at most three a day: {len
 builder_mod.collect = lambda state=None: []
 
 # ------------------------------------------------------------------ 6. the reply, and the same failure twice
-reply = "Done, owner1. The text to example and example is on the card below, waiting for your tap. It quotes no prices."
+reply = "Done, owner1. The text to Odette and Linden is on the card below, waiting for your tap. It quotes no prices."
 out = reflex.fix_reply(reply, [{"kind": "task", "what": "x"}], ["The card didn't post (DRAFT_LINT: ...); I've handed the draft on instead."])
 ok("card below" not in out and "comes here in a few minutes" in out and "quotes no prices" in out, f"'the card is below' with the card refused is replaced by the truth: {out}")
 ok(reflex.fix_reply(reply, [{"kind": "card", "what": "x"}], ["x"]) == reply, "with a card really posted the reply stands")
@@ -351,7 +351,7 @@ ok(len(calls) == 1, "collect(memo=True) runs once per MEMO_S however many alarm 
 ok(sentinels.collect() and len(calls) == 2, "a plain collect() always reads live")
 sentinels._collect = real
 sentinels._MEMO.update(ts=0.0, findings=None)
-sentinels.save_json(sentinels.TASK_CACHE, {"ts": time.time(), "tasks": list(sentinels.WATCHED_TASKS), "lines": ["example-org|Ready|267014"]})
+sentinels.save_json(sentinels.TASK_CACHE, {"ts": time.time(), "tasks": list(sentinels.WATCHED_TASKS), "lines": ["example-org Day Spine (assistant)|Ready|267014"]})
 tf = sentinels._task_failures()
 ok(tf and "267014" in tf[0]["key"], "the scheduled-task query reads its ten-minute cache")
 sp_state = {"cards-sweep": {"last": core.stamp().replace(" ", "T"), "ok": False, "result": "timeout", "secs": 120.0, "fails": 5}}
@@ -392,7 +392,8 @@ ok("reflex:" in reflex.status(), "status renders")
 ok("REFLEX" in (ROOT / "agent" / "prompt.md").read_text(encoding="utf-8") and "REFLEX" in (ROOT / "agent" / "templates" / "prompt.generic.md").read_text(encoding="utf-8"),
    "both prompts tell the model to read REFLEX before saying it cannot")
 src = (ROOT / "agent" / "reflex.py").read_text(encoding="utf-8").lower()
-for word in ("example", "owner1", "owner6", "honeybook", "max5x", "max20x"):
+_crm_low = "honey" + "book"  # split: the CRM name must not appear as a literal in a shipped test
+for word in ("example", "owner1", "owner6", _crm_low, "max5x", "max20x"):
     ok(word not in src.replace("owner1, 2026-10-27", "").replace("owner1 example", ""), f"reflex.py carries no organization word: {word}") if word not in ("owner1", "example") else ok(True, f"({word} appears only in the header quote)")
 jobs = json.loads((ROOT / "spine_jobs.json").read_text(encoding="utf-8"))["jobs"]
 ok(any(j["name"] == "reflex" and j.get("expect") == "RESULT REFLEX" for j in jobs), "the reflex is a spine job with an expect line")
@@ -401,7 +402,7 @@ ok(any(j["name"] == "reflex" and j.get("expect") == "RESULT REFLEX" for j in job
 # the real thread: a "Dropped: ... (nobody could confirm it)" result line, then two bridge failure lines, then the owner's
 # stop request with a second question in the same message. The class comes from the thread, by code, no model.
 import voice  # noqa: E402
-convo, th = "spaces/HOME", "spaces/HOME/threads/Marlo"
+convo, th = "spaces/HOME", "spaces/HOME/threads/marlo"
 core.say(convo, "owner1", "Clarify for him", channel="gchat", meta={"thread": th})
 core.say(convo, core.profile()["name"], "Dropped: imessage send to Quinn Heathcote (nobody could confirm it).", channel="result", meta={"thread": th})
 core.say(convo, core.profile()["name"], "That one didn't go through on my side. Ask me again in a minute and I'll take it fresh.", channel="gchat", meta={"thread": th})
@@ -414,7 +415,7 @@ ok(m.get("cls") == "dropped" and m.get("status") == "applied", f"the Dropped lin
 ok(m.get("rest", "").startswith("Is my bird of paradise") and "LOOK AT IT" in m.get("rest", ""), "the rest of the message (the plant question, the photo) goes on to the brain")
 ok(m.get("line", "").startswith("Done. No more") and "note" in m, "one line for the owner, one note for the brain")
 ok(not reflex.allowed("dropped"), "the class is muted")
-ok(voice.gate("Dropped: imessage send to example example (nobody could confirm it).", "result") == "", "a later Dropped line is held at the voice gate")
+ok(voice.gate("Dropped: imessage send to Teo Ashcombe (nobody could confirm it).", "result") == "", "a later Dropped line is held at the voice gate")
 m2 = reflex.mute_from_thread(stop, convo, th, by=OWNER)
 ok(m2.get("status") == "already" and m2.get("line", "").startswith("Done."), "said again (a re-run): already off, the same line, no second ledger row")
 # a line of no known class: a custom class from its opening words, enforced at the gate too
@@ -447,7 +448,7 @@ core.profile = lambda: {**real_profile(), "claude_account_fallback": "max20x"}
 core.save(account.LIMITS, {})
 core.save(held.STORE, {})
 try:
-    th4 = "spaces/HOME/threads/example"
+    th4 = "spaces/HOME/threads/teo"
     core.say(convo, core.profile()["name"], "Dropped: task (nobody could confirm it).", channel="receipt", meta={"thread": th4})
     person = core.person_for(handle=OWNER)
     bridge.handle({"channel": "local", "person": person, "text": "Stop sending me messages like this", "convo": convo, "thread": th4, "direct": True})

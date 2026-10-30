@@ -79,7 +79,7 @@ THREAD_KEEP = 60            # messages kept per contact (context for drafting)
 OUTBOX_MAX_AGE_H = 3        # an approved text not fetched within this long is not sent late
 HANDED_STALE_MIN = 30       # fetched by the phone but never acked
 HANDED_STALE_NOACK_MIN = 240  # ...on a phone whose Shortcut has NEVER acked (every text looks unconfirmed there; 2026-10-23)
-HANDED_GIVEUP_H = 72        # older than this, a handed text is not chased any more (example's Oct 18 text was still being raised Oct 23)
+HANDED_GIVEUP_H = 72        # older than this, a handed text is not chased any more (Teo's Oct 18 text was still being raised Oct 23)
 TEXT_MAX = 4000
 
 
@@ -98,7 +98,7 @@ def norm_handle(h: str) -> str:
 def valid_handle(h: str) -> bool:
     h = norm_handle(h)
     if "@" in h:
-        return bool(re.fullmatch(r"[\w.+-]+@[\w-]+\.[\w.-]+", h)) and "example.com" not in h
+        return bool(re.fullmatch(r"[\w.+-]+@[\w-]+\.[\w.-]+", h)) and "other-business.invalid" not in h
     return bool(re.fullmatch(r"\+\d{11,15}", h))
 
 
@@ -150,7 +150,7 @@ def thread(handle, n=20) -> dict:
 
 
 def _who_name(handle, text: str = "") -> str:
-    """The best name for a sender: whois.py (contacts, memory, the wiki, HoneyBook, the leads and the
+    """The best name for a sender: whois.py (contacts, memory, the wiki, the CRM, the leads and the
     texts themselves; 2026-10-23), the plain phone book before that."""
     try:
         import whois
@@ -242,7 +242,7 @@ def inbound(sender, text, name="", received="", account=DEFAULT_ACCOUNT):
     sid = hashlib.sha1(f"{handle}|{received[:16]}|{text}".encode("utf-8")).hexdigest()[:16]
     shown = who.get("label") or name or handle
     if name and who.get("label") and float(who.get("confidence") or 0) < 0.85 and who.get("kind") not in ("automated", "business"):
-        shown = who["label"]                   # "probably example (+1 ...)" says how sure the name is
+        shown = who["label"]                   # "probably Marisa (+1 ...)" says how sure the name is
     elif name:
         shown = name
     item = {"source": "imessage", "source_id": sid, "lane": lane, "kind": "imessage_in",

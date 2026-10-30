@@ -44,6 +44,10 @@ def check(name, cond, extra=""):
 RULES_SRC = C.RULES_PATH
 C.RULES_PATH = TMP / "money_rules.json"
 C.RULES_PATH.write_text(RULES_SRC.read_text(encoding="utf-8-sig"), encoding="utf-8")
+_rl = json.loads(C.RULES_PATH.read_text(encoding="utf-8"))      # the fixture CRM's client payments (any organization's rules)
+_rl.setdefault("buckets", {}).setdefault("income:crm", {"label": "CRM client payment", "side": "business", "kind": "income", "line": "1"})
+_rl.setdefault("rules", []).insert(0, {"id": "r-test-crm", "match": "client portal", "sign": "in", "bucket": "income:crm"})
+C.RULES_PATH.write_text(json.dumps(_rl), encoding="utf-8")
 c = C.cfg()
 C.cfg = lambda: c
 
@@ -89,7 +93,7 @@ def tx(tid, aid, days_ago, plaid_amount, name, pending=False, pending_id="", mer
     return row
 
 
-PAGE1 = [tx("t-hb1", "rel-op", 3, -2400.0, "HONEYBOOK PAYMENT 8821"), tx("t-adobe", "rel-op", 4, 69.99, "ADOBE *CREATIVE CLOUD", merchant="Adobe"),
+PAGE1 = [tx("t-crm1", "rel-op", 3, -2400.0, "CLIENT PORTAL PAYMENT 8821"), tx("t-adobe", "rel-op", 4, 69.99, "ADOBE *CREATIVE CLOUD", merchant="Adobe"),
          tx("t-xfer-out", "rel-op", 2, 600.0, "Transfer to Tax"), tx("t-xfer-in", "rel-tax", 1, -600.0, "Transfer from Operating"),
          tx("t-coffee-p", "rel-op", 1, 6.50, "BLUE BOTTLE COFFEE", pending=True)]
 PAGE2 = [tx("t-irs", "rel-tax", 100, 900.0, "IRS USATAXPYMT"), tx("t-card", "rel-card", 5, 120.0, "MUSICBED SUBSCRIPTION")]
@@ -219,19 +223,19 @@ check("a Relay credit account is a card (Plaid type beats the relay name pattern
       A["rel-card"]["kind"] == "card" and A["rel-card"]["side"] == "business" and A["rel-card"]["balance"] == -250.0, A["rel-card"])
 check("balances + as_of + mask carried", A["rel-op"]["balance"] == 5120.55 and A["rel-op"]["balance_date"] == TODAY.isoformat() and A["rel-op"]["mask"] == "0001")
 T = led["transactions"]
-check("Plaid sign flipped: deposit positive, charge negative", T["t-hb1"]["amount"] == 2400.0 and T["t-adobe"]["amount"] == -69.99 and T["t-xfer-out"]["amount"] == -600.0 and T["t-xfer-in"]["amount"] == 600.0)
+check("Plaid sign flipped: deposit positive, charge negative", T["t-crm1"]["amount"] == 2400.0 and T["t-adobe"]["amount"] == -69.99 and T["t-xfer-out"]["amount"] == -600.0 and T["t-xfer-in"]["amount"] == 600.0)
 check("row shape matches the SimpleFIN rows", set(T["t-adobe"]) >= {"id", "account_id", "posted", "amount", "description", "payee", "memo", "pending", "bucket", "bucket_src", "rule_id", "seen"}
       and T["t-adobe"]["payee"] == "Adobe" and T["t-adobe"]["memo"] == "GENERAL_SERVICES_OTHER" and T["t-coffee-p"]["pending"] is True, T["t-adobe"])
 r2 = plaid.merge(led, "item-relay-1", "Relay", ACCOUNTS, PAGE1 + PAGE2, c=c, as_of=TODAY.isoformat())
 check("merge is idempotent", r2["new"] == 0 and r2["updated"] == 0 and r2["removed"] == 0, r2)
 T["t-coffee-p"].update({"bucket": "biz:meals", "bucket_src": "learned", "rule_id": "L1"})
-T["t-hb1"]["bucket"] = "income:honeybook"
+T["t-crm1"]["bucket"] = "income:crm"
 posted = tx("t-coffee", "rel-op", 0, 6.50, "BLUE BOTTLE COFFEE 0421", pending_id="t-coffee-p")
 r3 = plaid.merge(led, "item-relay-1", "Relay", ACCOUNTS, [posted], removed=[{"transaction_id": "t-coffee-p"}, {"transaction_id": "t-card"}], c=c, as_of=TODAY.isoformat())
 check("pending -> posted carries the bucket, drops the pending row; a removed id is dropped",
       "t-coffee-p" not in T and T["t-coffee"]["bucket"] == "biz:meals" and T["t-coffee"]["bucket_src"] == "learned" and "t-card" not in T
       and r3["carried"] == 1 and r3["removed"] == 2 and r3["new"] == 1, (r3, T.get("t-coffee")))
-check("a bucket already placed survives a re-merge", plaid.merge(led, "item-relay-1", "Relay", ACCOUNTS, PAGE1[:1], c=c)["updated"] == 0 and T["t-hb1"]["bucket"] == "income:honeybook")
+check("a bucket already placed survives a re-merge", plaid.merge(led, "item-relay-1", "Relay", ACCOUNTS, PAGE1[:1], c=c)["updated"] == 0 and T["t-crm1"]["bucket"] == "income:crm")
 
 # ------------------------------------------------------------------ pull: not configured / not linked / linked / incremental / quota / dry
 C.save_ledger({"accounts": {}, "transactions": {}, "pulled": {}})
@@ -294,8 +298,8 @@ check("simplefin.py status lists Relay Operating / Tax / Savings next to the Sim
       and names["Chase Total Checking"]["feed"] == "simplefin" and stt["transactions"] == len(led["transactions"]), names)
 categorize.apply(led, c=c)
 bk = {t["id"]: t["bucket"] for t in led["transactions"].values()}
-check("categorize places the Relay rows: HoneyBook income, Adobe software, IRS federal, the Operating->Tax transfer paired",
-      bk["t-hb1"] == "income:honeybook" and bk["t-adobe"] == "biz:software" and bk["t-irs"] == "tax:federal" and bk["t-xfer-out"] == "transfer" and bk["t-xfer-in"] == "transfer"
+check("categorize places the Relay rows: CRM client income, Adobe software, IRS federal, the Operating->Tax transfer paired",
+      bk["t-crm1"] == "income:crm" and bk["t-adobe"] == "biz:software" and bk["t-irs"] == "tax:federal" and bk["t-xfer-out"] == "transfer" and bk["t-xfer-in"] == "transfer"
       and bk["chk-1"] == "personal:subscriptions", bk)
 ps = plaid.status()
 check("plaid.py status: items + accounts + count, no token", ps["items"]["item-relay-1"]["institution"] == "Relay" and len(ps["accounts"]) == 4 and ps["transactions"] == 7 and "SECRET" not in json.dumps(ps), ps)

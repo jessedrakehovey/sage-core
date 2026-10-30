@@ -72,7 +72,7 @@ DENIED = ",".join([
     "mcp__gmail__send_email", "mcp__gmail__delete_email", "mcp__gmail__batch_delete_emails",
     "mcp__example-mail-personal__send_email", "mcp__example-mail-personal__delete_email",
     "mcp__example-mail-films__send_email", "mcp__example-mail-films__delete_email",
-    "mcp__honeybook__take_action", "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click",
+    "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click",
     "mcp__playwright-doer__browser_click",
     "Edit(Wiki/**)", "Edit(Memory/**)", "Edit(Schema/**)", "Edit(Raw/**)", "Edit(scripts/**)", "Edit(.claude/**)",
     "Edit(assistant/scripts/**)", "Edit(assistant/doer/*.py)", "Edit(assistant/doer/*.json)", "Edit(assistant/doer/*.md)",
@@ -194,11 +194,12 @@ def _run_turn_on(prompt: str, out_dir: Path, resume: str = "", timeout: int = 90
     if not Path(CLAUDE).exists():
         return {"ok": False, "error": "claude CLI not found", "text": "", "session": "", "marker": "", "arg": ""}
     out_dir.mkdir(parents=True, exist_ok=True)
+    _allowed, _denied = _doer()._apply_crm_tools(ALLOWED, DENIED)
     cmd = [CLAUDE, "-p", "--model", str(CCFG.get("model", CFG.get("model", "sonnet"))), "--output-format", "json",
            "--max-turns", str(CCFG.get("max_turns", CFG.get("max_turns", 80))),
            "--mcp-config", str(_mcp_config(out_dir)), "--strict-mcp-config",
            "--settings", str(_settings(out_dir)),
-           "--allowedTools", ALLOWED, "--disallowedTools", DENIED]
+           "--allowedTools", _allowed, "--disallowedTools", _denied]
     if resume:
         cmd += ["--resume", resume]
     env, note = d._env(acct)

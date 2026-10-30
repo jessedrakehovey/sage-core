@@ -45,7 +45,7 @@
     "owner3@example.invalid"
    ],
    "chat_user": "",
-   "phone": "+1555-038-0038"
+   "phone": "+15550380038"
   },
   "owner6": {
    "name": "owner6",
@@ -55,7 +55,7 @@
     "owner6@example.invalid"
    ],
    "chat_user": "",
-   "phone": "+1555-010-6110"
+   "phone": "+15550106110"
   },
   "staff1": {
    "name": "staff1",
@@ -65,7 +65,7 @@
     "owner2@example.invalid"
    ],
    "chat_user": "",
-   "phone": "+1555-094-4994",
+   "phone": "+15550944994",
    "added": "2026-10-24",
    "why": "owner1 2026-10-24: 'Allow him permission to do wedding business tasks limited to that of an admin and not an owner. [He] should have zero access to my personal life information.'"
   }

@@ -1,0 +1,139 @@
+{
+ "_comment": "Ported in shape from the property OS's scripts/comms/draft_rules.json (2026-10-06, with the owner's crossover grant). There the rules were mined from 255 corrections he typed on message cards; the ones that are about HOW the owner WRITES carry over as-is, the tenant/staff-specific ones do not. New rules get added the same way: from what he edits or skips (assistant/learnings/<lane>.md, cards.answers revised_text). draft_lint.py applies them BEFORE a draft becomes a card. severity: block = fix before carding; warn = fix unless the draft truly needs it; info = look. audience: lead | couple | vendor | personal | owner | any. A rule never sends and never rewrites: it only reports.",
+ "_version": 1,
+ "limits": {
+  "text_chars": 320,
+  "personal_text_chars": 240,
+  "email_words": 0,
+  "_evidence": "Property backtest: only TEXT length predicted an edit (54% of over-cap texts edited vs 34%). Personal texts are shorter still: the owner's own outbound texts are one or two lines."
+ },
+ "rules": [
+  {
+   "id": "no-ai-tells",
+   "severity": "warn",
+   "audience": "any",
+   "pattern": "\\b(glad to drive|gap to close|on that footing|to be clear,|i wanted to (reach out|flag)|please be advised|as per|kindly|rest assured|i hope this (finds|message finds)|just (checking|touching) in to see|i trust (this|you))\\b",
+   "fix": "Write it the way owner1 would say it out loud. Drop process detail nobody asked for.",
+   "evidence": "Property corrections: \"sounds like ai\", \"Sound more human\", \"You still don't sound like me\" (7 edits)"
+  },
+  {
+   "id": "no-em-dash",
+   "severity": "block",
+   "audience": "any",
+   "pattern": "\\u2014|\\u2013| -- ",
+   "fix": "No dashes as punctuation. Use a period or a comma.",
+   "evidence": "Standing rule on every lane (memory avoid-em-dashes)"
+  },
+  {
+   "id": "no-follow-up-filler",
+   "severity": "info",
+   "audience": "any",
+   "pattern": "\\b(follow(ing)?[ -]?up|circle back|touch base)\\b",
+   "fix": "Say the actual next step and when, or drop the sentence.",
+   "evidence": "\"Stop saying following up\" (property, 3 edits)"
+  },
+  {
+   "id": "no-open-offers",
+   "severity": "info",
+   "audience": "any",
+   "pattern": "\\b(happy to|glad to|feel free to|don'?t hesitate|let me know if (you|there)|if you (need|have|notice) any(thing)?)\\b",
+   "fix": "Answer, or ask one specific question. Do not invite more questions.",
+   "evidence": "\"don't offer this just to answer more questions\" (property, 9 edits). Info only: a wedding lead may genuinely be told to ask away."
+  },
+  {
+   "id": "no-apology-or-fault",
+   "severity": "warn",
+   "audience": "any",
+   "pattern": "\\b(i apologi[sz]e|we apologi[sz]e|my apologies|sorry (for|about) the (delay|wait|late)|our (mistake|error|fault))\\b",
+   "fix": "Acknowledge and state the fact. Do not apologize for a delay owner1 did not ask you to own.",
+   "evidence": "\"There is no apology\", \"Don't say what we did wrong\" (property). Warn, not block: a personal 'sorry about that' can be right."
+  },
+  {
+   "id": "no-promised-followup-time",
+   "severity": "block",
+   "audience": "any",
+   "kind": "forbid",
+   "pattern": "\\b(a|the)\\s+(time|confirmation|update)\\s+will\\s+(follow|be (sent|provided|confirmed))\\b|\\bwill\\s+(follow up|send (you )?(a )?(confirmation|written confirmation))\\b|\\bonce (it|a time) is set\\b|\\byou will receive (a )?(written )?confirmation\\b",
+   "fix": "State the fact you have. Do not promise a follow-up time or a confirmation nobody scheduled.",
+   "evidence": "\"Stop promising follow up times and written confirmations\" (property 2026-09-21)"
+  },
+  {
+   "id": "no-price-date-turnaround-promise",
+   "severity": "block",
+   "audience": "lead",
+   "pattern": "\\$\\s?\\d|\\b\\d{1,2}(,\\d{3})+\\b|\\b(per hour|hourly rate|starting at|packages? (start|range)|discount|deposit of)\\b|\\b(you'?ll have|you will have|delivered (in|within)|within \\d+ (weeks?|days?)|turnaround (is|of)|we'?re (available|free|open) (on|that)|that date is (open|available|free))\\b",
+   "fix": "Never state a price, an open date or a delivery time to a lead. Point to the collection PDF / say owner1 will confirm.",
+   "evidence": "CLAUDE.md hard rule: no pricing commitments, no turnaround promises without owner1"
+  },
+  {
+   "id": "no-price-date-turnaround-promise-couple",
+   "severity": "block",
+   "audience": "couple",
+   "pattern": "\\b(delivered (in|within)|within \\d+ (weeks?|days?)|turnaround (is|of)|by (next|the end of) (week|month)|you'?ll have (it|the film|everything) (by|in|within))\\b",
+   "fix": "Never give a booked couple a delivery date or turnaround. owner1 sets those.",
+   "evidence": "CLAUDE.md: the assistant never states a delivery date without owner1's approval"
+  },
+  {
+   "id": "no-example-voice-in-personal",
+   "severity": "warn",
+   "audience": "personal",
+   "pattern": "\\b(example-org|best regards|warm regards|kind regards|sincerely|cheers,|thank you for reaching out|i appreciate you)\\b",
+   "fix": "A personal text has no sign-off and no business voice. Write like a text to a friend.",
+   "evidence": "operator.md owner1's personal texts: first person, casual, no greeting line, no sign-off"
+  },
+  {
+   "id": "no-greeting-line-in-text",
+   "severity": "info",
+   "audience": "personal",
+   "pattern": "^\\s*(hi|hello|hey)\\s+\\w+[,!.]",
+   "fix": "Texts to people he already talks to open with the point, not a greeting line.",
+   "evidence": "owner1's own outbound texts in phone_threads.json open with the point"
+  },
+  {
+   "id": "one-question-only",
+   "severity": "warn",
+   "audience": "any",
+   "kind": "max_questions",
+   "max": 2,
+   "fix": "Ask the one question that moves it forward. He deletes question lists.",
+   "evidence": "\"remove this question 4\", \"best to reformat for just the one question\" (property, 4 edits)"
+  },
+  {
+   "id": "lead-warmth",
+   "severity": "warn",
+   "audience": "lead",
+   "kind": "needs_any",
+   "pattern": "\\b(congrat|excited|love|thank|so glad|can'?t wait|beautiful|thrilled)\\b",
+   "fix": "A lead or couple message opens warm: this is their wedding. Flat and formal reads cold.",
+   "evidence": "Brand voice (CLAUDE.md): warm, personal, celebratory"
+  }
+ ],
+ "process_checks": [
+  {
+   "id": "already-answered",
+   "say": "Before drafting, read the thread: if owner1 already replied from his phone (an 'out' message newer than their text) or an exec ticket already went out to this person today, do not draft. 17 of the property corrections were \"we sent this already\"."
+  },
+  {
+   "id": "one-card-per-thread",
+   "say": "A burst of texts from one person or one group is ONE card that answers what is actually open, never a card per message."
+  },
+  {
+   "id": "verify-before-asserting"
+  },
+  {
+   "id": "do-not-ask-what-the-record-answers"
+  },
+  {
+   "id": "human-not-complete",
+   "say": "Completeness is the failure mode, not inaccuracy (property 2026-09-22: a factually perfect three-receipt email drew 'too much details seems inhuman'). Answer what they asked and stop."
+  },
+  {
+   "id": "preview-format",
+   "say": "Every text card shows [TEXT PREVIEW] To <number>: then the exact text; every email card shows the [EMAIL PREVIEW] block. He approves what he reads."
+  },
+  {
+   "id": "commitments-are-judgment-cards",
+   "say": "A plan, a date, money, a favour, a price: never in a draft. A judgment card with 2-3 short answers as the labels; his tap becomes the exec card."
+  }
+ ]
+}

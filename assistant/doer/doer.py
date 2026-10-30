@@ -19,7 +19,7 @@ owner's chat with Sage.
 Safety shape (scripts/guardrails/check_gates.py target "doer"): explicit --allowedTools, a fixed
 deny belt, --strict-mcp-config with only the doer's browser server, Bash limited to login_fill.py
 (types vault logins the model never sees), report.py checkpoint and vault.py has. No mail, no
-HoneyBook, no web fetch, no file writes outside assistant/out/doer. Everything it does on a site
+the CRM, no web fetch, no file writes outside assistant/out/doer. Everything it does on a site
 is in one of three tiers (prompt.md); tier C never completes without an owner's tap.
 """
 from __future__ import annotations
@@ -116,7 +116,7 @@ ALLOWED = ",".join([
     f"mcp__{MCP}__browser_wait_for", f"mcp__{MCP}__browser_take_screenshot", f"mcp__{MCP}__browser_tabs",
     f"mcp__{MCP}__browser_handle_dialog", f"mcp__{MCP}__browser_find", f"mcp__{MCP}__browser_console_messages",
     f"mcp__{MCP}__browser_resize", f"mcp__{MCP}__browser_drag",
-    # the forced click on a control that never counts as stable (HoneyBook project pages, 2026-10-18:
+    # the forced click on a control that never counts as stable (CRM project pages, 2026-10-18:
     # three runs had no DOM-click route); prompt.md allows it only for that, after two timeouts
     f"mcp__{MCP}__browser_evaluate",
 ])
@@ -127,7 +127,7 @@ DENIED = ",".join([
     "mcp__gmail__send_email", "mcp__gmail__delete_email", "mcp__gmail__batch_delete_emails",
     "mcp__example-mail-personal__send_email", "mcp__example-mail-personal__delete_email",
     "mcp__example-mail-films__send_email", "mcp__example-mail-films__delete_email",
-    "mcp__honeybook__take_action", "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click",
+    "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click",
     "Edit(Wiki/**)", "Edit(Memory/**)", "Edit(Schema/**)", "Edit(scripts/**)", "Edit(.claude/**)",
     "Edit(assistant/scripts/**)", "Edit(assistant/doer/**)", "Edit(assistant/agent/**)", "Edit(assistant/data/**)",
     "Edit(assistant/config.json)", "Edit(assistant/prompts/**)",
@@ -297,7 +297,7 @@ def _mcp_config(out_dir: Path) -> Path:
 
 def _settings(out_dir: Path) -> Path:
     """click_guard.py on the browser tools: 3 stuck clicks on one control end the job with the page
-    state instead of running to max_turns (four HoneyBook runs, 2026-10-18). Counts reset per turn."""
+    state instead of running to max_turns (four CRM site runs, 2026-10-18). Counts reset per turn."""
     import click_guard
     click_guard.reset(out_dir)
     py, g, d = Path(sys.executable).as_posix(), (HERE / "click_guard.py").as_posix(), out_dir.as_posix()
@@ -419,6 +419,19 @@ def with_fallback(turn, prompt: str, out_dir: Path, resume: str = "", **kw) -> d
     return r
 
 
+def _apply_crm_tools(allowed: str, denied: str) -> tuple[str, str]:
+    """Inject the CRM connector's write tool names into the deny belt at runtime so the engine lists none."""
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import alib
+        write_tools = alib.plugin_set("MCP_WRITE_TOOLS")
+        if write_tools:
+            denied = denied + "," + ",".join(sorted(write_tools))
+    except Exception:  # noqa: BLE001
+        pass
+    return allowed, denied
+
+
 def run_turn(prompt: str, out_dir: Path, resume: str = "", timeout: int = 900) -> dict:
     """One headless model turn with the doer's browser -> {"ok", "text", "session", "error", "marker", "arg"}."""
     return with_fallback(_run_turn_on, prompt, out_dir, resume=resume, timeout=timeout)
@@ -428,11 +441,12 @@ def _run_turn_on(prompt: str, out_dir: Path, resume: str = "", timeout: int = 90
     if not Path(CLAUDE).exists():
         return {"ok": False, "error": "claude CLI not found", "text": "", "session": "", "marker": "", "arg": ""}
     out_dir.mkdir(parents=True, exist_ok=True)
+    _allowed, _denied = _apply_crm_tools(ALLOWED, DENIED)
     cmd = [CLAUDE, "-p", "--model", str(CFG.get("model", "sonnet")), "--output-format", "json",
            "--max-turns", str(CFG.get("max_turns", 80)),
            "--mcp-config", str(_mcp_config(out_dir)), "--strict-mcp-config",
            "--settings", str(_settings(out_dir)),
-           "--allowedTools", ALLOWED, "--disallowedTools", DENIED]
+           "--allowedTools", _allowed, "--disallowedTools", _denied]
     if resume:
         cmd += ["--resume", resume]
     env, note = _env(acct)

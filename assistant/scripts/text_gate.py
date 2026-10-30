@@ -8,7 +8,7 @@ number belongs to a wedding party:
   - a quiz lead          assistant/data/leads/*.json
   - a booked couple      scripts/projects/project_state.json (phones)
   - a couple / vendor    any phone number written in Wiki/Couples/ or Wiki/Vendors/
-  - a HoneyBook client   the desk snapshot's contacts (contacts.crm_people)
+  - a CRM contact        the desk snapshot's contacts (contacts.crm_people)
 
 Everything else is still written to the thread log by phone_bridge.py, so Sage and the
 operator can draft or triage any thread when an owner asks in chat; it is just never
@@ -16,8 +16,8 @@ ticketed, carded, chased or turned into a sentinel on its own. A matched text is
 `wedding`. owner's iPhone is not touched.
 
 Family is never a wedding party, even when a source above lists them (2026-10-10: owner is a
-HoneyBook contact, so her texts were carded): the owners (assistant/agent/people.json, and any
-HoneyBook contact on an owner's email) and every phone in Wiki/People/Family and Friends.md are
+CRM contact, so her texts were carded): the owners (assistant/agent/people.json, and any
+CRM contact on an owner's email) and every phone in Wiki/People/Family and Friends.md are
 taken out of the wedding set, and their texts are never ticketed on any phone or lane (2026-10-11).
 Since 2026-10-11 the wedding-only rule covers owner's iPhone too and any lane a text arrives
 in: an unmatched number is logged only, never carded, unless an owner asks in chat.
@@ -170,7 +170,7 @@ def household_numbers() -> set:
         out.update(_key(m) for m in _PHONE.findall(f.read_text(encoding="utf-8", errors="replace")))
     except OSError:
         pass
-    try:   # a friend's or relative's own note (2026-10-15: Casey Juniper, a past HoneyBook client, still got cards)
+    try:   # a friend's or relative's own note (2026-10-15: Casey Juniper, a past CRM contact, still got cards)
         for f in (VAULT / "Wiki" / "People").glob("*.md"):
             if f.name == "Contacts.md":   # the whole phone book (2026-10-23), clients included: not a family list
                 continue
@@ -256,7 +256,7 @@ def _own_text(q: dict) -> str:
 
 def own_advice(card) -> bool:
     """A text card's hint must come from its own conversation (2026-10-17: AJ's card said "Edit & send
-    if you want to answer the gift exchange or holidays now", copied from example's card a second
+    if you want to answer the gift exchange or holidays now", copied from Marisa's card a second
     earlier). When the advice is word for word another open card's to a different number, and every
     word it shares with that card's conversation is missing from this one's, it is replaced with a
     plain hint, in the card and its files. True when it was replaced. Never raises."""

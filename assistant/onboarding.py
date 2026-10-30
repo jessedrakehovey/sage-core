@@ -127,6 +127,10 @@ def discover(answers: dict | None = None, only: str = "") -> dict:
                                "path": bt.get("path") if bt else "", "status": "to-connect" if e else "uncatalogued",
                                "how": bt.get("how") if bt else "No catalog entry yet: the agent asks how you reach it today and writes one.",
                                "when": time.strftime("%Y-%m-%d")}
+    try:
+        crm_build(s)
+    except Exception as e:  # noqa: BLE001   filing the build never costs the owner their Discovery answers
+        print(f"CRM_BUILD_SKIPPED {type(e).__name__}: {str(e)[:120]}", file=sys.stderr)
     ask = disc.get("tracks") or {}
     if ask and not only and (answers is not None and answers.get("tracks") or answers is None and not s.get("tracks")):
         raw = answers.get("tracks") if answers is not None else _ask(f"[tracks] {ask.get('ask', '')} (examples: {', '.join(ask.get('examples') or [])})", None, "tracks", "")
@@ -135,6 +139,48 @@ def discover(answers: dict | None = None, only: str = "") -> dict:
     _save(STATE, s)
     seed_wiki(s)
     return s
+
+
+def _crm_connected() -> bool:
+    sys.path.insert(0, str(HERE / "scripts"))
+    try:
+        import crm
+        return crm._connector() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def crm_build(s: dict, write=None) -> str:
+    """The engine ships no CRM (assistant/CRM_CONTRACT.md). When Discovery names one and no connector is installed,
+    file ONE build request so the builder writes `crm_<id>.py` against the contract. Returns the request's path
+    ('' when none was needed). `write` is the wiki writer (tests pass a fake)."""
+    d = (s.get("discovery") or {}).get("crm") or {}
+    tool = str(d.get("tool") or "").strip()
+    if not tool or d.get("status") == "skipped" or _crm_connected():
+        return ""
+    cid = str(d.get("catalog_id") or "") or "".join(ch for ch in tool.lower() if ch.isalnum())[:24] or "crm"
+    if (s.get("crm_build") or {}).get("id") == cid:
+        return ""
+    how = str(d.get("how") or "")
+    body = (f"## Build request\n\nThe owner tracks clients and projects in {tool}. Write the CRM connector "
+            f"`assistant/scripts/crm_{cid}.py` against `assistant/CRM_CONTRACT.md` and add `crm_{cid}` to "
+            f"`assistant/config.json -> plugins.modules`.\n\n"
+            f"- Start with the snapshot (read-only): a refresh command in `SENSOR_CMDS` and a spine job that writes the "
+            f"contract's JSON. Writes (messages, stage moves) come after, each one only behind an owner's tap.\n"
+            f"- How {tool} connects (catalog): {how or 'not catalogued yet: ask the owner how they reach it and add a catalog entry.'}\n"
+            f"- Done when `crm.connected()` is true, `crm.snapshot()` returns this business's projects, and the "
+            f"tests in `assistant/tests/test_crm.py` pass against it.")
+    lane = "business"
+    if write is None:
+        sys.path.insert(0, str(HERE / "agent"))
+        import wiki_writer
+        write = wiki_writer.write
+        lane = (wiki_writer.lanes() or [lane])[0]
+    x = write({"title": f"Build request Connect {tool} as the CRM"[:90], "type": "workflow", "lane": lane, "body": body}, by="onboarding")
+    if x.get("status") not in ("applied", "appended"):
+        return ""
+    s["crm_build"] = {"id": cid, "tool": tool, "path": str(x.get("path") or ""), "when": time.strftime("%Y-%m-%d")}
+    return s["crm_build"]["path"]
 
 
 def parse_tracks(raw) -> list:

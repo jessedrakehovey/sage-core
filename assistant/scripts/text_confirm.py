@@ -3,7 +3,7 @@
 An approved text is `handed` to an iPhone and stays unconfirmed until the phone's Shortcut
 acks it; when the ack never comes, sentinels.py chases it and the operator cards the owner to
 "check Messages". But a text FROM that number after the hand-over already answers the
-question (example replied to the intro text on Oct 8 and the "text unconfirmed" card still
+question (Delia replied to the intro text on Oct 8 and the "text unconfirmed" card still
 sat open two days later, warning not to re-send). So, zero LLM:
 
   1. every handed outbox item whose recipient has texted in since it was handed is marked

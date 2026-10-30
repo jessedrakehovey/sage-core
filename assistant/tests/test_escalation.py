@@ -25,7 +25,7 @@ os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
 os.environ["RULINGS_FILE"] = str(ROOT / "data" / "rulings.json")
-os.environ["HB_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
+os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
 for d in ("adata", "cards", "agent_state", "agent_data"):
     (TMP / d).mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -90,7 +90,7 @@ oc.STORE.write_text(oc.STORE.read_text(encoding="utf-8").replace(f'"ref": "tk-sl
                                                                    f'"ref": "tk-slow", "what": "a draft the operator never returned", "lane": "wedding", "by": "", "convo": "", "thread": "", "route": "task", "verifier": "commitment", "state": "claimed", "created": "2026-01-01T00:00:00", "_x": "'), encoding="utf-8")
 s = oc.settle(dry=False)
 check("a claim past its route clock is unverified, not waited on again", s.get("route_clock") == 1 and oc.fold()[old["id"]]["state"] == "unverified", (s, oc.fold()[old["id"]]["state"]))
-check("route clocks come from tracking.json", oc.routes()["operator"] == 150 and oc.route_max_min({"kind": "hb_message", "route": "hb_message"}) == 15)
+check("route clocks come from tracking.json", oc.routes()["operator"] == 150 and oc.route_max_min({"kind": "crm_message", "route": "crm_message"}) == 15)
 
 # ------------------------------------------------------------------ 3. the spine's expect line
 ok, res = spine.run_job({"name": "t", "cmd": ["python", "-c", "print('hello')"], "expect": "RESULT", "timeout_s": 30}, False)
@@ -131,7 +131,7 @@ import core  # noqa: E402
 import bridge  # noqa: E402
 posted = []
 bridge.post_in = lambda convo, thread, text: posted.append((convo, thread, text))
-core.save(bridge.INFLIGHT, {"abc": {"ts": time.time() - 50 * 60, "m": {"convo": "dm:owner1", "thread": "", "text": "where is the example card", "person": {"key": "owner1"}}}})
+core.save(bridge.INFLIGHT, {"abc": {"ts": time.time() - 50 * 60, "m": {"convo": "dm:owner1", "thread": "", "text": "where is the Corwin card", "person": {"key": "owner1"}}}})
 n = bridge.stalled_turns()
 check("an owner line in flight for 45+ min gets ONE plain line where it was asked", n == 1 and posted and "Still on it" in posted[0][2], posted)
 check("said once only", bridge.stalled_turns() == 0 and len(posted) == 1)

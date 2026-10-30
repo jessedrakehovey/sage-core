@@ -88,7 +88,7 @@ NAV_BACK = ('<div style="padding:10px 16px;font:14px Poppins,system-ui,sans-seri
 
 
 def _build_desk():
-    """The Desk (dashboard/build.py: HoneyBook strip, leads, edit bay, nagging, system) served
+    """The Desk (dashboard/build.py: the CRM strip, leads, edit bay, nagging, system) served
     at /desk so there is ONE address for both pages. Rebuilt at most once a minute."""
     with _lock:
         if time.time() - _desk["ts"] > 60:

@@ -321,9 +321,22 @@ def flag_line(ln: str, ident: list, niche: list, allow: list) -> tuple:
     return "", ""
 
 
+CONNECTOR_LABEL = "a connector of the organization's own"
+
+
+def for_path(rel: str, ident: list) -> list:
+    """The identity patterns that apply to rel: catalog and onboarding reference may name any service (they are how
+    the agent learns to connect one), so the connector pattern skips them (2026-10-29)."""
+    keep = ("assistant/catalog/", "assistant/onboarding/")
+    if rel.replace("\\", "/").startswith(keep):
+        return [(rx, lb) for rx, lb in ident if not lb.startswith(CONNECTOR_LABEL)]
+    return ident
+
+
 def flags_of(rel: str, text: str, ident: list, niche: list, allow: list) -> dict:
     """{line_no: (kind, label, text)} for every flagged working line of the file."""
     out = {}
+    ident = for_path(rel, ident)
     for n, ln in working_lines(rel, text).items():
         kind, label = flag_line(ln, ident, niche, allow)
         if kind:
@@ -341,7 +354,7 @@ def niche_patterns(cfg: dict) -> list:
         t = str(t).strip()
         if not t:
             continue
-        if t.endswith("_"):            # a prefix such as hb_
+        if t.endswith("_"):            # a prefix such as crm_
             pats.append((re.compile(r"(?<![A-Za-z0-9])" + re.escape(t), re.I), f"niche {t}"))
         else:
             pats.append((re.compile(r"(?<![A-Za-z])" + re.escape(t) + r"(?![A-Za-z])", re.I), f"niche {t}"))
@@ -434,6 +447,10 @@ class SageEngine:
         pats.append((_PII_PHONE, "a phone number"))
         pats.append((re.compile(r"S-1-5-21(?:-\d+){3,4}"), "a user account SID"))       # a task XML names this PC's user (2026-10-29)
         pats.extend(people_patterns(self.vault, self.cfg))                                # anyone in the organization's records (2026-10-29)
+        # the organization's own connectors (its CRM): the engine ships none (core_sync.json -> connector_terms)
+        terms = [str(x) for x in (self.cfg.get("connector_terms") or []) if str(x).strip()]
+        if terms:
+            pats.append((re.compile("|".join(re.escape(x) for x in terms), re.I), f"{CONNECTOR_LABEL} ({', '.join(terms[:3])})"))
         # an owner's name inside a joined word ("OwnerBeach_MIX.wav", a cut-off address) slips past whole-word rules
         joined = {w for p in v["persons"] for w in [p["name"].split()[0] if p["name"] else ""] + p["name"].split()[1:] if len(w) >= 4}
         joined |= {s for s in v["surnames"] if len(s) >= 4}
@@ -458,7 +475,7 @@ class SageEngine:
                 return f"does not compile: {e.msg} (line {e.lineno})"
         if self.textual(rel):
             txt = data.decode("utf-8", "replace")
-            for rx, label in ident:
+            for rx, label in for_path(rel, ident):
                 if rx.search(txt):
                     return f"still carries {label}"
         return ""
@@ -488,6 +505,8 @@ class SageEngine:
         full["pack_prefixes"], full["pack_files"], full["files"] = list(e.PACK_PREFIXES), sorted(e.PACK_FILES), man["files"]
         (core / e.MANIFEST_NAME).write_text(json.dumps(full, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         (core / "README.md").write_text(e._engine_readme(full), encoding="utf-8")
+        if getattr(e, "ENGINE_GITIGNORE", ""):
+            (core / ".gitignore").write_text(e.ENGINE_GITIGNORE, encoding="utf-8")     # the engine's own, never the organization's
         return [e.MANIFEST_NAME, "README.md", ".gitignore"]
 
     def note(self, text: str) -> None:
@@ -1082,7 +1101,10 @@ def audit(eng, vault: Path, core: Path, quiet: bool = False) -> int:
         except OSError:
             continue
         for i, ln in enumerate(txt.splitlines(), 1):
-            for rx, label in ident:
+            # the manifest lists every shipped file, catalog reference included (it may name any service)
+            line_rel = rel if not (rel == getattr(getattr(eng, "e", None), "MANIFEST_NAME", "engine_manifest.json") and re.search(r'"assistant/(?:catalog|onboarding)/', ln)) \
+                else "assistant/catalog/x"
+            for rx, label in for_path(line_rel, ident):
                 if rx.search(ln):
                     hits += 1
                     if not quiet and hits <= 60:

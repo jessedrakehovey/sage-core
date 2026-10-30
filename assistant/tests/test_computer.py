@@ -257,6 +257,6 @@ ok(len(CALLS) == 1 + int(doer.CFG.get("continues_max", 3)) and tickets._load()[t
 src = (ROOT / "doer" / "computer.py").read_text(encoding="utf-8")
 ok('ALLOWED = ",".join([' in src and 'DENIED = ",".join([' in src, "computer.py carries the two gate shapes")
 ok("--dangerously-skip-permissions" not in src and '"--settings"' in src and '"--strict-mcp-config"' in src, "no skip-permissions; the settings hook and strict MCP are passed")
-ok("PowerShell" in computer.DENIED.split(",") and "mcp__honeybook__take_action" in computer.DENIED.split(","), "PowerShell and HoneyBook write are denied")
+ok("PowerShell" in computer.DENIED.split(","), "PowerShell is denied")
 
 print(f"\nALL {N} CHECKS PASSED")

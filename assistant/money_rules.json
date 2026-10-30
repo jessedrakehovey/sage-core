@@ -1,69 +1,339 @@
 {
  "_doc": "Merchant rules for the money lane (assistant/scripts/money/categorize.py). A transaction gets the FIRST rule whose `match` (case-insensitive regex on the bank description) fits; `sign` limits a rule to deposits (in) or charges (out); `account` limits it to accounts whose name matches. `bucket` must be a key of `buckets`. `learned` holds the rules the owner's typed answers on the weekly unknowns card produced (never hand-edit the ids; delete a row to unlearn). buckets: side business = Schedule C; `line` is the Schedule C line it feeds; `kind` income|expense|transfer|tax|ignore.",
  "buckets": {
-  "income:honeybook": {"label": "HoneyBook client payment", "side": "business", "kind": "income", "line": "1"},
-  "income:other": {"label": "Other business income", "side": "business", "kind": "income", "line": "1"},
-  "income:personal": {"label": "Personal income", "side": "personal", "kind": "income", "line": ""},
-  "biz:software": {"label": "Software & subscriptions", "side": "business", "kind": "expense", "line": "18"},
-  "biz:music": {"label": "Music licensing", "side": "business", "kind": "expense", "line": "27a"},
-  "biz:gear": {"label": "Gear & equipment", "side": "business", "kind": "expense", "line": "22"},
-  "biz:ads": {"label": "Advertising", "side": "business", "kind": "expense", "line": "8"},
-  "biz:travel": {"label": "Travel", "side": "business", "kind": "expense", "line": "24a"},
-  "biz:meals": {"label": "Business meals", "side": "business", "kind": "expense", "line": "24b"},
-  "biz:contractors": {"label": "Contract labor (second shooters)", "side": "business", "kind": "expense", "line": "11"},
-  "biz:insurance": {"label": "Business insurance", "side": "business", "kind": "expense", "line": "15"},
-  "biz:fees": {"label": "Bank & processing fees", "side": "business", "kind": "expense", "line": "10"},
-  "biz:office": {"label": "Office & supplies", "side": "business", "kind": "expense", "line": "18"},
-  "biz:phone": {"label": "Phone & internet", "side": "business", "kind": "expense", "line": "25"},
-  "biz:education": {"label": "Education & courses", "side": "business", "kind": "expense", "line": "27a"},
-  "biz:legal": {"label": "Legal & professional", "side": "business", "kind": "expense", "line": "17"},
-  "biz:other": {"label": "Other business expense", "side": "business", "kind": "expense", "line": "27a"},
-  "tax:federal": {"label": "Federal tax payment", "side": "business", "kind": "tax", "line": ""},
-  "tax:california": {"label": "California tax payment", "side": "business", "kind": "tax", "line": ""},
-  "personal:rent": {"label": "Rent & housing", "side": "personal", "kind": "expense", "line": ""},
-  "personal:groceries": {"label": "Groceries", "side": "personal", "kind": "expense", "line": ""},
-  "personal:dining": {"label": "Dining out", "side": "personal", "kind": "expense", "line": ""},
-  "personal:utilities": {"label": "Utilities", "side": "personal", "kind": "expense", "line": ""},
-  "personal:car": {"label": "Car & fuel", "side": "personal", "kind": "expense", "line": ""},
-  "personal:health": {"label": "Health", "side": "personal", "kind": "expense", "line": ""},
-  "personal:shopping": {"label": "Shopping", "side": "personal", "kind": "expense", "line": ""},
-  "personal:subscriptions": {"label": "Personal subscriptions", "side": "personal", "kind": "expense", "line": ""},
-  "personal:travel": {"label": "Personal travel", "side": "personal", "kind": "expense", "line": ""},
-  "personal:other": {"label": "Other personal", "side": "personal", "kind": "expense", "line": ""},
-  "transfer": {"label": "Transfer between own accounts", "side": "none", "kind": "transfer", "line": ""},
-  "ignore": {"label": "Ignore", "side": "none", "kind": "ignore", "line": ""}
+  "income:crm": {
+   "label": "CRM client payment",
+   "side": "business",
+   "kind": "income",
+   "line": "1"
+  },
+  "income:other": {
+   "label": "Other business income",
+   "side": "business",
+   "kind": "income",
+   "line": "1"
+  },
+  "income:personal": {
+   "label": "Personal income",
+   "side": "personal",
+   "kind": "income",
+   "line": ""
+  },
+  "biz:software": {
+   "label": "Software & subscriptions",
+   "side": "business",
+   "kind": "expense",
+   "line": "18"
+  },
+  "biz:music": {
+   "label": "Music licensing",
+   "side": "business",
+   "kind": "expense",
+   "line": "27a"
+  },
+  "biz:gear": {
+   "label": "Gear & equipment",
+   "side": "business",
+   "kind": "expense",
+   "line": "22"
+  },
+  "biz:ads": {
+   "label": "Advertising",
+   "side": "business",
+   "kind": "expense",
+   "line": "8"
+  },
+  "biz:travel": {
+   "label": "Travel",
+   "side": "business",
+   "kind": "expense",
+   "line": "24a"
+  },
+  "biz:meals": {
+   "label": "Business meals",
+   "side": "business",
+   "kind": "expense",
+   "line": "24b"
+  },
+  "biz:contractors": {
+   "label": "Contract labor (second shooters)",
+   "side": "business",
+   "kind": "expense",
+   "line": "11"
+  },
+  "biz:insurance": {
+   "label": "Business insurance",
+   "side": "business",
+   "kind": "expense",
+   "line": "15"
+  },
+  "biz:fees": {
+   "label": "Bank & processing fees",
+   "side": "business",
+   "kind": "expense",
+   "line": "10"
+  },
+  "biz:office": {
+   "label": "Office & supplies",
+   "side": "business",
+   "kind": "expense",
+   "line": "18"
+  },
+  "biz:phone": {
+   "label": "Phone & internet",
+   "side": "business",
+   "kind": "expense",
+   "line": "25"
+  },
+  "biz:education": {
+   "label": "Education & courses",
+   "side": "business",
+   "kind": "expense",
+   "line": "27a"
+  },
+  "biz:legal": {
+   "label": "Legal & professional",
+   "side": "business",
+   "kind": "expense",
+   "line": "17"
+  },
+  "biz:other": {
+   "label": "Other business expense",
+   "side": "business",
+   "kind": "expense",
+   "line": "27a"
+  },
+  "tax:federal": {
+   "label": "Federal tax payment",
+   "side": "business",
+   "kind": "tax",
+   "line": ""
+  },
+  "tax:california": {
+   "label": "California tax payment",
+   "side": "business",
+   "kind": "tax",
+   "line": ""
+  },
+  "personal:rent": {
+   "label": "Rent & housing",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:groceries": {
+   "label": "Groceries",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:dining": {
+   "label": "Dining out",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:utilities": {
+   "label": "Utilities",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:car": {
+   "label": "Car & fuel",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:health": {
+   "label": "Health",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:shopping": {
+   "label": "Shopping",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:subscriptions": {
+   "label": "Personal subscriptions",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:travel": {
+   "label": "Personal travel",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "personal:other": {
+   "label": "Other personal",
+   "side": "personal",
+   "kind": "expense",
+   "line": ""
+  },
+  "transfer": {
+   "label": "Transfer between own accounts",
+   "side": "none",
+   "kind": "transfer",
+   "line": ""
+  },
+  "ignore": {
+   "label": "Ignore",
+   "side": "none",
+   "kind": "ignore",
+   "line": ""
+  }
  },
  "aliases": {
   "_doc": "Words the owner may type on the unknowns card -> bucket key. Any bucket key or label also works, as does a unique prefix of either.",
-  "software": "biz:software", "sub": "biz:software", "subscription": "biz:software",
-  "music": "biz:music", "gear": "biz:gear", "equipment": "biz:gear", "ads": "biz:ads", "advertising": "biz:ads",
-  "travel": "biz:travel", "meal": "biz:meals", "meals": "biz:meals", "contractor": "biz:contractors", "second shooter": "biz:contractors",
-  "insurance": "biz:insurance", "fee": "biz:fees", "fees": "biz:fees", "office": "biz:office", "phone": "biz:phone", "internet": "biz:phone",
-  "education": "biz:education", "course": "biz:education", "legal": "biz:legal", "business": "biz:other", "biz": "biz:other",
-  "income": "income:other", "honeybook": "income:honeybook", "client": "income:honeybook",
-  "irs": "tax:federal", "federal": "tax:federal", "ftb": "tax:california", "california": "tax:california", "ca": "tax:california",
-  "rent": "personal:rent", "groceries": "personal:groceries", "grocery": "personal:groceries", "dining": "personal:dining", "restaurant": "personal:dining",
-  "utilities": "personal:utilities", "car": "personal:car", "gas": "personal:car", "fuel": "personal:car", "health": "personal:health",
-  "shopping": "personal:shopping", "personal": "personal:other", "transfer": "transfer", "skip": "ignore", "ignore": "ignore"
+  "software": "biz:software",
+  "sub": "biz:software",
+  "subscription": "biz:software",
+  "music": "biz:music",
+  "gear": "biz:gear",
+  "equipment": "biz:gear",
+  "ads": "biz:ads",
+  "advertising": "biz:ads",
+  "travel": "biz:travel",
+  "meal": "biz:meals",
+  "meals": "biz:meals",
+  "contractor": "biz:contractors",
+  "second shooter": "biz:contractors",
+  "insurance": "biz:insurance",
+  "fee": "biz:fees",
+  "fees": "biz:fees",
+  "office": "biz:office",
+  "phone": "biz:phone",
+  "internet": "biz:phone",
+  "education": "biz:education",
+  "course": "biz:education",
+  "legal": "biz:legal",
+  "business": "biz:other",
+  "biz": "biz:other",
+  "income": "income:other",
+  "client": "income:crm",
+  "crm": "income:crm",
+  "irs": "tax:federal",
+  "federal": "tax:federal",
+  "ftb": "tax:california",
+  "california": "tax:california",
+  "ca": "tax:california",
+  "rent": "personal:rent",
+  "groceries": "personal:groceries",
+  "grocery": "personal:groceries",
+  "dining": "personal:dining",
+  "restaurant": "personal:dining",
+  "utilities": "personal:utilities",
+  "car": "personal:car",
+  "gas": "personal:car",
+  "fuel": "personal:car",
+  "health": "personal:health",
+  "shopping": "personal:shopping",
+  "personal": "personal:other",
+  "transfer": "transfer",
+  "skip": "ignore",
+  "ignore": "ignore"
  },
  "rules": [
-  {"id": "r-honeybook", "match": "honeybook|hb payments|honey book", "sign": "in", "bucket": "income:honeybook"},
-  {"id": "r-stripe-in", "match": "stripe|square inc|sq \\*.*deposit", "sign": "in", "bucket": "income:other"},
-  {"id": "r-irs", "match": "irs |usataxpymt|us treasury|direct pay", "sign": "out", "bucket": "tax:federal"},
-  {"id": "r-ftb", "match": "franchise tax|ftb |cal ftb", "sign": "out", "bucket": "tax:california"},
-  {"id": "r-music", "match": "musicbed|artlist|epidemic sound|soundstripe", "sign": "out", "bucket": "biz:music"},
-  {"id": "r-software", "match": "adobe|blackmagic|frame\\.io|dropbox|google storage|google one|workspace|honeybook|typeform|vercel|github|anthropic|openai|notion|canva|tailscale|backblaze|lumafusion|topaz|davinci", "sign": "out", "bucket": "biz:software"},
-  {"id": "r-ads", "match": "google ads|googleads|google \\*ads|meta ads|facebk ads|the knot|weddingwire|zola", "sign": "out", "bucket": "biz:ads"},
-  {"id": "r-gear", "match": "b&h|bhphoto|adorama|lensrentals|borrowlenses|sony|smallrig|dji|rode |sennheiser|tascam|zoom corp|sandisk|samsung ssd", "sign": "out", "bucket": "biz:gear"},
-  {"id": "r-fees", "match": "wire fee|monthly fee|service charge|processing fee", "sign": "out", "bucket": "biz:fees"},
-  {"id": "r-phone", "match": "verizon|t-mobile|at&t|spectrum|cox comm|starlink", "sign": "out", "bucket": "biz:phone"},
-  {"id": "r-fuel", "match": "chevron|shell oil|arco|76 |costco gas|exxon|mobil", "sign": "out", "bucket": "personal:car"},
-  {"id": "r-groceries", "match": "trader joe|whole foods|vons|ralphs|costco whse|sprouts|albertsons|safeway", "sign": "out", "bucket": "personal:groceries"},
-  {"id": "r-dining", "match": "doordash|uber eats|grubhub|starbucks|chipotle|in-n-out|taco bell", "sign": "out", "bucket": "personal:dining"},
-  {"id": "r-personal-subs", "match": "netflix|spotify|hulu|disney plus|apple\\.com/bill|youtube premium|amazon prime", "sign": "out", "bucket": "personal:subscriptions"},
-  {"id": "r-utilities", "match": "so cal edison|sce |socalgas|edison|water dist|pg&e", "sign": "out", "bucket": "personal:utilities"},
-  {"id": "r-health", "match": "pharmacy|cvs|walgreens|kaiser|dignity health|medical", "sign": "out", "bucket": "personal:health"},
-  {"id": "r-transfer", "match": "^transfer|xfer to|xfer from|online transfer|relay transfer|bucket transfer", "bucket": "transfer"}
+  {
+   "id": "r-stripe-in",
+   "match": "stripe|square inc|sq \\*.*deposit",
+   "sign": "in",
+   "bucket": "income:other"
+  },
+  {
+   "id": "r-irs",
+   "match": "irs |usataxpymt|us treasury|direct pay",
+   "sign": "out",
+   "bucket": "tax:federal"
+  },
+  {
+   "id": "r-ftb",
+   "match": "franchise tax|ftb |cal ftb",
+   "sign": "out",
+   "bucket": "tax:california"
+  },
+  {
+   "id": "r-music",
+   "match": "musicbed|artlist|epidemic sound|soundstripe",
+   "sign": "out",
+   "bucket": "biz:music"
+  },
+  {
+   "id": "r-software",
+   "match": "adobe|blackmagic|frame\\.io|dropbox|google storage|google one|workspace|typeform|vercel|github|anthropic|openai|notion|canva|tailscale|backblaze|lumafusion|topaz|davinci",
+   "sign": "out",
+   "bucket": "biz:software"
+  },
+  {
+   "id": "r-ads",
+   "match": "google ads|googleads|google \\*ads|meta ads|facebk ads|the knot|weddingwire|zola",
+   "sign": "out",
+   "bucket": "biz:ads"
+  },
+  {
+   "id": "r-gear",
+   "match": "b&h|bhphoto|adorama|lensrentals|borrowlenses|sony|smallrig|dji|rode |sennheiser|tascam|zoom corp|sandisk|samsung ssd",
+   "sign": "out",
+   "bucket": "biz:gear"
+  },
+  {
+   "id": "r-fees",
+   "match": "wire fee|monthly fee|service charge|processing fee",
+   "sign": "out",
+   "bucket": "biz:fees"
+  },
+  {
+   "id": "r-phone",
+   "match": "verizon|t-mobile|at&t|spectrum|cox comm|starlink",
+   "sign": "out",
+   "bucket": "biz:phone"
+  },
+  {
+   "id": "r-fuel",
+   "match": "chevron|shell oil|arco|76 |costco gas|exxon|mobil",
+   "sign": "out",
+   "bucket": "personal:car"
+  },
+  {
+   "id": "r-groceries",
+   "match": "trader joe|whole foods|vons|ralphs|costco whse|sprouts|albertsons|safeway",
+   "sign": "out",
+   "bucket": "personal:groceries"
+  },
+  {
+   "id": "r-dining",
+   "match": "doordash|uber eats|grubhub|starbucks|chipotle|in-n-out|taco bell",
+   "sign": "out",
+   "bucket": "personal:dining"
+  },
+  {
+   "id": "r-personal-subs",
+   "match": "netflix|spotify|hulu|disney plus|apple\\.com/bill|youtube premium|amazon prime",
+   "sign": "out",
+   "bucket": "personal:subscriptions"
+  },
+  {
+   "id": "r-utilities",
+   "match": "so cal edison|sce |socalgas|edison|water dist|pg&e",
+   "sign": "out",
+   "bucket": "personal:utilities"
+  },
+  {
+   "id": "r-health",
+   "match": "pharmacy|cvs|walgreens|kaiser|dignity health|medical",
+   "sign": "out",
+   "bucket": "personal:health"
+  },
+  {
+   "id": "r-transfer",
+   "match": "^transfer|xfer to|xfer from|online transfer|relay transfer|bucket transfer",
+   "bucket": "transfer"
+  }
  ],
  "learned": []
 }

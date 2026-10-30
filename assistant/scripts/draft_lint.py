@@ -33,7 +33,12 @@ _GREETING_RE = re.compile(r"^\s*(?:good\s+(?:morning|afternoon|evening)|morning|
 
 
 def load_rules(path: Path = RULES_FILE) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    """The organization's rules; the engine's template when it has none yet; no rules at all before that (a draft is
+    never blocked because a rules file is missing)."""
+    for p in (path, HERE.parent / "templates" / "data" / path.name):
+        if p.is_file():
+            return json.loads(p.read_text(encoding="utf-8"))
+    return {"rules": [], "limits": {}}
 
 
 def audience_for(lane: str, kind: str = "", thread_class: str = "") -> str:

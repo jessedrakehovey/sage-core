@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <URI>\the organization</URI>
+    <URI>\example-org Deadman (assistant)</URI>
     <Description>The thing that watches the watchers (assistant/scripts/deadman.py, stdlib only): every 30 min checks the Day Spine, the chat bridge, the comms probe and disk, and tells the owner through chat, then email, then a banner when one has stopped. WP2 2026-10-24.</Description>
   </RegistrationInfo>
   <Triggers>

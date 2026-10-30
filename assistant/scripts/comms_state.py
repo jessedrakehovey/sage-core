@@ -36,6 +36,8 @@ sys.path.insert(0, str(HERE))
 from alib import DATA, VAULT, load_json, now_iso, save_json  # noqa: E402
 
 LAW = Path(__file__).resolve().parents[1] / "data" / "comms_law.json"
+if not LAW.is_file():                                      # the bare engine: the scrubbed template
+    LAW = LAW.parents[1] / "templates" / "data" / LAW.name
 STATE = DATA / "comms_state.json"
 LATCH = DATA / "comms_breach_latch.json"
 NOISE = re.compile(r"\b(verification code|your code is|one-time|otp|unsubscribe|reply stop|flash sale|% off|promo|"
@@ -69,7 +71,7 @@ def _digits(h: str) -> str:
 
 
 def _leads() -> dict:
-    """digits / email -> lead name, from the quiz lead files and HoneyBook snapshot."""
+    """digits / email -> lead name, from the quiz lead files and the CRM snapshot."""
     out = {}
     try:
         for f in (DATA / "leads").glob("*.json"):
@@ -136,7 +138,7 @@ def _open_cards_by_handle() -> dict:
 
 def _owner_replies() -> list:
     """Active memory facts in which an OWNER told Sage they replied themselves (from the phone, in
-    HoneyBook: out of band, so no log here ever sees it). example 2026-10-22: the owner said on 10/21 he had
+    the CRM: out of band, so no log here ever sees it). Sloane 2026-10-22: the owner said on 10/21 he had
     replied, yet her 10/9 text kept raising reply cards. Dream-written facts do not count."""
     try:
         users = (load_json(VAULT / "assistant" / "agent" / "people.json", {}) or {}).get("users") or {}
@@ -156,7 +158,7 @@ def _owner_replies() -> list:
 def _replied_by_owner(th: dict, replies: list) -> str:
     """The memory id of an owner's 'I replied' about this contact made AFTER their last inbound, else ''.
     Matched by the contact's number / address anywhere in it, or a word of their name in its SUBJECT
-    (a fact about example that mentions 'the example handoff' is not about example)."""
+    (a fact about Corwin that mentions 'the Sloane handoff' is not about Sloane)."""
     li = th.get("last_inbound")
     if not li or not replies:
         return ""

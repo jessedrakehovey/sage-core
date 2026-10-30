@@ -54,8 +54,8 @@ check("one button per option, '(Recommended)' shown as the filled green button n
 params = {p["key"]: p["value"] for p in btns[0]["onClick"]["action"]["parameters"]}
 check("button carries qid/option/q only", params == {"qid": "q0123456789ab", "option": "Draft a text to them (Recommended)", "q": "0"}
       and btns[0]["onClick"]["action"]["function"] == "card_answer")
-Kingsmere = "\n".join(w["textParagraph"]["text"] for s in c["sections"] for w in s["widgets"] if "textParagraph" in w)
-check("html escaped, link kept, newline -> br", "&lt;script&gt;" in Kingsmere and '<a href="https://x.test/a">' in Kingsmere and "<br>" in Kingsmere)
+kingsmere = "\n".join(w["textParagraph"]["text"] for s in c["sections"] for w in s["widgets"] if "textParagraph" in w)
+check("html escaped, link kept, newline -> br", "&lt;script&gt;" in kingsmere and '<a href="https://x.test/a">' in kingsmere and "<br>" in kingsmere)
 check("header: plain title, lane in the subtitle (2026-10-08 redesign)", c["header"]["title"] == "Hot lead - what next?" and c["header"]["subtitle"].startswith("Wedding"))
 check("details section folded", any(s.get("collapsible") for s in c["sections"]))
 
@@ -65,14 +65,14 @@ c = body["cardsV2"][0]["card"]
 allb = [b for s in c["sections"] for w in s["widgets"] if "buttonList" in w for b in w["buttonList"]["buttons"]]
 check("answered card has only Undo", [b["text"] for b in allb] == ["Undo"] and allb[0]["onClick"]["action"]["function"] == "card_undo")
 txt = "\n".join(w["textParagraph"]["text"] for s in c["sections"] for w in s["widgets"] if "textParagraph" in w)
-check("answered card names the chooser and the real send timing (never a flat 'about 35 s')", "owner1" in txt and ("Goes to your phone" in txt or "Runs at the next pass" in txt or "Held until" in txt) and "35 s" not in txt)
+check("answered card names the chooser and the real send timing (never a flat 'about 35 s')", "owner1" in txt.lower() and ("Goes to your phone" in txt or "Runs at the next pass" in txt or "Held until" in txt) and "35 s" not in txt)
 tcard = {"id": "q0123456789ab", "questions": [dict(Q, exec={"kind": "imessage_send", "payload": {}, "approve_label": "Send"})]}
 body = chat_push.card_body(tcard, "answered", {"option": "Send", "by": "gchat:owner1", "ticket": "tk-2"})
 allb = [b for s in body["cardsV2"][0]["card"]["sections"] for w in s["widgets"] if "buttonList" in w for b in w["buttonList"]["buttons"]]
 check("approved text card offers Send now from phone (https link)", [b["text"] for b in allb] == ["Undo", "Send now from phone"]
       and allb[1]["onClick"]["openLink"]["url"].startswith("https://") and allb[1]["onClick"]["openLink"]["url"].endswith("/phone/run"))
-# 3b. the mark on a tapped card means it really happened (example, 2026-10-24): queued ⏳, refused ❌, landed ✅
-hb = {"id": "q0123456789ab", "questions": [dict(Q, exec={"kind": "hb_message", "payload": {}, "approve_label": "Send"})]}
+# 3b. the mark on a tapped card means it really happened (Delia, 2026-10-24): queued ⏳, refused ❌, landed ✅
+send_card = {"id": "q0123456789ab", "questions": [dict(Q, exec={"kind": "email_send", "payload": {}, "approve_label": "Send"})]}
 
 
 def _first(b):
@@ -80,14 +80,14 @@ def _first(b):
     return [w["textParagraph"]["text"] for w in b["cardsV2"][0]["card"]["sections"][-1]["widgets"] if "textParagraph" in w][0]
 
 
-t_q = _first(chat_push.card_body(hb, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3"}))
-t_m = _first(chat_push.card_body(hb, "answered", {"option": "Send", "by": "owner1", "mint_error": "unable to process your request"}))
-t_f = _first(chat_push.card_body(hb, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3", "failed": True,
-                                                  "result": "Not done: HB_FAILED=REFUSED the member did not approve this change"}))
-t_ok = _first(chat_push.card_body(hb, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3",
-                                                   "result": "Sent in HoneyBook at 10:40 AM (HoneyBook message 1234abcd)."}))
-t_w = _first(chat_push.card_body(hb, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3",
-                                                  "result": "HoneyBook took the move but the read-back shows another stage; check the pipeline."}))
+t_q = _first(chat_push.card_body(send_card, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3"}))
+t_m = _first(chat_push.card_body(send_card, "answered", {"option": "Send", "by": "owner1", "mint_error": "unable to process your request"}))
+t_f = _first(chat_push.card_body(send_card, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3", "failed": True,
+                                                  "result": "Not done: SEND_FAILED=REFUSED the member did not approve this change"}))
+t_ok = _first(chat_push.card_body(send_card, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3",
+                                                   "result": "Sent at 10:40 AM (message 1234abcd)."}))
+t_w = _first(chat_push.card_body(send_card, "answered", {"option": "Send", "by": "owner1", "ticket": "tk-3",
+                                                  "result": "The CRM took the move but the read-back shows another stage; check the pipeline."}))
 t_plain = _first(chat_push.card_body(card, "answered", {"option": "I'll reach out myself", "by": "owner1"}))
 check("a queued send shows ⏳, never a green check, until its result is in", t_q.startswith("⏳") and "✅" not in t_q, t_q)
 check("a refused send shows ❌ and says it was not sent", t_m.startswith("❌") and "Not sent" in t_m and "✅" not in t_m, t_m)
@@ -95,7 +95,7 @@ check("a failed send shows ❌ with what went wrong", t_f.startswith("❌") and 
 check("a confirmed send shows ✅ with its evidence line", t_ok.startswith("✅") and "1234abcd" in t_ok and "Runs at the next pass" not in t_ok, t_ok)
 check("a send whose read-back disagrees shows ⚠️, not ✅", t_w.startswith("⚠️"), t_w)
 check("a plain choice (nothing to send) keeps its ✅", t_plain.startswith("✅"), t_plain)
-st = json.dumps(chat_push.stack_body([(hb, "answered", {"option": "Send", "ticket": "tk-3"}), (card, "open", None)]), ensure_ascii=False)
+st = json.dumps(chat_push.stack_body([(send_card, "answered", {"option": "Send", "ticket": "tk-3"}), (card, "open", None)]), ensure_ascii=False)
 check("a stack shows the queued send as ⏳ too", "⏳ Hot lead" in st and "✅ Hot lead" not in st)
 
 body = chat_push.card_body(card, "expired")
@@ -104,8 +104,8 @@ check("expired card has no buttons", not any("buttonList" in w for s in body["ca
 # 4. long text is capped, never dropped
 big = dict(Q, question="x" * 9000, details="y" * 9000)
 body = chat_push.card_body({"id": "q0123456789ab", "questions": [big]}, "open")
-Kingsmere = [w["textParagraph"]["text"] for s in body["cardsV2"][0]["card"]["sections"] for w in s["widgets"] if "textParagraph" in w]
-check("question/details capped", len(Kingsmere[0]) <= chat_push.QUESTION_MAX + 8 and len(Kingsmere[1]) <= chat_push.DETAILS_MAX + 8)
+kingsmere = [w["textParagraph"]["text"] for s in body["cardsV2"][0]["card"]["sections"] for w in s["widgets"] if "textParagraph" in w]
+check("question/details capped", len(kingsmere[0]) <= chat_push.QUESTION_MAX + 8 and len(kingsmere[1]) <= chat_push.DETAILS_MAX + 8)
 
 # 5. parse_click: add-on shape and classic shape
 addon = {"commonEventObject": {"invokedFunction": "card_answer", "parameters": {"qid": "q0123456789ab", "option": "Skip", "q": "0"}},
@@ -169,11 +169,11 @@ check("no system note reaches Chat by default (owner1 2026-10-08: cards and Sage
 
 # 8. the HTTP endpoint (gchat_events): token gate, taps answered synchronously, messages queued
 import gchat_events  # noqa: E402
-AUD = ["555-032-5432", "https://x.test/gchat/events"]
-ok_claims = {"iss": gchat_events.CHAT_ISSUER, "aud": "555-032-5432"}
+AUD = ["5550325432", "https://x.test/gchat/events"]
+ok_claims = {"iss": gchat_events.CHAT_ISSUER, "aud": "5550325432"}
 check("no bearer -> refused", gchat_events.verify_bearer("", AUD, _verify=lambda t: ok_claims) is None)
 check("good token -> claims", gchat_events.verify_bearer("Bearer abc", AUD, _verify=lambda t: ok_claims) is not None)
-check("wrong issuer -> refused", gchat_events.verify_bearer("Bearer abc", AUD, _verify=lambda t: {"iss": "x", "aud": "555-032-5432"}) is None)
+check("wrong issuer -> refused", gchat_events.verify_bearer("Bearer abc", AUD, _verify=lambda t: {"iss": "x", "aud": "5550325432"}) is None)
 check("wrong audience -> refused", gchat_events.verify_bearer("Bearer abc", AUD, _verify=lambda t: {"iss": gchat_events.CHAT_ISSUER, "aud": "999"}) is None)
 def _boom(t):
     raise ValueError("bad")
@@ -266,11 +266,11 @@ check("the Chat message is rewritten with the edited text", edits and edits[-1][
 ev_empty = json.loads(json.dumps(ev_sub)); ev_empty["commonEventObject"]["formInputs"]["body"]["stringInputs"]["value"] = ["   "]
 check("an empty edit sends nothing", "Nothing sent" in json.dumps(gchat_events.handle(ev_empty)))
 
-# 10. example, 2026-10-18: a draft with [the owner: ...] blanks never goes out as written
+# 10. Marisa, 2026-10-18: a draft with [the owner: ...] blanks never goes out as written
 import exec_store as es  # noqa: E402
 BL = "Hey! On the gift exchange: [owner1: yes / no]. For the holidays, [owner1: our plans]."
-QB = {"header": "Text reply: example", "lane": "personal",
-      "question": "example asked about the gift exchange.\n[TEXT PREVIEW] To +18055550111:\n" + BL,
+QB = {"header": "Text reply: Marisa", "lane": "personal",
+      "question": "Marisa asked about the gift exchange.\n[TEXT PREVIEW] To +18055550111:\n" + BL,
       "options": [{"label": "Edit & send (Recommended)"}, {"label": "Skip"}],
       "exec": {"kind": "imessage_send", "payload": {"account": "owner1-iphone", "to": "+18055550111", "body": BL},
                "approve_label": "Edit & send (Recommended)"}}
@@ -347,7 +347,7 @@ for t in [t for t in threading.enumerate() if t.name.startswith("tap-")]:
 check("...and the work finishes behind it, silently when it worked",
       cards._read(cards.LIVE / f"{qs}.json")["status"] == "answered" and not said and not repushed, (cards._read(cards.LIVE / f"{qs}.json")["status"], said, repushed))
 
-# the owner 2026-10-25 (example's resend, error at 5:36, sent at 5:40): "I don't want it to say, unable to process
+# the owner 2026-10-25 (Corwin's resend, error at 5:36, sent at 5:40): "I don't want it to say, unable to process
 # request and then work a little bit later it should not say the error". The relay delivered that one tap
 # twice; the second got {} back, which Chat shows as the error. A slow tap shows ⏳ working on it, a duplicate
 # delivery shows the same, and the card flips to the real outcome when the result lands.
@@ -437,10 +437,10 @@ chat_push.enabled = lambda: True
 chat_push._edit_all = lambda c, b, what: redone.append((what, _first(b))) or 1
 chat_push.card_thread = lambda c: ""
 cards._answers_index = lambda: {"q0123456789ab": {"qid": "q0123456789ab", "option": "Send", "by": "gchat:owner1", "ticket": "tk-3"}}
-real_push_result(hb, "Sent in HoneyBook at 10:40 AM (HoneyBook message 1234abcd).")
-real_push_result(hb, "Not done: HB_FAILED=REFUSED the member did not approve this change. The card is back on your phone.")
+real_push_result(send_card, "Sent at 10:40 AM (message 1234abcd).")
+real_push_result(send_card, "Not done: SEND_FAILED=REFUSED the member did not approve this change. The card is back on your phone.")
 cards._answers_index = lambda: {"q0123456789ab": {"qid": "q0123456789ab", "undone": True}}
-real_push_result(hb, "Sent in HoneyBook at 10:41 AM.")
+real_push_result(send_card, "Sent at 10:41 AM.")
 chat_push.enabled, chat_push._edit_all, chat_push.card_thread, cards._answers_index = _saved
 check("push_result re-marks the card: ✅ on evidence, ❌ on Not done, untouched once undone",
       [w for w, _ in redone] == ["mark_result", "mark_result"] and redone[0][1].startswith("✅") and redone[1][1].startswith("❌"), redone)
@@ -475,11 +475,11 @@ chat_push.enabled, chat_push._g, chat_push.targets = _sv
 check("push_card posts the reply card once, into the live thread", posted == [("spaces/HIRE", "spaces/HIRE/threads/T1")]
       and rc.get("chat_thread") == "spaces/HIRE/threads/T1", posted)
 
-# a card handed on to the operator after a draft-lint refusal (2026-10-26, example): the operator posts it with
+# a card handed on to the operator after a draft-lint refusal (2026-10-26, Odette): the operator posts it with
 # --thread from the team-space ask; it lands in THAT thread of the team space, not the home space
 posted.clear()
 chat_push.enabled, chat_push._g, chat_push.targets = (lambda: True), (lambda: _G()), (lambda lane, what: [("home", "spaces/HOME")])
-tq = {"header": "Email to example", "lane": "wedding", "question": "owner1 asked for the example follow-up.",
+tq = {"header": "Email to Odette", "lane": "wedding", "question": "owner1 asked for the Odette follow-up.",
       "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}]}
 REAL_PUSH_CARD({"id": "qteam01", "chat_thread": "spaces/TEAM/threads/T9", "questions": [tq]})
 check("a card asked for in a team-space thread posts under that ask, in the team space",

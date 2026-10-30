@@ -6,10 +6,10 @@ note `status: draft` (an owner verifies it), runs the wiki linter and makes a sc
 An existing note is never rewritten: the body is appended as a dated section between
 markers, so an undo can take exactly that section out again.
 
-Refused: Packages (owned by the pricing engine), a NEW Couples page (the HoneyBook sync creates
+Refused: Packages (owned by the pricing engine), a NEW Couples page (the CRM sync creates
 those), anything outside Wiki/, and any body that carries a secret (the schema's money rule).
 Couples notes (2026-10-18): a body for an existing couple goes INSIDE the page's sync-safe
-"## Story and notes" region (sage:notes markers), which hb_couples_sync.py never touches; type
+"## Story and notes" region (sage:notes markers), which the CRM sync never touches; type
 "couple" (or a title naming the couple) routes there. couple_notes() is the one-call form.
 """
 from __future__ import annotations
@@ -26,6 +26,8 @@ import core  # noqa: E402
 
 WIKI = core.VAULT / "Wiki"
 SCHEMA = core.VAULT / "Schema" / "schema.md"
+if not SCHEMA.is_file():                                   # the bare engine: only the generic contract
+    SCHEMA = core.VAULT / "assistant" / "templates" / "Schema" / "schema.md"
 CONFIG = core.VAULT / "assistant" / "config.json"
 # this organization's routing, used when its Schema/schema.md carries no ```routing block (the generic schema the engine
 # ships has one, so a new organization's notes land in the folders new_org.py made; 2026-10-29)
@@ -131,8 +133,8 @@ COUPLES = WIKI / "Couples"
 
 
 def find_couple(name: str):
-    """The Couples note for a couple named loosely ("example", "example and example", "2026-11-07 example",
-    "example example's wedding"): the note whose file stem (date + surname) or H1 shares a word with the
+    """The Couples note for a couple named loosely ("Ashcombe", "Teo and Wren", "2026-11-07 Ashcombe",
+    "Teo Ashcombe's wedding"): the note whose file stem (date + surname) or H1 shares a word with the
     name, newest wedding first; None when nothing matches or two different couples do."""
     words = lambda s: set(re.findall(r"[a-z]{3,}", re.sub(r"'s\b", "", str(s or "").lower())))
     toks = words(name) - {"and", "the", "wedding", "couple", "couples", "project", "notes", "note", "story", "with", "for", "their", "file", "page"}
@@ -150,7 +152,7 @@ def find_couple(name: str):
             hits.append(p)
     if len(hits) == 1:
         return hits[0]
-    if len(hits) > 1:                                   # "example" plus the date wins over "example" alone
+    if len(hits) > 1:                                   # "Ashcombe" plus the date wins over "Ashcombe" alone
         exact = [p for p in hits if re.sub(r"\s+", " ", str(name or "")).strip().lower() == p.stem.lower()]
         return exact[0] if len(exact) == 1 else None
     return None
@@ -159,7 +161,7 @@ def find_couple(name: str):
 def insert_couple_notes(text: str, body: str, marker: str, name: str, today: str) -> str:
     """Put a dated section INSIDE the couple note's sync-safe region (## Story and notes between
     NOTES_BEGIN/NOTES_END). The region is created on first use, before '## Open items' when that
-    heading exists, else at the end. hb_couples_sync.py rewrites only its own hb:begin/end block, so
+    heading exists, else at the end. The CRM sync script rewrites only its own sync begin/end block, so
     this region survives every nightly sync; the dated section's own marker keeps it undoable."""
     section = f"\n<!-- {marker}:begin -->\n### {today}, added by {name}\n\n{body.strip()}\n<!-- {marker}:end -->\n"
     if NOTES_BEGIN in text and NOTES_END in text:
@@ -213,7 +215,7 @@ def write(note: dict, by: str = "", commit: bool = True, ask: str = "") -> dict:
         return {"status": "refused", "reason": f"type {typ!r} is not in the schema yet (recorded as a gap); nearest allowed type: {near}"
                 + f" (allowed: {', '.join(allowed_types)})", "suggest": near, "gap": typ}
     if typ == "couple" and not (find_couple(title) or next((p for p in COUPLES.glob(f"{title}.md")), None)):
-        return {"status": "refused", "reason": f"no Couples note matches {title!r}: a couple's page is created by the HoneyBook sync, notes are added to it"}
+        return {"status": "refused", "reason": f"no Couples note matches {title!r}: a couple's page is created by the CRM sync, notes are added to it"}
     if _SECRET.search(body):
         return {"status": "refused", "reason": "the note looks like it holds a secret or an account number"}
     folder = folder_for(typ, lane)
@@ -234,8 +236,8 @@ def write(note: dict, by: str = "", commit: bool = True, ask: str = "") -> dict:
         old = existing.read_text(encoding="utf-8")
         new = re.sub(r"^updated: .*$", f"updated: {today}", old, count=1, flags=re.M)
         if existing.parent.name == "Couples":
-            # the HoneyBook sync rewrites only its hb:begin/end block, so a story-and-notes region of our
-            # own is safe there (2026-10-18: example & example's meeting recording was refused as "maintained
+            # the CRM sync rewrites only its hb:begin/end block, so a story-and-notes region of our
+            # own is safe there (2026-10-18: Teo & Wren's meeting recording was refused as "maintained
             # by their own sync" and Sage told the owner it had been filed; see insert_couple_notes)
             new = insert_couple_notes(new, body, marker, name, today)
         else:

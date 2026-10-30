@@ -71,7 +71,7 @@ check("rule: applied with a ledger row", r["status"] == "applied" and r.get("cha
 check("rule: near-duplicate folds", core.rule_add("keep replies to three sentences unless asked for more detail", by="owner1")["status"] == "folded")
 for bad in ("Email the couple directly when their film is ready",
             "Reply to leads without asking first",
-            "Auto-approve HoneyBook notes",
+            "Auto-approve the CRM notes",
             "Tell couples the delivery date is four weeks",
             "Pay the electric bill from the joint account each month",
             "Delete old drafts after a week"):
@@ -121,7 +121,7 @@ check("routine: prompt run reaches both, re-arms", n == 1 and {k for k, _ in sen
 lines = actions.apply({"learn": [{"rule": "Use first names only in replies to me", "why": "less formal"}],
                        "remember": [{"kind": "household", "subject": "trash", "fact": "Trash day is Thursday"}],
                        "schedule": {"title": "Trash out", "when": {"weekly": "wed 19:00"}, "to": "both", "say": "Trash goes out tonight"},
-                       "note": {"title": "Dishwasher", "type": "asset", "lane": "home", "tags": ["appliance", "nonsense-tag"],
+                       "note": {"title": "Dishwasher", "type": "asset", "lane": "home", "tags": ["maintenance", "nonsense-tag"],
                                 "body": "Bosch 500 series, bought 2024. Filter cleaned monthly."},
                        "task": {"lane": "wedding", "text": "Draft a thank-you email to the Wrights"}}, owner6,
                       ctx={"convo": "spaces/S1", "thread": "spaces/S1/threads/ASK1"})
@@ -133,7 +133,7 @@ check("actions: successes add no line under the reply (owner1 2026-10-07: no rob
       not any(w in joined for w in ("Learned", "Remembered", "Scheduled", "Wiki note written", "Handed to the operator", "/undo")))
 note_path = core.VAULT / "Wiki" / "Home" / "Dishwasher.md"
 txt = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
-check("note: schema front matter, draft, bad tag dropped", "type: asset" in txt and "status: draft" in txt and "nonsense-tag" not in txt and "tags: [appliance]" in txt)
+check("note: schema front matter, draft, bad tag dropped", "type: asset" in txt and "status: draft" in txt and "nonsense-tag" not in txt and "tags: [maintenance]" in txt)
 actions.apply({"note": {"title": "Dishwasher", "type": "asset", "lane": "home", "body": "Warranty runs to 2027, serial on the door."}}, owner1)
 txt2 = note_path.read_text(encoding="utf-8")
 check("note: second write appends, never rewrites", "Bosch 500" in txt2 and "Warranty runs to 2027" in txt2 and txt2.count("# Dishwasher") == 1)
@@ -264,6 +264,13 @@ check("gchat: off until configured", not gchat.configured() or True)
 # ---- google: read-only MCP server + calendar add (stand-in API)
 import gmcp, google_api  # noqa: E402,E401
 google_api.HOME = TMP / "google"
+if not google_api.CONFIG.is_file():                               # the bare engine ships no google.json: the accounts this test names
+    google_api.CONFIG = TMP / "google.json"
+    google_api.CONFIG.write_text(json.dumps({"accounts": {
+        "owner1-personal": {"address": "owner4@example.invalid", "person": "owner1", "calendars": ["primary"]},
+        "owner1-films": {"address": "owner3@example.invalid", "person": "owner1", "calendars": ["primary"],
+                        "extra_scopes": ["https://www.googleapis.com/auth/spreadsheets"]},
+        "owner6": {"address": "owner6@example.invalid", "person": "owner6", "calendars": ["primary"]}}}), encoding="utf-8")
 google_api.HOME.mkdir()
 init = gmcp.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}})
 tl = gmcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
@@ -277,7 +284,7 @@ r = gmcp.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"
 check("mcp: unknown account is an error", r["result"].get("isError"))
 check("mcp: notifications get no reply", gmcp.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None)
 check("google: no send-capable scope on the tokens", not any(s.endswith(x) for s in google_api.SCOPES for x in ("gmail.send", "gmail.compose", "gmail.modify", "mail.google.com/")))
-check("google: no property address configured", not any("example" in a["address"] for a in google_api.accounts().values()))
+check("google: no property address configured", not any("other-business.invalid" in a["address"] for a in google_api.accounts().values()))
 check("actions: event without a connected calendar is refused honestly",
       "not connected" in actions.apply({"event": {"title": "Dinner", "start": "2026-10-12 18:30"}}, owner6)[0])
 (google_api.HOME / "owner6.json").write_text("{}", encoding="utf-8")
@@ -449,7 +456,7 @@ for _t in _tix()[-2:]:                                # these test tickets are d
 import commitments as _cm
 _d = _cm._load(); [it.update(status="kept", closed="2026-01-01 00:00") for it in _d["items"] if it.get("status") == "open"]; _cm._save(_d)
 check("message ask detector: asks yes, questions no",
-      claims.asked_for_message("Reply in HoneyBook to example") and claims.asked_for_message("so re-draft the text")
+      claims.asked_for_message("Reply in the CRM to Delia") and claims.asked_for_message("so re-draft the text")
       and not claims.asked_for_message("Did you text Jon?") and not claims.asked_for_message("Tell me about Korean grass"))
 
 check("chat markup: bold, headers, bullets, links", gchat.to_gchat("## Plan\n**Sat** is free\n- one\n- two\n[site](https://x.co/a)")
@@ -629,9 +636,9 @@ check("protected: a rule about build notes 'in the same reply ... tell him' is n
 check("protected: 'reply to the couple' still is", core.is_protected("reply to the couple"))
 
 # one copy of each Chat message: the HTTP relay re-delivers, and the same message can come by
-# Pub/Sub, HTTP and the space reader at once (2026-10-07: 'Fix HoneyBook connector' x3)
+# Pub/Sub, HTTP and the space reader at once (2026-10-07: 'Fix the CRM connector' x3)
 _m = {"email": "owner3@example.invalid", "chat_user": "", "name": "owner1", "space": "spaces/D", "dm": True,
-      "thread": "", "text": "Fix HoneyBook connector", "msg_name": "spaces/D/messages/M1", "attachments": []}
+      "thread": "", "text": "Fix the CRM connector", "msg_name": "spaces/D/messages/M1", "attachments": []}
 _n0 = len(core.rows(gchat.INBOX_HTTP))
 gchat.queue_inbound(_m); gchat.queue_inbound(dict(_m)); gchat.queue_inbound(dict(_m, msg_name="spaces/D/messages/M2"))
 check("gchat: a re-delivered HTTP event is queued once", len(core.rows(gchat.INBOX_HTTP)) == _n0 + 2)
@@ -915,7 +922,7 @@ core.save(builder.STATE, {"Wiki\\Personal\\Build request group.md": {"status": "
 check("commitments: a build already confirmed once is not confirmed a second time",
       commitments.check(_pp, now=_now) == [] and len(_posted) == _n and not [it for it in commitments.open_rows() if it["kind"] == "build"])
 # the builder's combined note already carried this build (2026-10-10 18:25 then 18:30): no second line
-_long = ("owner6's texts no longer make reply cards because owners and anyone saved in HoneyBook under the family label "
+_long = ("owner6's texts no longer make reply cards because owners and anyone saved in the CRM under the family label "
          "are now treated as household, so only real wedding leads, couples and vendors get cards from their texts")
 core.say("spaces/S1", "Sage", "I built a couple of things you asked for: something else; " + _long + ". It's live now.", channel="builder")
 commitments.register("build", "owner6 texts", "Wiki/Personal/Build request owner6.md", owner1, {"convo": "spaces/S1", "thread": ""})
@@ -961,14 +968,14 @@ _cards.sweep()
 _cards.UNDO_S = 30
 check("commitments: the yes tap on that card re-arms the build", core.load(builder.STATE, {})["Wiki/Operations/Build request q.md"]["status"] == "approved")
 actions.LAST_APPLIED.clear()
-actions.apply({"do": {"lane": "wedding", "text": "Re-authorise the HoneyBook connector in the browser"}}, owner1, ctx={"convo": "spaces/S1", "thread": ""})
+actions.apply({"do": {"lane": "wedding", "text": "Re-authorise the CRM connector in the browser"}}, owner1, ctx={"convo": "spaces/S1", "thread": ""})
 _dtid = actions.LAST_APPLIED[-1]["ref"]
-commitments.register("do", "Re-authorise the HoneyBook connector", _dtid, owner1, {"convo": "spaces/S1", "thread": ""}, now=_now)
-tickets._transition(_dtid, "staged", "doer", "blocked: HoneyBook is signed out", {"claimed", "new"})
+commitments.register("do", "Re-authorise the CRM connector", _dtid, owner1, {"convo": "spaces/S1", "thread": ""}, now=_now)
+tickets._transition(_dtid, "staged", "doer", "blocked: the CRM is signed out", {"claimed", "new"})
 _n = len(_posted)
 said = commitments.check(_pp, now=_now + timedelta(hours=2))
 check("commitments: a doer job that failed and already reported itself is not said a second time",
-      not [s for s in said if s["id"] and "HoneyBook" in s["text"]] and len(_posted) == _n
+      not [s for s in said if s["id"] and "the CRM" in s["text"]] and len(_posted) == _n
       and not [it for it in commitments.open_rows() if it["ref"] == _dtid])
 check("commitments: /promises renders", "Nothing outstanding" in commitments.render())
 check("commitments: closed rows feed the nightly review as outcomes", any(it["status"] == "failed" for it in commitments.recent(1, now=_now + timedelta(hours=2))))
@@ -985,14 +992,15 @@ check("skills: the same title appends a dated section and merges triggers", r2["
       and "lens rental" in skills.all_skills()[0]["meta"]["triggers"] and "## Learned" in skills.all_skills()[0]["body"])
 check("skills: a permission or a secret is refused", skills.write({"title": "Pay bills", "body": "You can pay the bill without a card when it is under 50 dollars, ok to send."})["status"] == "refused"
       and skills.write({"title": "Portal", "body": "Sign in with password: hunter2 and then open the statements page for the month."})["status"] == "refused")
-check("skills: matched by trigger, rendered for the context", skills.match("can you rent a lens for the example wedding")["slug"] == "rent-lenses-at-lensrentals"
+check("skills: matched by trigger, rendered for the context", skills.match("can you rent a lens for the Ashcombe wedding")["slug"] == "rent-lenses-at-lensrentals"
       and "Rent lenses at Lensrentals (do; triggers: lensrentals" in skills.render() and skills.match("what's for dinner") is None)
-_vc = skills._parse((ROOT / "agent" / "skills" / "prepping-owner1-for-a-lead-vision-call.md").read_text(encoding="utf-8"))
-_vc_sample = _vc["body"].split("Sample brief", 1)[-1].strip().splitlines()
-check("skills: the vision-call prep names the #1 priority, the likely worries, earlier contact, and ends on the next-step line (2026-10-25)",
-      "vision meeting" in _vc["meta"]["triggers"] and "#1 priority" in _vc["body"] and "who else decides or pays" in _vc["body"]
-      and "below the recommended tier" in _vc["body"] and "earlier calls, texts or emails" in _vc["body"] and "in the Meet a few minutes early" in _vc["body"]
-      and _vc_sample[-1] == "Before you hang up, set a day and time for the next step." and "**" not in _vc["body"])
+if (ROOT / "agent" / "skills" / "prepping-owner1-for-a-lead-vision-call.md").is_file():   # the organization's own skill
+    _vc = skills._parse((ROOT / "agent" / "skills" / "prepping-owner1-for-a-lead-vision-call.md").read_text(encoding="utf-8"))
+    _vc_sample = _vc["body"].split("Sample brief", 1)[-1].strip().splitlines()
+    check("skills: the vision-call prep names the #1 priority, the likely worries, earlier contact, and ends on the next-step line (2026-10-25)",
+          "vision meeting" in _vc["meta"]["triggers"] and "#1 priority" in _vc["body"] and "who else decides or pays" in _vc["body"]
+          and "below the recommended tier" in _vc["body"] and "earlier calls, texts or emails" in _vc["body"] and "in the Meet a few minutes early" in _vc["body"]
+          and _vc_sample[-1] == "Before you hang up, set a day and time for the next step." and "**" not in _vc["body"])
 actions.apply({"do": {"lane": "wedding", "text": "Rent a lens for Nov 7 from lensrentals, the 35mm"}}, owner1, ctx={"convo": "dm:owner1", "thread": ""})
 _do = [t for t in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values() if t["kind"] == "agent_run" and "35mm" in t["title"]]
 check("doer: wake refuses while the data store is a scratch dir (the 35mm fixture leak)",
@@ -1038,18 +1046,18 @@ _gcal = [{"title": "Vision call: Arden & Reese", "start": "2026-10-12T15:00:00-0
           "guests": ["owner4@example.invalid", "owner2@example.invalid"]},
          {"title": "Dentist", "start": "2026-10-12T15:00:00-07:00", "owner": "owner6"},
          {"title": "Vision call: later couple", "start": "2026-10-12T16:00:00-07:00", "owner": "owner1"}]
-_snap = {"contacts": [{"name": "staff1 example", "email": "owner2@example.invalid"}],
+_snap = {"contacts": [{"name": "staff1 Quillfeather", "email": "owner2@example.invalid"}],
          "meetings": [{"id": "hb1", "title": "Vision Meeting", "type": "video_call", "start": "2026-10-12T22:00:00Z",
                        "location": "", "clients": [{"name": "Reese"}], "hosts": ["owner1 example"]}]}
 _posts = []
 n1 = meeting_reminder.tick(lambda k, t: _posts.append((k, t)), now=_t0, google=_gcal, snap=_snap)
 n2 = meeting_reminder.tick(lambda k, t: _posts.append((k, t)), now=_t0 + timedelta(minutes=1), google=_gcal, snap=_snap)
-check("meeting reminder: one line for the call in both Google and HoneyBook, never twice", n1 == 1 and n2 == 0 and len(_posts) == 1)
+check("meeting reminder: one line for the call in both Google and the CRM, never twice", n1 == 1 and n2 == 0 and len(_posts) == 1)
 _k, _txt = _posts[0] if _posts else ("", "")
 print("     " + _txt)
 check("meeting reminder: to the host, with the time, the Meet link and who is expected",
       _k == "owner1" and _txt.startswith("owner1,") and "3:00 PM" in _txt and "in 8 min" in _txt
-      and "https://meet.google.com/abc-defg-hij" in _txt and "staff1 example" in _txt and "Reese" in _txt)
+      and "https://meet.google.com/abc-defg-hij" in _txt and "staff1 Quillfeather" in _txt and "Reese" in _txt)
 check("meeting reminder: an ordinary event or a call an hour out is not reminded",
       "Dentist" not in _txt and "later couple" not in _txt
       and meeting_reminder.tick(lambda *a: _posts.append(a), now=_t0 - timedelta(minutes=30), google=_gcal[2:], snap={}) == 0)
@@ -1064,13 +1072,13 @@ check("calendar read: the Meet link comes from hangoutLink or a link in the note
 import cards as _cards_mod, contacts as _contacts_mod, draft_lint as _dl, org as _org  # noqa: E402,E401
 _o = _org.load()
 _o["people"] = [{"name": "Quinn Heathcote", "role": "contract shooter", "about": ""},
-                {"name": "staff1 example", "role": "partner", "about": "owner2@example.invalid"},
-                {"name": "example example IV", "role": "contract editor", "about": ""}]
+                {"name": "staff1 Quillfeather", "role": "partner", "about": "owner2@example.invalid"},
+                {"name": "Corwin Castellan IV", "role": "contract editor", "about": ""}]
 _org.save(_o)
 (core.VAULT / "Wiki" / "People").mkdir(parents=True, exist_ok=True)
 (core.VAULT / "Wiki" / "People" / "Quinn Heathcote.md").write_text("# Quinn Heathcote\n\n- **Phone:** (805) 555-0142\n", encoding="utf-8")
 _real_lookup, _real_post = _contacts_mod.lookup, _cards_mod.post
-_contacts_mod.lookup = lambda h, db=None: {"name": "example example IV"} if "0199" in str(h) else None
+_contacts_mod.lookup = lambda h, db=None: {"name": "Corwin Castellan IV"} if "0199" in str(h) else None
 _posted = []
 _cards_mod.post = lambda qs, **k: (_posted.append(qs[0]), {"posted": True})[1]
 _pay = "Hi Marlo, can you second shoot Nov 14? The day pays $600."
@@ -1085,8 +1093,8 @@ check("team pay: the same words to anyone else (a drafted name alone does not co
       len(_posted) == 3 and "thread_class" not in _posted[2]
       and any("no-price-date-turnaround-promise" in b for b in _dl.check_card(_posted[2])[0]))
 check("team pay: matched by the handle in org, the People page or the contact's full name",
-      actions.team_member("8055550142") == "Quinn Heathcote" and actions.team_member("owner2@example.invalid") == "staff1 example"
-      and actions.team_member("+1 805 555 0199") == "example example IV"
+      actions.team_member("8055550142") == "Quinn Heathcote" and actions.team_member("owner2@example.invalid") == "staff1 Quillfeather"
+      and actions.team_member("+1 805 555 0199") == "Corwin Castellan IV"
       and actions.team_member("p4f6cf3@example.invalid") == "" and actions.team_member("") == "")
 _contacts_mod.lookup, _cards_mod.post = _real_lookup, _real_post
 

@@ -7,6 +7,7 @@ import os as _os, tempfile as _tf
 _os.environ.setdefault("WV_LOG_DIR", _tf.mkdtemp(prefix="wv_logs_"))
 import io
 import json
+import re
 import os
 import sys
 import tempfile
@@ -15,6 +16,23 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
+
+
+def _org_words(root):
+    """This organization's own name and people (org.json, people.json): what a generic file must never carry."""
+    out = set()
+    try:
+        n = str(json.loads((root / "org.json").read_text(encoding="utf-8-sig")).get("name") or "")
+        out |= {w for w in [n, n.split(" ")[0]] if len(w) >= 4}
+    except (OSError, ValueError):
+        pass
+    try:
+        for k, u in (json.loads((root / "agent" / "people.json").read_text(encoding="utf-8-sig")).get("users") or {}).items():
+            out |= {w for w in (k, str(u.get("name") or "").split(" ")[0]) if len(w) >= 3}
+    except (OSError, ValueError):
+        pass
+    return sorted(out, key=len, reverse=True)
+
 TMP = Path(tempfile.mkdtemp(prefix="wv_orgsetup_"))
 os.environ["ASSISTANT_DATA"] = str(TMP / "adata")
 os.environ["ASSISTANT_CARDS"] = str(TMP / "cards")
@@ -81,7 +99,7 @@ ok(org.interview_hint() == "", "org: the same question is not asked twice in a d
 org.apply({"hours": "Weekdays 7-19"}, by="owner1")
 ok(org.next_questions() == [] and org.interview_hint() == "" and "complete" in org.status_text(), "org: onboarding completes")
 # undo restores the previous profile
-cid = org.apply({"where": "example"}, by="owner1")["change"]
+cid = org.apply({"where": "Brackwater"}, by="owner1")["change"]
 ok(core.undo(cid, by="owner1").startswith("Undone") and not org.load().get("where"), "org: /undo cN restores the profile")
 
 # ---------------------------------------------------------------- actions wiring
@@ -110,7 +128,8 @@ ok(rc["kind"] == "terminal" and rc["argv"][1:] == ["assistant/agent/google_api.p
 rc = setup_actions.recipe(reg["doer-vault"])
 ok(rc["argv"][1:] == ["assistant/doer/vault.py", "init"], "setup: 'a | b | c' renew text keeps the first command")
 ok(setup_actions.recipe(reg["doer-sessions"])["kind"] == "text", "setup: a placeholder command (<site>) is instructions, not a button")
-ok(setup_actions.recipe(reg["honeybook"])["kind"] == "mcp" and setup_actions.recipe(reg["typeform"])["kind"] == "env", "setup: explicit setup blocks win")
+_mcp = next((k for k, r in reg.items() if (r.get("setup") or {}).get("kind") == "mcp"), "")     # a connector row, where the organization has one
+ok((not _mcp or setup_actions.recipe(reg[_mcp])["kind"] == "mcp") and setup_actions.recipe(reg["typeform"])["kind"] == "env", "setup: explicit setup blocks win")
 ok(setup_actions.recipe(reg["claude-token"])["kind"] == "env" and setup_actions.recipe(reg["claude-token"])["name"] == "CLAUDE_CODE_OAUTH_TOKEN", "setup: env rows ask for one hidden value")
 order = {"dead": 0, "not_configured": 1, "unknown": 2, "manual": 3, "live": 4}
 ranks = [order.get(r["state"], 2) for r in rows]
@@ -119,9 +138,10 @@ sb = setup_actions.summary_block()
 ok(sb.startswith("CONNECTIONS (") and "/setup" in sb and "never ask for a password" in sb, "setup: summary block for the brain")
 ok(setup_actions.run("nope-not-a-row")["ok"] is False, "setup: unknown id refused")
 ok(setup_actions.run("svc-nothing", "check")["ok"] is False, "setup: check on an unknown service refused")
-ok(setup_actions.run("honeybook")["ok"] and "Claude Code session" in setup_actions.run("honeybook")["message"], "setup: an mcp row returns its instructions, runs nothing")
-runs = json.loads((setup_actions.RUNS).read_text(encoding="utf-8"))
-ok(runs.get("honeybook", {}).get("last") == "mcp", "setup: a run is recorded per row")
+if _mcp:
+    ok(setup_actions.run(_mcp)["ok"] and "Claude Code session" in setup_actions.run(_mcp)["message"], "setup: an mcp row returns its instructions, runs nothing")
+    runs = json.loads((setup_actions.RUNS).read_text(encoding="utf-8"))
+    ok(runs.get(_mcp, {}).get("last") == "mcp", "setup: a run is recorded per row")
 ok(not any(ch.isalpha() and False for ch in sb), "setup: (sanity) summary is text")
 # nothing in the Setup engine reads a secret: the module never imports keyring or the vault
 src = (ROOT / "scripts" / "setup_actions.py").read_text(encoding="utf-8")
@@ -161,7 +181,7 @@ ok("files uploaded" in resources.status_text(), "library: /library status")
 import wiki_writer
 wiki_writer.WIKI = TMP / "Wiki"
 (TMP / "Wiki").mkdir(exist_ok=True)
-wiki_writer._lint_ok = lambda: (True, "")
+wiki_writer._lint_ok = lambda rel="": (True, "")
 rel_src = Path(r["path"]).relative_to(TMP).as_posix()        # "Raw/Uploads/..." relative to the scratch vault
 _old_vault = core.VAULT
 core.VAULT = TMP
@@ -211,9 +231,9 @@ conns = json.loads((acme / "assistant" / "connections.json").read_text(encoding=
 ok(prof["name"] == "Pip" and prof["household"] == "Acme Bakery" and prof["home_space"] == "" and prof["claude_account"] == "", "new_org: profile rewritten, nothing of example's left")
 ok(list(ppl["users"]) == ["ana"] and ppl["users"]["ana"]["emails"] == ["ana@acme.test"], "new_org: people are the new owners only")
 ok(o2["name"] == "Acme Bakery" and o2["services"] == [] and o2["people"][0]["name"] == "Ana Ruiz", "new_org: org.json seeded with the name and owners, rest to be learned")
-ok({c["id"] for c in conns} >= {"claude-token", "mission-control", "agent-bridge", "google-ana", "mail-ana"} and not any(c["id"].startswith(("hb-", "honeybook", "typeform")) for c in conns), "new_org: generic connections plus per-owner Google/mail rows; no example rows")
+ok({c["id"] for c in conns} >= {"claude-token", "mission-control", "agent-bridge", "google-ana", "mail-ana"} and not any(c["id"].startswith(("typeform",)) for c in conns), "new_org: generic connections plus per-owner Google/mail rows; no example rows")
 ok(not list((acme / "assistant" / "data").rglob("*.jsonl")) and not (acme / "assistant" / "agent" / "gchat.local.json").exists() and not list((acme / "assistant" / "data").rglob("*.kdbx")), "new_org: no data, no vault, no local secrets copied")
-ok("example" not in (acme / "assistant" / "agent" / "prompt.md").read_text(encoding="utf-8") and "## Learning the organization" in (acme / "assistant" / "agent" / "prompt.md").read_text(encoding="utf-8"), "new_org: generic prompt installed")
+ok(not re.search(r"\b(?:" + "|".join(map(re.escape, [w for w in _org_words(HERE.parent) if len(w) >= 4])) + r")\b", (acme / "assistant" / "agent" / "prompt.md").read_text(encoding="utf-8")) and "## Learning the organization" in (acme / "assistant" / "agent" / "prompt.md").read_text(encoding="utf-8"), "new_org: generic prompt installed")
 ok((acme / "README.md").read_text(encoding="utf-8").startswith("# Acme Bakery - assistant setup"), "new_org: README checklist written")
 r = subprocess.run([sys.executable, str(ROOT / "new_org.py"), "Acme", "--agent", "Pip", "--owner", "A:a@b.c", "--out", str(ROOT.parent / "inside")], capture_output=True, text=True, cwd=str(ROOT.parent), timeout=60)
 ok(r.returncode != 0 and "own folder" in (r.stderr + r.stdout), "new_org: refuses to scaffold inside this vault")

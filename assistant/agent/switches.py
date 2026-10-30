@@ -121,18 +121,16 @@ def task_states(fresh: bool = False) -> dict:
     names = [j["task"] for j in jobs() if j.get("task")]
     if not names:
         return {}
-    if not fresh and time.time() - _STATES["ts"] < STATE_CACHE_S and _STATES["map"]:
+    if not fresh and time.time() - _STATES["ts"] < STATE_CACHE_S:
         return _STATES["map"]
     arr = ",".join(_q(n) for n in names)
     rc, out = _ps(f"Get-ScheduledTask -TaskName @({arr}) -ErrorAction SilentlyContinue | ForEach-Object {{ $_.TaskName + '|' + $_.State }}")
     m = {}
-    if not rc:
-        for ln in out.splitlines():
-            if "|" in ln:
-                n, s = ln.rsplit("|", 1)
-                m[n.strip()] = s.strip()
-    if m:
-        _STATES.update(ts=time.time(), map=m)
+    for ln in out.splitlines():                            # Get-ScheduledTask exits 1 when ANY name is missing; the found ones still print
+        if "|" in ln:
+            n, s = ln.rsplit("|", 1)
+            m[n.strip()] = s.strip()
+    _STATES.update(ts=time.time(), map=m)                  # cached either way: a new organization has none registered yet (2026-10-29)
     return m
 
 

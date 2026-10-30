@@ -38,16 +38,16 @@ def check(name, cond, extra=""):
 
 
 # 1. Drive links in a body (Gmail turns big attachments into these)
-body = ("OwnerFilm_MIX_SFX_V2.wav\n<https://drive.google.com/file/d/EXAMPLE-FILE-ID/view?usp=drive_web>\n"
-        "again https://drive.google.com/file/d/EXAMPLE-FILE-ID/view and "
-        "https://drive.google.com/open?id=EXAMPLE-FILE-ID plus https://docs.google.com/document/d/EXAMPLE-FILE-ID/edit")
+body = ("OwnerFilm_MIX_SFX_V2.wav\n<https://drive.google.com/file/d/1EXAMPLEce94c7919588188b/view?usp=drive_web>\n"
+        "again https://drive.google.com/file/d/1EXAMPLEce94c7919588188b/view and "
+        "https://drive.google.com/open?id=1EXAMPLE4d1942600fc68a22 plus https://docs.google.com/document/d/1EXAMPLEd0667678514dfe27/edit")
 ids = google_api.drive_links(body)
 check("drive links parsed, deduped, in order", ids == ["1EXAMPLEce94c7919588188b", "1EXAMPLE4d1942600fc68a22",
                                                       "1EXAMPLEd0667678514dfe27"], ids)
 check("no links -> empty", google_api.drive_links("nothing here") == [])
 
 # 2. the footage-folder refusal and safe names
-check("project folder is not footage", not ma.is_footage_folder(r"L:\projects\Kingsmere\_SoundMix_example_v2"))
+check("project folder is not footage", not ma.is_footage_folder(r"L:\projects\Kingsmere\_SoundMix_Corwin_v2"))
 check("Audio/ Card N/ DCIM are footage", ma.is_footage_folder(r"D:\Wedding\Audio\H5") and ma.is_footage_folder("E:/Card 2/x")
       and ma.is_footage_folder(r"F:\DCIM\100"))
 check("safe file names", ma._safe_name('a/b:c*"d?.wav') == "a_b_c__d_.wav" and ma._safe_name("") == "attachment")
@@ -92,12 +92,15 @@ check("it is the doer's file, not assistant/scripts/learn.py", str(getattr(L, "_
 
 # 5. policy: the new tools are tier B from the doer's shell, editor scripts are scanned, a full interpreter path is scanned
 import computer_policy as cp  # noqa: E402
-check("mail_attach from the doer is tier B", cp.classify('python assistant/scripts/mail_attach.py owner1-personal 1a13da84cfd13326 --out "C:/Users/owner1/Videos/Sage Inbox/example"')[0] == "B")
-check("the Resolve swap with the Python312 path is tier B", cp.classify('"C:/Users/owner1/AppData/Local/Programs/Python/Python312/python.exe" editor/resolve_swap_audio.py --project "owner1 Beach" --old a.wav --new "L:/x/b.wav" --apply')[0] == "B")
-check("a full-path interpreter still scans the script (missing one is refused)", cp.classify('"C:/Users/owner1/AppData/Local/Programs/Python/Python312/python.exe" editor/nope.py')[0] == "NEVER")
+HOME = Path.home().as_posix()                               # the policy's ~ is this machine's home, whoever runs it
+check("mail_attach from the doer is tier B", cp.classify('python assistant/scripts/mail_attach.py owner1-personal 1a13da84cfd13326 --out "' + HOME + '/Videos/Sage Inbox/Corwin"')[0] == "B")
+if (ROOT.parent / "editor" / "resolve_swap_audio.py").is_file():   # the organization's editor tool: only where it lives
+    check("the Resolve swap with the Python312 path is tier B", cp.classify('"' + HOME + '/AppData/Local/Programs/Python/Python312/python.exe" editor/resolve_swap_audio.py --project "owner1 Beach" --old a.wav --new "L:/x/b.wav" --apply')[0] == "B")
+check("a full-path interpreter still scans the script (missing one is refused)", cp.classify('"' + HOME + '/AppData/Local/Programs/Python/Python312/python.exe" editor/nope.py')[0] == "NEVER")
 check("Sage Inbox is a write root", any("Sage Inbox" in r for r in cp._policy()["write_roots"]))
 check("mail_attach passes the static scan", cp.scan_script((ROOT / "scripts" / "mail_attach.py").read_text(encoding="utf-8"))[0] == "B")
-check("resolve_swap_audio passes the static scan", cp.scan_script((ROOT.parent / "editor" / "resolve_swap_audio.py").read_text(encoding="utf-8"))[0] == "B")
+if (ROOT.parent / "editor" / "resolve_swap_audio.py").is_file():   # the organization's editor tool: only where it lives
+    check("resolve_swap_audio passes the static scan", cp.scan_script((ROOT.parent / "editor" / "resolve_swap_audio.py").read_text(encoding="utf-8"))[0] == "B")
 check("the computer prompt carries the evidence contract and both tools",
       all(x in (ROOT / "doer" / "computer_prompt.md").read_text(encoding="utf-8") for x in ("evidence.json", "mail_attach.py", "resolve_swap_audio.py")))
 

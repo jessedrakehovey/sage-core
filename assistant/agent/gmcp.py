@@ -64,7 +64,7 @@ TOOLS = [
          "account": {"type": "string"}, "id": {"type": "string"}}}},
     {"name": "vault_search",
      "description": "Semantic search over the household's wiki and memory (Wiki/, Memory/). Ask it in plain words "
-                    "('how do we deliver the final film', 'who is the florist for the example wedding', 'cat litter'). "
+                    "('how do we deliver the final film', 'who is the florist for the Ashcombe wedding', 'cat litter'). "
                     "Returns the closest passages with their file paths; open a file with Read for the full note. "
                     "Use it before saying you don't know something about the home, the people or the business.",
      "inputSchema": {"type": "object", "required": ["query"], "properties": {
@@ -269,11 +269,11 @@ WRITE_TOOLS = [
          "note": {"type": "string"}}}},
     {"name": "identify",
      "description": "An owner told you who a phone number or email belongs to ('that's my dad', 'that was Diane, Frank's wife', "
-                    "'the 0590 number is example the editor'): save it, so the texts, the cards and the records name them from now on. "
+                    "'the 0590 number is Ambrose the editor'): save it, so the texts, the cards and the records name them from now on. "
                     "Also when you work it out yourself with certainty from what they wrote and the owner confirms it.",
      "inputSchema": {"type": "object", "required": ["handle", "name"], "properties": {
          "handle": {"type": "string", "description": "the phone number or email, as in the text log"},
-         "name": {"type": "string", "description": "what the owner calls them (Dad, example, example Park)"},
+         "name": {"type": "string", "description": "what the owner calls them (Dad, Marisa, Ambrose Park)"},
          "relation": {"type": "string", "description": "optional: owner1's dad, owner6's college friend, our editor, a lead"},
          "kind": {"type": "string", "enum": ["family", "friend", "client", "lead", "vendor", "contact", "business"]}}}},
 ]
@@ -282,7 +282,7 @@ READ_MORE = [
     {"name": "texts_search",
      "description": "Search the owners' text-message log (what reached their iPhones, both ways): by words in a message, a phone number, "
                     "or a saved name. Returns who (number and saved name), when, direction and the text. Use it before asking "
-                    "'what's their number' or 'what did they say', and to tell who 'my dad' or 'example' is from what they wrote.",
+                    "'what's their number' or 'what did they say', and to tell who 'my dad' or 'Marisa' is from what they wrote.",
      "inputSchema": {"type": "object", "required": ["query"], "properties": {
          "query": {"type": "string", "description": "words from the message, a number, or a name"},
          "days": {"type": "integer", "description": "how far back, default 30"},
@@ -290,7 +290,7 @@ READ_MORE = [
     {"name": "who_is",
      "description": "Who a phone number or email belongs to, with the evidence: contacts, memory, the wiki, the services they use, the leads, and the "
                     "texts themselves (how the owner addressed them, how they signed, who else is in the group text). Also answers a "
-                    "description: 'my dad', 'the mechanic', 'example', 'the one asking about the gift exchange'. Returns the best name "
+                    "description: 'my dad', 'the mechanic', 'Marisa', 'the one asking about the gift exchange'. Returns the best name "
                     "with how sure, why, other candidates, the group, and their last texts. Use it before ever asking an owner who someone is.",
      "inputSchema": {"type": "object", "required": ["query"], "properties": {
          "query": {"type": "string", "description": "a number, an email, a name, a relationship or a few words about them"}}}},

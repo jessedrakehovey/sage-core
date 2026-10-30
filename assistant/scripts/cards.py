@@ -57,7 +57,7 @@ Guards at post time (same rules as the property OS, adapted):
                     still standing, a nudge right after a send) and a reply draft already open or
                     already sent to that recipient -> DUPLICATE_SUBJECT / ALREADY_ANSWERED
 
-Alarm cards (2026-10-06): an infrastructure alarm ("HoneyBook connector down", "Sage bridge
+Alarm cards (2026-10-06): an infrastructure alarm ("the CRM connector down", "Sage bridge
 down") carries "clears_when": {"connection": "<id from assistant/connections.json>"}. The
 sweep retires it as "resolved" (and edits the Chat message to say so) once conn_check has
 proven THAT connection live after the card was posted - the same check that would raise the
@@ -75,6 +75,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import crm  # noqa: E402
 import exec_store as es  # noqa: E402
 import rulings  # noqa: E402
 
@@ -281,13 +282,19 @@ def _subject(q) -> str:
     return str(q.get("subject") or q.get("chain_key") or q.get("probation_class") or q.get("mining_key") or "").strip().lower()
 
 
-_ENT_STOP = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "wed", "thu", "fri", "sat", "sun",
-             "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
-             "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "the", "this", "that", "what", "who",
-             "which", "when", "where", "how", "why", "owner1", "owner6", "sage", "honeybook", "mission", "control", "edit", "send",
-             "skip", "reply", "text", "approve", "example", "films", "recommended", "yes", "nothing", "fix", "still", "also", "your",
-             "you", "they", "she", "his", "her", "their", "our", "and", "but", "for", "with", "from", "about", "after", "before",
-             "tap", "card", "both", "new", "old", "one", "two", "three", "today", "tomorrow", "tonight", "yesterday", "pick", "put"}
+_ENT_STOP_BASE = frozenset({
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+    "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "the", "this", "that", "what", "who",
+    "which", "when", "where", "how", "why", "owner1", "owner6", "sage", "mission", "control", "edit", "send",
+    "skip", "reply", "text", "approve", "example", "films", "recommended", "yes", "nothing", "fix", "still", "also", "your",
+    "you", "they", "she", "his", "her", "their", "our", "and", "but", "for", "with", "from", "about", "after", "before",
+    "tap", "card", "both", "new", "old", "one", "two", "three", "today", "tomorrow", "tonight", "yesterday", "pick", "put"})
+
+
+def _ent_stop() -> frozenset:
+    """Words that are NOT entity names in card questions: common words plus the CRM channel name and its aliases."""
+    return _ENT_STOP_BASE | {crm.CHANNEL} | crm.kinds("CHANNEL_ALIASES")
 
 
 def _entities(text) -> set:
@@ -296,8 +303,9 @@ def _entities(text) -> set:
     different decisions even when their wording is a template."""
     t = str(text or "")
     ents = set(re.findall(r"\d{4,}|[\w.+-]+@[\w-]+\.\w+", t))
+    stop = _ent_stop()
     for w in re.findall(r"\b[A-Z][a-z]{2,}\b", t):
-        if w.lower() not in _ENT_STOP:
+        if w.lower() not in stop:
             ents.add(w.lower())
     return ents
 
@@ -387,7 +395,7 @@ def _recipient(q) -> str:
 
 
 def _fill_inbound_ts(q) -> None:
-    """A reply to someone who just wrote in is never "the 3rd card to them in 24 h" (example said yes at
+    """A reply to someone who just wrote in is never "the 3rd card to them in 24 h" (Corwin said yes at
     16:10 on 2026-10-23 and the card answering him was refused FRESHNESS_REPEAT_RECIPIENT; Sage had to ask
     in chat). The brain never fills last_inbound_ts, so take it from the comms board
     (data/comms_state.json, written zero-LLM by the comms probe: the newest line each way per contact).
@@ -437,7 +445,7 @@ def _freshness(q, now) -> str:
             if any(_recipient(x) == rcp for x in c.get("questions") or []):
                 hits.append(c.get("id"))
     if _is_reply(q):
-        return ""                 # answering someone who wrote in is a conversation, not a chase (example, 2026-10-24 16:46)
+        return ""                 # answering someone who wrote in is a conversation, not a chase (Corwin, 2026-10-24 16:46)
     if len(hits) + 1 >= REPEAT_LIMIT and not (li and li > max(
             float((_read(LIVE / f"{h}.json") or _read(DONE / f"{h}.json") or {}).get("ts") or 0) for h in hits)):
         return "FRESHNESS_REPEAT_RECIPIENT: this would be card #%d to ...%s in 24h (%s). Bundle, do not chain." % (
@@ -533,25 +541,26 @@ def _sanitize_exec(q):
         digits = re.sub(r"\D", "", to)
         if _squash(to) not in _squash(qtext) and (not digits or digits[-10:] not in re.sub(r"\D", "", qtext)):
             return None, f"EXEC_VERBATIM: imessage_send to={to!r} is not in the card question; the approver must see who it goes to"
-    if kind == "hb_message":
+    if kind in crm.kinds("MESSAGE_KINDS"):
         qtext = str(q.get("question") or "")
-        if "[HONEYBOOK MESSAGE PREVIEW]" not in qtext:
-            return None, "EXEC_VERBATIM: an hb_message card must contain [HONEYBOOK MESSAGE PREVIEW] followed by who it goes to and the exact text"
-    if kind == "hb_project_update":
+        tag = crm.preview_tag()
+        if tag not in qtext:
+            return None, f"EXEC_VERBATIM: a {crm.name()} message card must contain {tag} followed by who it goes to and the exact text"
+    if kind in crm.kinds("FIELD_UPDATE_KINDS"):
         qsq = _squash(q.get("question"))
         for k, v in (payload.get("fields") or {}).items():
             if _squash(str(v)) not in qsq:
-                return None, f"EXEC_VERBATIM: hb_project_update {k}={str(v)[:50]!r} is not in the card question; owner1 must read every value this writes"
-    if kind == "hb_add_participant":
+                return None, f"EXEC_VERBATIM: {kind} {k}={str(v)[:50]!r} is not in the card question; owner1 must read every value this writes"
+    if kind in crm.kinds("PARTICIPANT_KINDS"):
         qsq = _squash(q.get("question"))
         for k in ("email", "name"):
             v = str(payload.get(k) or "").strip()
             if v and _squash(v) not in qsq:
-                return None, f"EXEC_VERBATIM: hb_add_participant {k}={v[:50]!r} is not in the card question; the approver must read who is being added"
-    if kind == "hb_set_stage":
+                return None, f"EXEC_VERBATIM: {kind} {k}={v[:50]!r} is not in the card question; the approver must read who is being added"
+    if kind in crm.kinds("STAGE_KINDS"):
         qsq = _squash(q.get("question"))
         if _squash(str(payload.get("stage") or "")) not in qsq:
-            return None, f"EXEC_VERBATIM: hb_set_stage stage={str(payload.get('stage'))[:40]!r} is not in the card question; the approver must read where the project goes"
+            return None, f"EXEC_VERBATIM: {kind} stage={str(payload.get('stage'))[:40]!r} is not in the card question; the approver must read where the project goes"
     if kind == "sheet_set":
         # every cell this writes, with its value, sits verbatim on the card: the owner reads each one
         qsq = _squash(q.get("question"))
@@ -569,12 +578,12 @@ def _sanitize_exec(q):
         ok, why = g.sheet_ready(str(payload.get("account") or ""))
         if not ok:
             return None, why
-    if kind.startswith("hb_"):
-        # the daily self-test (hb_exec.py selftest) found this kind's connector path dead: no card may be posted
-        # for it, or an approval lands on a send that cannot run (Emery, 2026-10-18, approved twice, sent never)
+    _path_check = crm._hook("path_ok")
+    if callable(_path_check):
+        # the daily self-test found this kind's connector path dead: no card may be posted for it,
+        # or an approval lands on a send that cannot run (Emery, 2026-10-18, approved twice, sent never)
         try:
-            import hb_exec
-            ok, why = hb_exec.path_ok(kind)
+            ok, why = _path_check(kind)
         except Exception:  # noqa: BLE001
             ok, why = True, ""
         if not ok:
@@ -609,7 +618,7 @@ def _sanitize_exec(q):
         return None, f"exec approve_label {approve_label!r} matches none of the options {labels}"
     edity = [x for x in labels + [approve_label] if re.search(r"\bedit", x, re.I)]
     if edity:
-        # example, 2026-10-18: an option labelled "Edit & send (Recommended)" was the one-tap approve,
+        # Marisa, 2026-10-18: an option labelled "Edit & send (Recommended)" was the one-tap approve,
         # so tapping it sent the draft unedited, blanks and all. Chat and Mission Control add the
         # real edit button themselves; no option may be named like it.
         return None, (f"EDIT_LABEL: {edity[0]!r} - no button may say Edit; the edit box is added to every exec card "
@@ -766,7 +775,7 @@ def post(questions, owner, expires_s=DEFAULT_EXPIRES_S, lane="", thread="", repl
 def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=False):
     if asked and isinstance(questions, list) and questions and isinstance(questions[0], dict):
         # an owner-asked card: the older open card on the same subject / to the same recipient is what the
-        # owner is replacing, so find it and supersede it rather than refuse (example's proposal, 2026-10-21:
+        # owner is replacing, so find it and supersede it rather than refuse (Corwin's proposal, 2026-10-21:
         # four asks, FRESHNESS_REPEAT_RECIPIENT each time, no card)
         if not replaces:
             replaces = _asked_replaces(questions[0], lane)
@@ -801,7 +810,7 @@ def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=F
             hdr = str(q.get("header") or "")
             if _REPLY_HEADER.match(hdr):
                 return {"posted": False, "q": i, "reason": "TEXT_NEEDS_DRAFT: a reply card carries the draft itself (exec imessage_send / "
-                                                            "email_send / hb_message with [TEXT PREVIEW] and the full text), never a choice of "
+                                                            "email_send / a CRM message kind with [TEXT PREVIEW] and the full text), never a choice of "
                                                             "replies as buttons. Write the likeliest safe reply, put the alternative in `advice` "
                                                             "(Edit & send is on every card); if one fact is missing, ask for it in chat with "
                                                             "cards.py say and post the draft once it is known."}
@@ -1046,7 +1055,7 @@ def _answer_locked(qid, option, text="", revised="", q_index=0, by="owner1", sen
         left = es.unfilled_blanks(payload) if ex.get("kind") in es.OUTBOUND_KINDS else []
         if left:
             # a draft with an unfilled [the owner: ...] blank cannot be approved as written, and an edit that
-            # left one in cannot either; the card stays OPEN so the owner can fill it (example, 2026-10-18)
+            # left one in cannot either; the card stays OPEN so the owner can fill it (Marisa, 2026-10-18)
             return {"ok": False, "blanks": left,
                     "reason": (f"not sent - the message still has a blank to fill: {left[0][:60]}. "
                                "Tap Edit & send, replace every [ ... ] with your words, then Send.")}
@@ -1099,7 +1108,9 @@ def _took_back_ticket(e):
     if st == "running":
         return False, "it is going out right now, so it can't be stopped", False
     when = str(cur.get("ts_done") or "")[11:16]
-    what = {"imessage_send": "text", "email_send": "email", "hb_message": "HoneyBook message"}.get(str(cur.get("kind") or ""), "action")
+    _k = str(cur.get("kind") or "")
+    what = "text" if _k == "imessage_send" else "email" if _k == "email_send" \
+           else (f"{crm.name()} message" if _k in crm.kinds("MESSAGE_KINDS") else "action")
     return False, (f"the {what} already went out" + (f" at {when}" if when else "")
                    + f", and a sent {what} can't be pulled back. Tell me in chat if a correction should go"), False
 
@@ -1135,7 +1146,7 @@ def _undo_followup(qid, card, e, by):
 def undo(qid, by="owner1"):
     """Take back an answer. Works for as long as the answer has not taken effect (the owner 2026-10-20:
     "undo function on approval cards is not working but it is vital that it does" - the Undo on the
-    example intro-text card was refused at 08:35 for a text due at 09:00, because only the first 30 s
+    Odette intro-text card was refused at 08:35 for a text due at 09:00, because only the first 30 s
     counted). An approved send can be undone until it actually goes out; a decision, up to
     UNDO_DECISION_MAX_S later, even after the sweep has handed it on (its follow-up is closed or
     reversed). The card comes back open, in the same Chat message, for a new answer."""
@@ -1634,8 +1645,9 @@ def _act_on_hold(h) -> bool:
 def breaker_card(lane: str, fails: int, held: int) -> dict:
     """ONE card by code when a send channel trips its breaker (drain._breaker_note): what is paused, how many
     wait, and buttons that act. Clears itself when the channel works again (clears_when breaker)."""
-    names = {"email": "Email", "phone": "Texts (the phone outbox)", "honeybook": "HoneyBook", "sheets": "Google Sheets",
-             "ads": "Google Ads", "doer": "The doer", "local": "Local jobs"}
+    names = {"email": "Email", "phone": "Texts (the phone outbox)", "sheets": "Google Sheets",
+             "ads": "Google Ads", "doer": "The doer", "local": "Local jobs",
+             crm.CHANNEL: crm.name()}
     name = names.get(lane, lane)
     q = {"header": f"{name} paused"[:60], "lane": "personal", "audience": "personal", "urgent": True,
          "question": (f"{name} failed {fails} times in a row, so I have paused that channel: {held} approved item{'s' if held != 1 else ''} "

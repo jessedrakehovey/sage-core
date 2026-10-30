@@ -17,8 +17,8 @@ organization. This module draws the line once and both `new_org.py` and `sage up
            fills; in the organization's folder the same path is the organization's.
   MODULE   optional engine parts an organization switches on: `money` (the personal-finance lane), `typeform`
            (the lead sensor). Their files ship; their spine jobs start off.
-  NICHE    never exported: the wedding lifecycle skills, the HoneyBook scripts (the CRM is a catalog choice the
-           owner makes in Discovery, never engine code), the Resolve editor, card ingest, ads, lots, travel,
+  NICHE    never exported: the wedding lifecycle skills, the organization's CRM connector (the engine ships
+           none; Sage builds one when an owner introduces their CRM), the Resolve editor, card ingest, ads, lots, travel,
            taxes, rentals, shoot-day, the owners' phone setup notes, planning history.
 
 The engine's root path is written as {{ORG_ROOT}} in exported text files; `new_org.py` and `sage update`
@@ -34,6 +34,7 @@ overwritten without --force).
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import io
 import json
@@ -61,17 +62,13 @@ SKIP_ASSISTANT_AGENT_DIRS = {"state", "skills"}
 SKIP_FILES = {"gchat.local.json", "google.json", "index.html"}          # plus any *_IPHONE_SETUP.md (an owner's phone notes)
 SKIP_SUFFIXES = (".jsonl", ".log", ".kdbx", ".png", ".jpg", ".jpeg", ".gif", ".mp4", ".wav", ".pyc", ".tmp")
 SKIP_PLANNING_PREFIXES = ("BUILD_PLAN", "BUILD_PROPOSAL", "PLAN-", "TRACKING_DESIGN", "SAGE2_PLAN", "SAGE_CORE_PLAN")
-DATA_TEMPLATES = ("sop_map.json", "comms_law.json", "client_texts.json")     # new_org.py reads the same three
+DATA_TEMPLATES = ("sop_map.json", "comms_law.json", "client_texts.json", "draft_rules.json")     # new_org.py reads the same three
 # niche to this organization or this machine: never exported
 NICHE_PATHS = {
     "scripts/card_ingest", "scripts/music_license", "scripts/projects", "scripts/yt_ingest", "scripts/yt_scout",
     "scripts/omi_ingest", "scripts/transcribe.py", "scripts/yt_ingest_cron.ps1", "scripts/yt_ingest_cron.xml",
-    # the owner (2026-10-27): "no need for a HoneyBook connector module, that can be set by the user if desired":
-    # the CRM is a catalog entry an organization picks in Discovery, never engine code
-    "scripts/honeybook", "scripts/guardrails/honeybook_gate.py", "assistant/mcp_honeybook.json",
-    "assistant/scripts/hb_exec.py", "assistant/scripts/hb_snapshot.py", "assistant/scripts/collection_autosend.py",
-    "assistant/scripts/team_on_projects.py", "assistant/scripts/meeting_guests.py", "assistant/scripts/lead_meetings.py",
-    "assistant/scripts/sense_honeybook.py",
+    # a CRM connector and everything around it is the organization's own (core_sync.json -> niche_paths): the engine
+    # ships no CRM; Sage builds one against assistant/CRM_CONTRACT.md when an owner introduces theirs (2026-10-29)
     "assistant/scripts/sense_editor.py",
     # this organization's Drive accounts and mail home are wired into the hourly Drive ingest (2026-10-29): its own path
     "scripts/drive_ingest",
@@ -103,7 +100,7 @@ PACK_FILES = {"assistant/agent/profile.json", "assistant/agent/people.json", "as
               "assistant/agent/google.json", "assistant/agent/gchat.local.json", "assistant/org.json", "assistant/config.json",
               "assistant/connections.json", "assistant/tracking.json", "assistant/chains.json", "assistant/mining.json",
               "assistant/spine_jobs.json", "assistant/jobs.json", "assistant/money.json", "assistant/money_rules.json",
-              "assistant/mcp_honeybook.json", "assistant/switches.json", "assistant/agent/switches.json", "assistant/core_sync.json",
+              "assistant/switches.json", "assistant/agent/switches.json", "assistant/core_sync.json",
               "Schema/mistakes.md", "Schema/schema.md", "Schema/about.md", "README.md", "CLAUDE.md", "HANDOFF.md", ".claude/settings.local.json", MANIFEST_NAME}
 # engine files an organization's core_sync.py promoted to niche (assistant/core_sync.json -> niche_paths): a new file the
 # builder wrote that is only about that organization never ships. core_sync sets this; otherwise read once from the vault.
@@ -137,7 +134,7 @@ SID_PLACEHOLDER = "{{USER_SID}}"
 HEXID_RX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{24}(?![0-9A-Za-z])")
 ARTIFACT_RX = re.compile(r"(claude\.ai/(?:code/)?artifact/)[A-Za-z0-9_-]{8,}")
 GDOC_RX = re.compile(r"((?:drive|docs)\.google\.com/(?:file/d/|(?:document|spreadsheets|presentation|forms)/d/|open\?id=|drive/folders/))[A-Za-z0-9_-]{20,}")
-GID_RX = re.compile(r"(?<![A-Za-z0-9_-])1(?=[A-Za-z0-9_-]*[a-z])(?=[A-Za-z0-9_-]*[A-Z])[A-Za-z0-9_-]{24,43}(?![A-Za-z0-9_-])")   # a bare Drive/Sheets id
+GID_RX = re.compile(r"(?<![A-Za-z0-9_-])1(?!EXAMPLE)(?=[A-Za-z0-9_-]*[a-z])(?=[A-Za-z0-9_-]*[A-Z])[A-Za-z0-9_-]{24,43}(?![A-Za-z0-9_-])")   # a bare Drive/Sheets id
 STREET_RX = re.compile(r"\b\d{2,6}\s+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\s(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Court|Ct|Place|Pl)\b")
 EXTRA_IDENTITY = None
 PSEUDONYMS = None
@@ -186,7 +183,8 @@ def _phone_sub(m) -> str:
         return m.group(0)
     h = _tok(area + exch + last, 6)
     digits = str(int(h, 16) % 10000).zfill(4)
-    return f"{cc or ''}{lp or ''}555{mid or '-'}0{digits[:2]}{sep2 or '-'}{digits[2:]}{digits[:2]}"      # 555-0xx-xxxx: nobody's number
+    # 555-0xx-xxxx: nobody's number, written with the original's own separators (a bare 10-digit key stays bare)
+    return f"{cc or ''}{lp or ''}555{mid or ''}0{digits[:2]}{sep2 or ''}{digits[2:]}{digits[:2]}"
 
 
 def pii_scrub(text: str) -> str:
@@ -199,7 +197,7 @@ def pii_scrub(text: str) -> str:
         text = SID_RX.sub(SID_PLACEHOLDER, text)
     text = HEXID_RX.sub(lambda m: _tok(m.group(0), 24), text)
     if "google.com" in text:
-        text = GDOC_RX.sub(r"\1EXAMPLE-FILE-ID", text)
+        text = GDOC_RX.sub(lambda m: m.group(0) if m.group(0)[len(m.group(1)):].startswith("1EXAMPLE") else m.group(1) + "1EXAMPLE" + _tok(m.group(0)[len(m.group(1)):], 16), text)   # the bare id's token: links and ids still match
     text = GID_RX.sub(lambda m: "1EXAMPLE" + _tok(m.group(0), 16), text)
     if "artifact/" in text:
         text = ARTIFACT_RX.sub(r"\1EXAMPLE-ARTIFACT", text)
@@ -255,7 +253,9 @@ def org_values(root: Path | None = None) -> dict:
         pass
     hostparts = {part for h in hosts for part in h.split(".") if len(part) >= 6 and part not in ("ts", "net", "com", "local")}
     words |= set(extra_identity())          # places, clients, vendors, other organizations (core_sync.json identity_terms)
-    return {"names": names, "emails": emails, "domains": domains, "hosts": hosts, "hostparts": hostparts, "words": words,
+    org_name = str(org.get("name") or "").strip()
+    return {"names": names, "org_name": org_name, "org_word": (org_name.split() or [""])[0], "emails": emails, "domains": domains,
+            "hosts": hosts, "hostparts": hostparts, "words": words,
             "surnames": surnames, "persons": persons, "locals": locals_, "stems": stems, "root": str(root or VAULT)}
 
 
@@ -267,6 +267,19 @@ def _rx_word(w: str):
     return re.compile(r"(?:(?<![A-Za-z0-9])|(?<=\\[ntr]))" + re.escape(w) + r"(?![A-Za-z0-9])", re.I)
 
 
+def _case_like(fake: str):
+    """A stand-in written in the case of what it replaces ("wren@" -> "wren@", "WREN" -> "WREN"), so an address
+    or key the code lowercases still matches its test (2026-10-29)."""
+    def rep(m):
+        s = m.group(0)
+        if s.islower():
+            return fake.lower()
+        if s.isupper() and len(s) > 1:
+            return fake.upper()
+        return fake
+    return rep
+
+
 def _build_scrubs(root: Path | None = None) -> tuple:
     """(INFRA, ORG, OWNER, CODE): readable pairs for prose (the first three, applied in that order) and
     identifier-safe pairs for working lines of code (the fourth). Longest match first inside each group."""
@@ -274,8 +287,9 @@ def _build_scrubs(root: Path | None = None) -> tuple:
     infra, org, owner, code = [], [], [], []
     for real, fake in pseudonyms():         # first, so a full name goes whole before its parts meet the other pairs
         rx = _rx_word(real) if re.match(r"^[\w .'&-]+$", real) else re.compile(re.escape(real))
-        infra.append((rx, fake))
-        code.append((rx, fake))
+        rep = _case_like(fake) if re.match(r"^[\w .'&-]+$", real) else fake
+        infra.append((rx, rep))
+        code.append((rx, rep))
     emails = sorted(v["emails"])
     idx = {e: i + 1 for i, e in enumerate(emails)}
     for e in sorted(emails, key=len, reverse=True):
@@ -298,7 +312,15 @@ def _build_scrubs(root: Path | None = None) -> tuple:
     for loc, e in sorted(v["locals"].items(), key=lambda kv: len(kv[0]), reverse=True):
         infra.append((re.compile(re.escape(loc), re.I), "owner"))
         code.append((re.compile(re.escape(loc), re.I), f"owner{idx.get(e, 1)}"))
+    word = str(v.get("org_word") or "")
     for n in sorted(v["names"], key=len, reverse=True):
+        if len(word) >= 3 and n.startswith(word + " ") and n != v.get("org_name"):
+            # a name built on the organization's word (its scheduled tasks, its phone Shortcut) keeps the rest of the name,
+            # so a new organization's task names can be rebuilt from it (2026-10-29: "the organization" lost them)
+            tok = "example-org" + n[len(word):]
+            org.append((_rx_word(n), tok))
+            code.append((_rx_word(n), tok))
+            continue
         org.append((_rx_word(n), "the organization"))
         code.append((_rx_word(n), "example-org"))
     for j, s in enumerate(sorted(v["surnames"], key=len, reverse=True), 1):
@@ -333,6 +355,16 @@ PLUGINS_OFF = re.compile(r'("plugins"\s*:\s*\{[^{}]*?"modules"\s*:\s*)\[[^\]]*\]
 # ---------------------------------------------------------------- classification
 def _rel(p: Path, root: Path) -> str:
     return p.relative_to(root).as_posix()
+
+
+def is_template(root: Path | None = None) -> bool:
+    """Is this tree the exported engine itself (its pack is the scrubbed placeholder organization, "example-org")?
+    The checks that an export carries none of the SOURCE organization's identity only mean something in a real one."""
+    try:
+        name = str(_loadj(Path(root or VAULT) / "assistant" / "org.json").get("name") or "")
+    except Exception:  # noqa: BLE001
+        return False
+    return name == "example-org"
 
 
 def is_pack(rel: str) -> bool:
@@ -394,9 +426,62 @@ def ships(rel: str, with_tests: bool) -> bool:
             return False
         if len(parts) > 1 and parts[1] == "tests" and not with_tests:
             return False
+        if len(parts) > 1 and parts[1] == "tests" and name.endswith(".py") and niche_test(rel):
+            return False            # a test of niche code would only fail where that code does not ship
         if len(parts) > 1 and parts[1] == "web":
             return False            # built by dashboard.py at runtime
     return True
+
+
+NICHE_TEST_INFO: tuple | None = None
+def _niche_test_info(root: Path = VAULT) -> tuple:
+    """(module names only niche code defines, the organization's own code folders outside the engine roots), both
+    read from the tree, so the engine names neither (2026-10-29: a dozen sage-core tests imported modules that never
+    ship and failed there)."""
+    global NICHE_TEST_INFO
+    if NICHE_TEST_INFO is None:
+        shipped = set()
+        for r in ENGINE_ROOTS:
+            for f in (root / r).rglob("*.py") if (root / r).is_dir() else ():
+                if ships(f.relative_to(root).as_posix(), False):
+                    shipped.add(f.stem)
+        stems = set()
+        for n in NICHE_PATHS | extra_niche():
+            p = root / n
+            if p.is_dir():
+                stems |= {f.stem for f in p.rglob("*.py")}
+            elif n.endswith(".py"):
+                stems.add(Path(n).stem)
+        tops = set()
+        for d in root.iterdir() if root.is_dir() else ():
+            if d.is_dir() and re.match(r"^[A-Za-z][\w-]*$", d.name) and d.name not in ENGINE_ROOTS \
+                    and (next(d.glob("*.py"), None) or next(d.glob("*/*.py"), None)):
+                tops.add(d.name)
+        NICHE_TEST_INFO = (stems - shipped, tops)
+    return NICHE_TEST_INFO
+
+
+def niche_test(rel: str, root: Path = VAULT) -> bool:
+    """Does this test import a module only niche code defines, or put an organization folder on sys.path?"""
+    f = root / rel
+    if not f.is_file():
+        return False
+    try:
+        tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError, ValueError):
+        return False
+    stems, tops = _niche_test_info(root)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import) and any(a.name.split(".")[0] in stems for a in n.names):
+            return True
+        if isinstance(n, ast.ImportFrom) and n.module and not n.level and n.module.split(".")[0] in stems:
+            return True
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("insert", "append") \
+                and ast.unparse(n.func.value) == "sys.path":
+            src = ast.unparse(n)
+            if any(f"'{t}'" in src or f'"{t}"' in src for t in tops):
+                return True
+    return False
 
 
 def engine_files(root: Path, with_tests: bool = True) -> list:
@@ -542,6 +627,121 @@ def textual(rel: str) -> bool:
     return is_text(rel) or rel.lower().endswith((".py", ".gs"))
 
 
+# ---------------------------------------------------------------- the organization's connectors stay home (2026-10-29)
+# The engine ships no CRM (or any other connector): an organization's settings files carry entries for its own
+# connectors (a sync job, a connection row, a hook, an exec kind). core_sync.json -> connector_terms names them; an
+# export drops every JSON entry that mentions one, so a new organization's starter config has none.
+# Catalog and onboarding knowledge (how a service connects, what to ask) is reference, not a connector, and stays.
+CONNECTOR_TERMS = None
+# the engine's own .gitignore (an organization's folder keeps its own; the template never carries it, 2026-10-30)
+ENGINE_GITIGNORE = ("__pycache__/\n*.pyc\n*.log\n*.jsonl\n*.local.json\nassistant/data/\nassistant/out/\nassistant/learnings/\n"
+                    "assistant/agent/state/\n.semantic_store/\ndist/\n")
+CONNECTOR_KEEP = ("assistant/catalog/", "assistant/onboarding/")
+# the fields that say what an entry IS (a job's name and command, a connection's id, a hook's matcher, a kind)
+IDENTITY_KEYS = {"id", "name", "key", "kind", "source", "site", "server", "matcher", "command", "cmd", "args", "script",
+                 "path", "module", "type_id", "op"}
+
+
+def connector_terms() -> list:
+    global CONNECTOR_TERMS
+    if CONNECTOR_TERMS is None:
+        try:
+            d = json.loads((HERE / "core_sync.json").read_text(encoding="utf-8-sig"))
+            CONNECTOR_TERMS = [str(t).lower() for t in (d.get("connector_terms") or []) if str(t).strip()]
+        except (OSError, ValueError, AttributeError):
+            CONNECTOR_TERMS = []
+    return CONNECTOR_TERMS
+
+
+def _mentions(obj, terms: list) -> bool:
+    s = json.dumps(obj, ensure_ascii=False).lower()
+    return any(t in s for t in terms)
+
+
+def _drop_alternatives(s: str, terms: list) -> str:
+    """A regex alternation ("adobe|...|<connector>|typeform") without the alternatives that name the connector; ''
+    when s is not such a pattern (prose), or when nothing would be left. Only plain alternatives go (no brackets
+    in them), so the pattern's own groups stay balanced."""
+    if "|" not in s:
+        return ""
+    parts = s.split("|")
+    if any(_mentions(p, terms) and re.search(r"[()\[\]]", p) for p in parts):
+        return ""
+    kept = [p for p in parts if not _mentions(p, terms)]
+    return "|".join(kept) if kept and len(kept) < len(parts) else ""
+
+
+def _strip(obj, terms: list):
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if any(t in str(k).lower() for t in terms):
+                continue
+            if isinstance(v, (dict, list)):
+                out[k] = _strip(v, terms)
+            elif isinstance(v, str) and _mentions(v, terms):
+                kept = _drop_alternatives(v, terms)       # a pattern keeps its other alternatives; prose leaves
+                if kept:
+                    out[k] = kept
+            else:
+                out[k] = v
+        return out
+    if isinstance(obj, list):
+        out = []
+        for v in obj:
+            if isinstance(v, dict):
+                # an entry that IS the connector's (its own name, id, command or matcher says so) leaves whole;
+                # an entry that only lists a connector value among others keeps the rest
+                if any(str(k).lower() in IDENTITY_KEYS and isinstance(x, (str, list)) and _mentions(x, terms) for k, x in v.items()):
+                    continue
+                out.append(_strip(v, terms))
+            elif isinstance(v, list):
+                out.append(_strip(v, terms))
+            elif not _mentions(v, terms):
+                out.append(v)
+        return out
+    return obj
+
+
+CONNECTOR_WORDS = None
+
+
+def connector_words() -> list:
+    """core_sync.json -> connector_words {word: neutral}: how prose that named the organization's connector reads in
+    the engine ("the CRM"). Longest first."""
+    global CONNECTOR_WORDS
+    if CONNECTOR_WORDS is None:
+        try:
+            d = json.loads((HERE / "core_sync.json").read_text(encoding="utf-8-sig"))
+            m = d.get("connector_words") or {}
+            CONNECTOR_WORDS = [(re.compile(r"(?<![A-Za-z0-9])" + re.escape(str(k)) + r"(?![A-Za-z0-9])"), str(v))     # case as written
+                               for k, v in sorted(m.items(), key=lambda kv: len(kv[0]), reverse=True)]
+        except (OSError, ValueError, AttributeError):
+            CONNECTOR_WORDS = []
+    return CONNECTOR_WORDS
+
+
+def neutral_connector_words(rel: str, text: str) -> str:
+    if rel.replace("\\", "/").startswith(CONNECTOR_KEEP):
+        return text
+    for rx, rep in connector_words():
+        text = rx.sub(rep, text)
+    return text
+
+
+def strip_connector_json(rel: str, text: str) -> str:
+    """A shipped JSON file without the organization's own connector entries (connector_terms); unchanged when none."""
+    terms = connector_terms()
+    rel = rel.replace("\\", "/")
+    if not terms or rel.startswith(CONNECTOR_KEEP) or not any(t in text.lower() for t in terms):
+        return text
+    try:
+        d = json.loads(text)
+    except ValueError:
+        return text
+    return json.dumps(_strip(d, terms), indent=1, ensure_ascii=False) + "\n"
+
+
 def export_text(rel: str, text: str, root: Path = VAULT) -> str:
     """The template form of one text file: every prose line templated and scrubbed readably, every working line
     scrubbed with the code-safe tokens (a .py keeps its paths out of to_template: a Windows path written back into
@@ -549,6 +749,9 @@ def export_text(rel: str, text: str, root: Path = VAULT) -> str:
     if not textual(rel):
         return text
     low = rel.lower()
+    if low.endswith(".json"):
+        text = strip_connector_json(rel, text)
+    text = neutral_connector_words(rel, text)
     work = working_lines(rel, text)
     py_like = low.endswith((".py", ".gs"))
     out = []
@@ -632,8 +835,7 @@ def export(dst: Path, src_root: Path = VAULT, with_tests: bool = True, git: bool
            "pack_prefixes": list(PACK_PREFIXES), "pack_files": sorted(PACK_FILES), "files": files}
     (dst / MANIFEST_NAME).write_text(json.dumps(man, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     (dst / "README.md").write_text(_engine_readme(man), encoding="utf-8")
-    (dst / ".gitignore").write_text("__pycache__/\n*.pyc\n*.log\n*.jsonl\n*.local.json\nassistant/data/\nassistant/out/\nassistant/learnings/\n"
-                                    "assistant/agent/state/\n.semantic_store/\n", encoding="utf-8")
+    (dst / ".gitignore").write_text(ENGINE_GITIGNORE, encoding="utf-8")
     if git:
         for cmd in (["git", "init", "-q"], ["git", "add", "-A"], ["git", "-c", "user.name=sage-core", "-c", "user.email=sage-core@example.invalid",
                                                                   "commit", "-q", "-m", f"sage-core {man['engine']['version']}"]):

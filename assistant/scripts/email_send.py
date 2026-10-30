@@ -15,7 +15,7 @@ and exit 1. A reply (--in-reply-to, or a "Re:" subject found in the mailbox) car
 References plus its Message-ID and the subject "Re: <parent subject>"; after sending, the sent
 message's Gmail thread id is read back and compared to the parent's, adding THREAD=ok,
 THREAD_MISMATCH=... or THREAD_UNVERIFIED=... to the SENT=1 line. Identity guard: --from must be one of the accounts in assistant/config.json
-and can never be a example.com address.
+and can never be a other-business.invalid address.
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ ensure_venv()
 
 from alib import config, secret  # noqa: E402
 
-FORBIDDEN_DOMAINS = ("example.com",)
+FORBIDDEN_DOMAINS = ("other-business.invalid",)
 _STAGE = {"at": "setup"}   # how far main() got, for the last-resort handler at the bottom
 
 

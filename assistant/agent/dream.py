@@ -279,7 +279,7 @@ def apply(out: dict, packet: dict, dry: bool = False) -> list:
 
 ASKS = core.DATA / "dream_asks.json"
 ASK_CARDS_PER_DAY = 1        # the roast's cap: a dream question is one card a day, the rest fold into its details
-_WEDDING = re.compile(r"wedding|shoot|couple|booking|booked|honeybook|client|venue|inquir", re.I)
+_WEDDING = re.compile(r"wedding|shoot|couple|booking|booked|client|venue|inquir", re.I)
 
 
 def _log_owner_ask(by, n, txt, ev):

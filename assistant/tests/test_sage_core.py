@@ -1,6 +1,6 @@
 """sage-core (2026-10-27): the engine / pack split, the supervisor, onboarding and the habit ledger, end to end on a fixture.
 
-1. engine.export writes a clean engine (no niche files, no HoneyBook scripts, no host or folder of this organization).
+1. engine.export writes a clean engine (no niche files, no connector of the organization's own, no host or folder of it).
 2. new_org.py run FROM THAT EXPORT stands up "Acme Bakery": org.json carries the machine keys, shadow is on, buttons
    are off, module jobs and jobs whose script did not ship are disabled, the SOP map holds only the generic inquiry
    follow-through, the niche hook is gone from .claude/settings.json, the manifest is written.
@@ -32,6 +32,7 @@ OUT = TMP / "acme-os"
 FAILS = []
 sys.path.insert(0, str(ROOT))
 import engine  # noqa: E402
+TEMPLATE = engine.is_template(VAULT)                         # the exported engine: its organization is the placeholder
 
 
 def check(name, cond, extra=""):
@@ -54,9 +55,16 @@ def run(args, cwd=None, env_extra=None, timeout=180, py=None):
 man = engine.export(ENGINE, src_root=VAULT, with_tests=True)
 files = man["files"]
 check("export writes a manifest with the engine's files", len(files) > 250 and (ENGINE / "engine_manifest.json").exists() and (ENGINE / "README.md").exists(), str(len(files)))
-check("no HoneyBook scripts, no niche skills, no wedding templates in the engine",
-      not any(f.startswith(("scripts/honeybook/", "assistant/scripts/hb_", ".claude/skills/wedding-edit", ".claude/skills/card-ingest", "scripts/card_ingest", "Schema/templates/couple")) for f in files)
-      and "assistant/scripts/collection_autosend.py" not in files and "Schema/mistakes.md" not in files, [f for f in files if "honeybook" in f or "hb_" in f][:3])
+# what this organization marked its own (core_sync.json niche_paths) and its connector's words (connector_terms)
+_cs_path = VAULT / "assistant" / "core_sync.json"
+_cs = json.loads(_cs_path.read_text(encoding="utf-8-sig")) if _cs_path.exists() else {}
+_niche = [str(x).replace(chr(92), "/").rstrip("/") for x in _cs.get("niche_paths") or []]
+_terms = [str(x).lower() for x in _cs.get("connector_terms") or [] if str(x).strip()]
+check("no connector or niche file of the organization's own, no niche skills, no wedding templates in the engine",
+      not any(f == n or f.startswith(n + "/") for f in files for n in _niche)
+      and not any(x in f.lower() for f in files if not f.startswith(("assistant/catalog/", "assistant/onboarding/")) for x in _terms)   # catalog: how any CRM connects
+      and not any(f.startswith((".claude/skills/wedding-edit", ".claude/skills/card-ingest", "scripts/card_ingest", "Schema/templates/couple")) for f in files)
+      and "Schema/mistakes.md" not in files, [f for f in files if any(x in f.lower() for x in _terms)][:3])
 check("the agent, the doer, the builder, dreaming, cards, the executor, the spine, Mission Control and the wiki tooling ship",
       all(f in files for f in ("assistant/agent/brain.py", "assistant/agent/bridge.py", "assistant/agent/builder.py", "assistant/agent/dream.py", "assistant/agent/capability.py",
                                "assistant/agent/voice.py", "assistant/doer/doer.py", "assistant/doer/notes.py", "assistant/doer/report.py", "assistant/agent/receipts.py",
@@ -68,9 +76,9 @@ leak = []
 for rel in files:
     if engine.is_text(rel):
         t = (ENGINE / rel).read_text(encoding="utf-8", errors="replace")
-        if str(VAULT) in t or str(VAULT).replace("\\", "/") in t or ("tailnet" in t and not rel.endswith(".py")):
+        if str(VAULT) in t or str(VAULT).replace("\\", "/") in t or (not TEMPLATE and "tailnet" in t and not rel.endswith(".py")):
             leak.append(rel)          # code keeps its fallback literals and comments; docs, wrappers and templates do not
-        if rel.endswith((".md", ".ps1", ".xml")) and re.search(r"example|owner1", t, re.I):
+        if not TEMPLATE and rel.endswith((".md", ".ps1", ".xml")) and re.search(r"example|owner1", t, re.I):
             leak.append(rel + " (name)")
 check("no folder, host or owner of this organization in the engine's text files", not leak, "; ".join(leak[:6]))
 sids = [rel for rel in files if rel.endswith(".xml") and re.search(r"S-1-5-21(?:-\d+){3,4}", (ENGINE / rel).read_text(encoding="utf-8", errors="replace"))]
@@ -87,20 +95,23 @@ check("org.json carries the machine keys (keyring service, python, google_home, 
       org.get("keyring_service") == "acme-bakery-assistant" and org.get("google_home") == "~/.sage/acme-bakery/google" and org.get("lanes") == ["business", "personal"]
       and org.get("lifecycle") == "service-studio" and org.get("send_identities") == ["ana@acme.test", "example@acme.test"], org)
 cfg = json.loads((OUT / "assistant" / "config.json").read_text(encoding="utf-8"))
-check("config: shadow on, buttons off, cards to the owners' keys, texts held, no HoneyBook / meetings / projects / editor sections",
+check("config: shadow on, buttons off, cards to the owners' keys, texts held, no connector / meetings / projects / editor sections",
       cfg["shadow"]["on"] is True and cfg["push"]["buttons"] is False and cfg["push"]["cards_to"] == ["ana", "example"] and cfg["texts"]["enabled"] is False
-      and not any(k in cfg for k in ("honeybook_team", "meetings", "projects", "editor", "leads")) and cfg["lanes"] == ["business", "personal"], {k: cfg.get(k) for k in ("shadow", "push", "lanes")})
+      and not any(k in cfg for k in ("meetings", "projects", "editor", "leads")) and not any(x in k.lower() for k in cfg for x in _terms) and cfg["lanes"] == ["business", "personal"], {k: cfg.get(k) for k in ("shadow", "push", "lanes")})
 sj = json.loads((OUT / "assistant" / "spine_jobs.json").read_text(encoding="utf-8"))
 jobs = {j["name"]: j for j in sj["jobs"]}
-check("module jobs (money) start off; a job whose script did not ship (hb-snapshot) is off with the reason",
-      jobs["money-pull"]["enabled"] is False and jobs["money-pull"].get("module") == "money" and jobs["hb-snapshot"]["enabled"] is False and jobs["hb-snapshot"].get("missing")
-      and jobs["cards-sweep"].get("enabled", True) is True, {k: jobs[k] for k in ("money-pull", "hb-snapshot")})
+_script = lambda j: next((str(x) for x in j.get("cmd") or [] if str(x).endswith((".py", ".ps1"))), "")
+_gone = [k for k, j in jobs.items() if _script(j) and not (OUT / _script(j)).exists()]
+check("module jobs (money) start off; a job whose script did not ship is off with the reason (the engine ships no connector job)",
+      jobs["money-pull"]["enabled"] is False and jobs["money-pull"].get("module") == "money"
+      and all(jobs[k].get("enabled") is False and jobs[k].get("missing") for k in _gone)
+      and jobs["cards-sweep"].get("enabled", True) is True, {k: jobs[k] for k in ["money-pull"] + _gone[:3]})
 sop = json.loads((OUT / "assistant" / "data" / "sop_map.json").read_text(encoding="utf-8"))
 check("the SOP map holds only the generic inquiry follow-through, on the business lane", list(sop["sops"]) == ["inquiry"] and sop["sops"]["inquiry"]["lane"] == "business", list(sop["sops"]))
 st = json.loads((OUT / ".claude" / "settings.json").read_text(encoding="utf-8"))
 hooks = json.dumps(st.get("hooks"))
-check("the niche HoneyBook gate hook is gone from .claude/settings.json; the wiki hooks stay and point at the new root",
-      "honeybook_gate" not in hooks and "wiki_tool.py" in hooks and str(OUT).replace("\\", "\\\\") in hooks, hooks[:300])
+check("the organization's connector gate hook is gone from .claude/settings.json; the wiki hooks stay and point at the new root",
+      not any(x in hooks.lower() for x in _terms) and "wiki_tool.py" in hooks and str(OUT).replace("\\", "\\\\") in hooks, hooks[:300])
 check("Context, Memory, Schema/mistakes.md and the lane wiki folders exist",
       (OUT / "Context" / "Soul.md").exists() and (OUT / "Schema" / "mistakes.md").exists() and (OUT / "Wiki" / "Business").exists() and (OUT / "Memory" / "about.md").exists())
 man2 = json.loads((OUT / "engine_manifest.json").read_text(encoding="utf-8"))
@@ -126,8 +137,8 @@ rc3, out3 = run(["assistant/sage.py", "resume"])
 check("paused: only the deadman and Mission Control fire", rc2 == 0 and "deadman" in out2 and "spine" not in out2 and rc3 == 0, out2[-200:])
 rc, out = run(["assistant/catalog.py", "match", "stripe"])
 check("the catalog answers a tool by name with its tier", rc == 0 and "tier 1" in out and "Stripe" in out, out[-200:])
-rc, out = run(["assistant/catalog.py", "match", "honey book"])
-check("HoneyBook is a catalog choice, not engine code: tier 1 connector, no script path", rc == 0 and "mcp" in out and ".py" not in out, out[-300:])
+rc, out = run(["assistant/catalog.py", "match", "hubspot"])
+check("a CRM is a catalog choice, not engine code: tier 1 connector, no script path", rc == 0 and "tier 1" in out and ".py" not in out, out[-300:])
 ans = TMP / "disc.json"
 ans.write_text(json.dumps({"lead_intake": "website form", "crm": "HubSpot", "calendar": "Google Calendar", "mail": "Gmail", "text_phone": "iMessage",
                            "payments_invoicing": "Stripe", "contracts_esign": "none", "scheduling_booking": "Calendly", "file_storage": "Google Drive",
@@ -163,14 +174,14 @@ check("the blueprint is rendered from the answers as a wiki note", rc == 0 and b
 # ---------------------------------------------------------------- 3b. the wiki stack in the new tree (2026-10-29): generic schema, lint-clean blueprint, chat notes land
 sch = (OUT / "Schema" / "schema.md").read_text(encoding="utf-8")
 _types = lambda t: set((re.search(r"```types\n(.*?)```", t, re.S) or re.search(r"(x)(x)", "xx")).group(1).split())
-own_types = _types((VAULT / "Schema" / "schema.md").read_text(encoding="utf-8")) - _types((ROOT / "templates" / "Schema" / "schema.md").read_text(encoding="utf-8"))
+own_types = (_types((VAULT / "Schema" / "schema.md").read_text(encoding="utf-8")) if (VAULT / "Schema" / "schema.md").is_file() else set()) - _types((ROOT / "templates" / "Schema" / "schema.md").read_text(encoding="utf-8"))
 try:
     NICHE = [str(w).lower() for w in json.loads((ROOT / "core_sync.json").read_text(encoding="utf-8-sig")).get("niche_terms") or []]
 except (OSError, ValueError):
     NICHE = []
 gen_tpl = {p.name for p in (ROOT / "templates" / "Schema" / "templates").glob("*.md")}
 check("the new tree has the GENERIC schema and templates, not this organization's (none of its own types or niche words; only the generic templates; a routing block)",
-      "```routing" in sch and own_types and not (own_types & _types(sch)) and not any(w in sch.lower() for w in NICHE)
+      "```routing" in sch and (TEMPLATE or own_types) and not (own_types & _types(sch)) and not any(w in sch.lower() for w in NICHE)
       and {p.name for p in (OUT / "Schema" / "templates").glob("*.md")} == gen_tpl and "client-profile.md" in gen_tpl and "onboarding" in sch,
       f"own={sorted(own_types)[:4]} tpl={sorted(gen_tpl)}")
 rc, out = run(["scripts/wiki_tool.py", "lint"])

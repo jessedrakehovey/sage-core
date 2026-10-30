@@ -462,7 +462,7 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
         blanks = draft_blanks(q)
         if blanks:
             # a draft with an unfilled blank has no one-tap send: the only way out is the edit box
-            # (example, 2026-10-18: the draft went out with both [the owner: ...] blanks in it)
+            # (Marisa, 2026-10-18: the draft went out with both [the owner: ...] blanks in it)
             appr = str(ex.get("approve_label") or "Approve").strip().lower()
             opts = [o for o in opts if str(o["label"]).strip().lower() != appr]
         rec = [i for i, o in enumerate(opts) if _RECOMMENDED.search(str(o["label"]))] if not blanks else []
@@ -505,7 +505,7 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
         btns = [_button("Undo", "card_undo", {"qid": qid})] if buttons_on() else []
         if a.get("ticket") and kind == "imessage_send":
             # an https link (Chat allows no custom schemes) that Mission Control bounces to the
-            # shortcuts:// URL; Safari then launches "the organization" on the phone. Nothing
+            # shortcuts:// URL; Safari then launches "example-org Send Texts" on the phone. Nothing
             # sends unless the drain already put this approved text in that phone's outbox.
             btns.append({"text": "Send now from phone", "onClick": {"openLink": {"url": f"{MC_URL}/phone/run"}}})
         if btns:
@@ -714,7 +714,7 @@ def push_card(card: dict) -> dict:
             where = [(who, sp)]
         elif "/threads/" in str(card.get("chat_thread") or "") and \
                 str(card["chat_thread"]).split("/threads/")[0] not in [s for _k, s in where]:
-            # asked for in a thread of another space (the team space, 2026-10-26: the example card handed on
+            # asked for in a thread of another space (the team space, 2026-10-26: the Odette card handed on
             # after a lint refusal landed in the home space): the thread's own space, nowhere else
             sp = str(card["chat_thread"]).split("/threads/")[0]
             where = [(next((k for k, v in _spaces().items() if v == sp), "space"), sp)]
@@ -865,7 +865,7 @@ _STATE_ICON = {"answered": "✅", "consumed": "✅", "resolved": "✅", "expired
 
 
 def answered_icon(a: dict | None) -> str:
-    """The mark on a tapped card. A green check only means it really happened (the owner 2026-10-24, example:
+    """The mark on a tapped card. A green check only means it really happened (the owner 2026-10-24, Delia:
     "I got a green checkmark, but it also says unable to process your request. I need confirmation for
     these types of things that they actually send"): a tap that queued an action shows ⏳ until the
     drain posts its evidence line (push_result), ❌ when the action was refused or failed, ✅ for a

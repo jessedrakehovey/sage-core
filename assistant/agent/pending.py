@@ -18,7 +18,7 @@ Who carries what:
   * rule     -> "Add the rule" adds it as owner-approved / "Drop it"
   * retire   -> "Retire it" / "Keep it"
   * ask      -> "Have Sage do it" queues an operator ticket (outward steps still come back as cards), or a
-                doer job for HoneyBook Scheduler hosts, which no connector covers, or a read-only doer look
+                doer job for CRM Scheduler hosts, which no connector covers, or a read-only doer look
                 for a check on a sheet or a site / "Drop it"
   * patch    -> "Build it" files a build request the builder may build with the owner's OK
                 (hard paths never) / "Drop it"
@@ -290,7 +290,7 @@ def _lane(e: dict) -> str:
     t = e["text"]
     if re.search(r"(?i)\b(bank|plaid|simplefin|relay|tax|money|price|quote)\b", t):
         return "money" if not re.search(r"(?i)\b(quote|price)\b", t) else "wedding"
-    if re.search(r"(?i)\b(lead|couple|honeybook|wedding|client|shoot|film|booking|booked)\b", t):
+    if re.search(r"(?i)\b(lead|couple|wedding|client|shoot|film|booking|booked)\b", t):
         return "wedding"
     return "personal"
 
@@ -411,10 +411,10 @@ def answer(key: str, option: str, text: str = "", by: str = "owner") -> dict:
     return {"ok": True, "status": opt}
 
 
-# HoneyBook Scheduler hosts: no connector covers them, so the operator refused the tap as "a connector
+# CRM Scheduler hosts: no connector covers them, so the operator refused the tap as "a connector
 # job" (a team member on the Vision Meeting, 2026-10-20). An ask about them goes straight to the doer's browser.
 _SCHEDULER_HOSTS = re.compile(r"(?i)\b(co-?host|add host|multiple hosts|scheduler hosts?|session hosts?)\b")
-_HOST_STEPS = ("In the HoneyBook Scheduler (Tools > Scheduler > the session type > Attendees & hosts > Multiple hosts): "
+_HOST_STEPS = ("In the CRM Scheduler (Tools > Scheduler > the session type > Attendees & hosts > Multiple hosts): "
                "note the Preview slot count, open the Add host dropdown, pick the person, save the session, then report "
                "the Preview slot count before and after.")
 # A check that needs eyes on a sheet or a site (cells A1-A4 on the pricing sheet, 2026-10-19): the operator

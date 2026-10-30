@@ -64,14 +64,12 @@
   },
   "crm_stage": {
    "enabled": true,
-   "snapshot": "dashboard/data/honeybook.json",
    "event_grace_days": 2,
    "post_event_min_order": 13,
    "manual": true,
    "max_days_past": 120,
    "booked_stage": "Proposal Signed",
-   "post_event_stage": "File Management",
-   "_fix_doc": "2026-10-18: a lagging stage is offered as a fix on the weekly card (hb_set_stage through the connector, read back). booked_stage = where a client still on a lead stage goes; post_event_stage = where a booked couple goes once the wedding is past. Stage NAMES as HoneyBook shows them."
+   "post_event_stage": "File Management"
   },
   "armed_reminder": {
    "enabled": true,
@@ -124,7 +122,6 @@
   ]
  },
  "scheduling": {
-  "_doc": "Ruling 12: Sage proposes 2-3 call slots in ONE card with the drafted message; the tap sends; when they pick one, a confirmation card and a calendar_hold card follow. Slots come from both owners' Google calendars (when connected) + the calendar file + HoneyBook meetings + our holds + times already offered. windows are local wall-clock per weekday; a weekday missing here is never offered.",
   "enabled": true,
   "google": true,
   "windows": {
@@ -168,7 +165,6 @@
    "ceremony",
    "rehearsal"
   ],
-  "hb_snapshot": "dashboard/data/honeybook.json",
   "hold_title": "Call: {name}",
   "ask_words": "\\b(hop on a (?:quick )?call|set ?up a (?:quick )?(?:call|meeting|time|zoom)|schedule a (?:quick )?(?:call|meeting|zoom|time|chat)|(?:quick|phone|video|intro|discovery) call|chat on the phone|talk (?:on|over) the phone|are you free to (?:talk|chat|call)|time to (?:talk|chat|connect)|a call (?:this|next) week|consultation|facetime|zoom (?:call|meeting)|when are you (?:free|available)|what times? works? for you|jump on a call|get on a call|give (?:you|me) a call)\\b",
   "templates": {
@@ -179,11 +175,11 @@
    "personal_email_subject": "A quick call",
    "email_body": "Hi {first},\n\nWould love to talk through your day with you. I have a few openings for a call:\n\n{slots_lines}\n\nDoes one of those work? If not, send me a couple of times that do.\n\nowner1\nexample-org",
    "personal_email_body": "Hi {first},\n\nI can do {slots} for a call. Which works for you?\n\nowner1",
-   "honeybook_body": "Hi {first}!\n\nWould love to talk through your day with you. I have a few openings for a call:\n\n{slots_lines}\n\nDoes one of those work? If not, send me a couple of times that do.\n\nowner1",
+   "crm_body": "Hi {first}!\n\nWould love to talk through your day with you. I have a few openings for a call:\n\n{slots_lines}\n\nDoes one of those work? If not, send me a couple of times that do.\n\nowner1",
    "confirm_lead_text": "Perfect, {slot} it is. Talk to you then!",
    "confirm_personal_text": "{slot} works. Talk then.",
    "confirm_email_body": "Hi {first},\n\n{slot} is on my calendar. Talk to you then!\n\nowner1\nexample-org",
-   "confirm_honeybook_body": "Hi {first},\n\n{slot} is on my calendar. Talk to you then!\n\nowner1"
+   "confirm_crm_body": "Hi {first},\n\n{slot} is on my calendar. Talk to you then!\n\nowner1"
   }
  },
  "probation": {
@@ -196,19 +192,15 @@
     "title": "internal record writes",
     "exec_kinds": [
      "tracking_fix",
-     "hb_note",
-     "hb_project_update",
      "calendar_hold",
      "local"
-    ],
-    "_what": "the weekly record check, mined dates, calendar holds, HoneyBook notes and field updates: nothing a person outside the household sees"
+    ]
    },
    "routine_client_send": {
     "title": "routine client sends",
     "exec_kinds": [
      "email_send",
-     "imessage_send",
-     "hb_message"
+     "imessage_send"
     ],
     "followup_steps": [
      "wedding-lifecycle/thank-you",
@@ -312,11 +304,7 @@
   "approve_min": 0.9,
   "window_days": 90,
   "classes": [
-   "hb_add_participant",
-   "hb_set_stage",
-   "sheet_set",
-   "hb_note",
-   "hb_project_update"
+   "sheet_set"
   ]
  }
 }

@@ -26,7 +26,7 @@ os.environ["AGENT_STATE"] = str(TMP / "agent_state")
 os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
-os.environ["HB_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
+os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "agent"))
 import core  # noqa: E402
@@ -73,25 +73,25 @@ for line, want in (
     ("Make card", ""),
     ("Please reply to them asap", ""),
     ("Where's Victor from?", ""),
-    ("[tapped \"Send (Recommended)\" on the card \"Reply to example\"]", ""),
+    ("[tapped \"Send (Recommended)\" on the card \"Reply to Ambrose\"]", ""),
     ("How much are credits or membership?", ""),
 ):
     got = correction.kind(line)
     ok(got == want, f"kind({line[:50]!r}) = {got!r} (want {want!r})")
 
 # ---------------------------------------------------------------- 2. the original ask: this thread first, then the conversation
-convo, th = "spaces/HOME", "spaces/HOME/threads/example"
-core.say(convo, "owner1", "Provide the revised card for example with all five prices", channel="gchat", meta={"thread": th})
+convo, th = "spaces/HOME", "spaces/HOME/threads/corwin"
+core.say(convo, "owner1", "Provide the revised card for Corwin with all five prices", channel="gchat", meta={"thread": th})
 core.say(convo, NAME, "Done, the card is below.", channel="gchat", meta={"thread": th})
 core.say(convo, "owner1", "What's the weather for Saturday's shoot?", channel="gchat", meta={"thread": ""})
 core.say(convo, NAME, "Clear, high of 71.", channel="gchat", meta={"thread": ""})
-core.say(convo, "owner1", "[tapped \"Send (Recommended)\" on the card \"Text to example\"]", channel="gchat", meta={"thread": th})
+core.say(convo, "owner1", "[tapped \"Send (Recommended)\" on the card \"Text to Corwin\"]", channel="gchat", meta={"thread": th})
 a = correction.original_ask(convo, th, owner1)
 ok(a.get("text", "").startswith("Provide the revised card"), "in a thread the last real ask of that thread wins (a tap is not an ask)")
 a2 = correction.original_ask(convo, "", owner1)
 ok(a2.get("text", "").startswith("What's the weather"), "top level: the last real ask in the conversation")
-ok(correction.expected_deed("Provide the revised card for example with all five prices") == "" and
-   correction.expected_deed("Text example that the $750 flat covers 8 hours") == "task" and
+ok(correction.expected_deed("Provide the revised card for Corwin with all five prices") == "" and
+   correction.expected_deed("Text Corwin that the $750 flat covers 8 hours") == "task" and
    correction.expected_deed("Upload the 2022 taxes folder into Google Drive") == "do" and
    correction.expected_deed("What's the weather for Saturday?") == "", "expected deed: a message -> task, work somewhere -> do, a question -> none")
 ok(correction.apology_only("You're right, and I'm sorry. My side showed the card as posted, but I can't see why.", {}), "an apology with nothing put forward")
@@ -113,8 +113,8 @@ def fake(prompt, resume="", model="", timeout=600):
 
 brain._run_claude = fake
 dm = "dm:owner1"
-msg = {"channel": "local", "person": owner1, "text": "Text example that the $750 flat covers the first 8 hours", "convo": dm, "thread": "", "direct": True}
-replies[:] = ["Done, the card is below.\nSUGGEST {\"task\": {\"text\": \"Text example: the $750 flat covers the first 8 hours\", \"lane\": \"wedding\"}}"]
+msg = {"channel": "local", "person": owner1, "text": "Text Corwin that the $750 flat covers the first 8 hours", "convo": dm, "thread": "", "direct": True}
+replies[:] = ["Done, the card is below.\nSUGGEST {\"task\": {\"text\": \"Text Corwin: the $750 flat covers the first 8 hours\", \"lane\": \"wedding\"}}"]
 bridge.handle(dict(msg))
 ok(len(calls) == 1 and any(a.get("kind") == "task" for a in actions.LAST_APPLIED), "the ask puts a task forward")
 n_before = len(calls)
@@ -122,7 +122,7 @@ replies[:] = ["You're right, and I'm sorry. My side showed the card as posted, b
               "Sorry again, I really can't tell what happened to it."]
 bridge.handle({**msg, "text": "You told me the card is below, but you never sent one"})
 ok(len(calls) == n_before + 2, f"an apology with nothing done is re-run once: {len(calls) - n_before} turns")
-ok("CORRECTION" in calls[-2] and "Text example that the $750 flat" in calls[-2], "the first turn carried the CORRECTION block with the original ask")
+ok("CORRECTION" in calls[-2] and "Text Corwin that the $750 flat" in calls[-2], "the first turn carried the CORRECTION block with the original ask")
 ok("re-run" in calls[-1] and "was not sent" in calls[-1], "the re-run names the apology as what not to do")
 ok(any(a.get("kind") == "task" for a in actions.LAST_APPLIED), "still nothing put forward: the task is queued by code from the original ask")
 out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"]
@@ -134,7 +134,7 @@ ok(len(core.rows(bridge.OUTBOX)) == len(out) + 0 and sum(1 for r in out if "sorr
 
 # the brain does it on the first go: no re-run, nothing forced
 n_before = len(calls)
-replies[:] = ["Made it again, the card is below.\nSUGGEST {\"task\": {\"text\": \"Again, for example: the $750 flat covers the first 8 hours\", \"lane\": \"wedding\"}}"]
+replies[:] = ["Made it again, the card is below.\nSUGGEST {\"task\": {\"text\": \"Again, for Corwin: the $750 flat covers the first 8 hours\", \"lane\": \"wedding\"}}"]
 bridge.handle({**msg, "text": "Try again"})
 rows = correction.recent(1)
 ok(len(calls) == n_before + 1 and rows[-1]["kind"] == "redo" and rows[-1]["forced"] == "" and not rows[-1]["rerun"] and "task" in rows[-1]["applied"],
@@ -157,12 +157,12 @@ bridge.handle({**msg, "text": "No, Diane texted us and paired us with them"})
 ok(len(calls) == n_before + 1 and "CORRECTION" not in calls[-1] and len(correction.recent(1)) == n_rows, "a fact correction is a normal turn")
 
 # ---------------------------------------------------------------- 3b. "where is the card" in a thread the card already landed in
-# 2026-10-18 16:04-16:08, the example text: the card posted in the ask's thread two minutes after the reply, the owner tapped Send
+# 2026-10-18 16:04-16:08, the Hollis text: the card posted in the ask's thread two minutes after the reply, the owner tapped Send
 # the same minute he asked "Where is the card", and the reply said it "closed unsent" and made a second one.
 import cards  # noqa: E402
 TH = "spaces/S/threads/JER1"
-core.say(dm, "owner1", "Respond to example's text with something that would be very difficult for a human to type", channel="gchat", meta={"thread": TH})
-r = cards.post([{"question": "example texted: \"6 : 4 5\".\n[TEXT PREVIEW] To +18055550142:\ngot it, see you at 6:45 (upside down)", "header": "Text reply: example",
+core.say(dm, "owner1", "Respond to Hollis's text with something that would be very difficult for a human to type", channel="gchat", meta={"thread": TH})
+r = cards.post([{"question": "Hollis texted: \"6 : 4 5\".\n[TEXT PREVIEW] To +18055550142:\ngot it, see you at 6:45 (upside down)", "header": "Text reply: Hollis",
                  "lane": "personal", "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}],
                  "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)",
                           "payload": {"account": "owner1-iphone", "to": "+18055550142", "body": "got it, see you at 6:45"}}}],
@@ -260,7 +260,10 @@ for p in (ROOT / "agent" / "prompt.md", ROOT / "agent" / "templates" / "prompt.g
     P = p.read_text(encoding="utf-8")
     ok("is the ask again" in P and "three words at most" in P and "CORRECTION" in P, f"{p.name} carries the correction rule")
 src = (ROOT / "agent" / "correction.py").read_text(encoding="utf-8").lower()
-for word in ("example", "owner6", "honeybook", "max5x"):
+_org = json.loads((ROOT / "org.json").read_text(encoding="utf-8-sig")).get("name") or ""
+_ppl = list((json.loads((ROOT / "agent" / "people.json").read_text(encoding="utf-8-sig")).get("users") or {}).values())[1:]
+_words = {w.lower() for w in [_org.split(" ")[0]] + [str(u.get("name") or "").split(" ")[0] for u in _ppl] if len(w) >= 4}
+for word in sorted(_words | {"max5x"}):
     ok(word not in src, f"correction.py carries no organization word: {word}")
 
 print(f"ALL {N} OK")

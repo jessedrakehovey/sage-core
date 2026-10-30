@@ -8,7 +8,7 @@
   "phone_threads": true,
   "tickets": true,
   "chat": false,
-  "honeybook_messages": true
+  "crm_messages": true
  },
  "people": {
   "_doc": "A date beside one of these words, said by a couple / planner / vendor / family / friend / owner, is a commitment worth a calendar hold. The word may sit in the same sentence or the one before it. A lead's wedding date is never a hold (an inquiry is not a booking): lead_wedding_day sentences from a lead are skipped unless they also name a lead_meeting word, and inquiry_new tickets are not mined at all. A hold is only for the owners' own plans (2026-10-28): a message matching third_party_message (a prayer request) is about someone else and gets no hold; a sentence matching third_party (a surgery, a hospital stay) is skipped and never lends its commitment word to the next line; a sentence with no date of its own borrows the one before only when it names a time itself.",
@@ -23,13 +23,22 @@
  },
  "money": {
   "_doc": "Senders whose dates are duties: due / renewal / action-required. mail_arm.py already arms bill-due, renewal and delivery reminders silently from mail; mining adds the shapes below from the SAME senders and proposes them on a card.",
-  "senders": "(?:bank|chase|wells ?fargo|relay(?:fi)?|mercury|amex|american express|capital ?one|discover|citi|barclays|visa|mastercard|insurance|geico|progressive|state ?farm|allstate|farmers|lemonade|irs\\.gov|irs\\b|ftb\\.ca\\.gov|franchise tax|treasury|dmv|paypal|venmo|zelle|stripe|square(?:up)?|quickbooks|intuit|turbotax|gusto|adobe|dropbox|backblaze|frame\\.io|apple\\.com|icloud|netflix|spotify|youtube|verizon|at&t|att\\.com|t-mobile|comcast|xfinity|spectrum|edison|sce\\.com|socalgas|water|billing|statements?|payments?|invoice|noreply@.*(?:bank|pay|billing)|no-reply@.*(?:bank|pay|billing)|accounts?@|collections?@|lensrentals|honeybook|musicbed|artlist|tailscale|godaddy|squarespace|namecheap|cloudflare|github)",
+  "senders": "(?:bank|chase|wells ?fargo|relay(?:fi)?|mercury|amex|american express|capital ?one|discover|citi|barclays|visa|mastercard|insurance|geico|progressive|state ?farm|allstate|farmers|lemonade|irs\\.gov|irs\\b|ftb\\.ca\\.gov|franchise tax|treasury|dmv|paypal|venmo|zelle|stripe|square(?:up)?|quickbooks|intuit|turbotax|gusto|adobe|dropbox|backblaze|frame\\.io|apple\\.com|icloud|netflix|spotify|youtube|verizon|at&t|att\\.com|t-mobile|comcast|xfinity|spectrum|edison|sce\\.com|socalgas|water|billing|statements?|payments?|invoice|noreply@.*(?:bank|pay|billing)|no-reply@.*(?:bank|pay|billing)|accounts?@|collections?@|lensrentals|musicbed|artlist|tailscale|godaddy|squarespace|namecheap|cloudflare|github)",
   "subject": "\\b(statement|invoice|payment|bill|autopay|renew\\w*|policy|premium|subscription|membership|tax|1099|w-?2|refund|balance|past due|overdue|declined|failed|action required|verify|expir\\w*|final notice|suspend\\w*|cancel\\w*)\\b",
   "extra": "\\b(action (?:required|needed)|respond by|reply by|verify (?:by|before)|confirm (?:by|before)|complete (?:by|before)|last day|final notice|final reminder|deadline|expires? (?:on|in|at)|expiring|payment (?:failed|declined|returned|unsuccessful)|card (?:was )?declined|update your (?:card|payment)|past due|overdue|will be (?:suspended|cancell?ed|disconnected|charged)|auto-?renews?|free trial ends|trial (?:ends|expires)|price (?:increase|change)|goes up on)\\b",
   "followup": {
-   "due": ["money", "bill-due"],
-   "renewal": ["money", "renewal"],
-   "action": ["personal", "reminder"]
+   "due": [
+    "money",
+    "bill-due"
+   ],
+   "renewal": [
+    "money",
+    "renewal"
+   ],
+   "action": [
+    "personal",
+    "reminder"
+   ]
   },
   "lead_days": {
    "action": 3
@@ -51,16 +60,36 @@
  },
  "classes": {
   "_doc": "Who the sender is -> which lane the proposal lands in and who gets the card. Owners' own words (chat) go to their own lane.",
-  "lead": {"lane": "wedding"},
-  "couple": {"lane": "wedding"},
-  "vendor": {"lane": "wedding"},
-  "planner": {"lane": "wedding"},
-  "family": {"lane": "personal"},
-  "friend": {"lane": "personal"},
-  "owner6": {"lane": "owner6"},
-  "owner1": {"lane": "personal"},
-  "money": {"lane": "money"},
-  "unknown": {"lane": "personal"}
+  "lead": {
+   "lane": "wedding"
+  },
+  "couple": {
+   "lane": "wedding"
+  },
+  "vendor": {
+   "lane": "wedding"
+  },
+  "planner": {
+   "lane": "wedding"
+  },
+  "family": {
+   "lane": "personal"
+  },
+  "friend": {
+   "lane": "personal"
+  },
+  "owner6": {
+   "lane": "owner6"
+  },
+  "owner1": {
+   "lane": "personal"
+  },
+  "money": {
+   "lane": "money"
+  },
+  "unknown": {
+   "lane": "personal"
+  }
  },
  "event": {
   "duration_min": 60,

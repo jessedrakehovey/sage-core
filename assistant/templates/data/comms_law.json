@@ -1,5 +1,4 @@
 {
- "_doc": "The comms law: who gets answered how fast, per thread class (ported in shape from the property OS's scripts/comms/law.json, 2026-10-06). Read by comms_state.py (SLA + state) and the operator prompt. Hours are wall-clock. A class is picked by the thread's lane and the party: a number or address that came through the Package Finder quiz or a HoneyBook lead is a lead; a booked couple is a couple; owner's lane is her own; everything else is personal (recorded, triaged, never auto-drafted).",
  "classes": {
   "lead": {
    "sla_h": 0.25,

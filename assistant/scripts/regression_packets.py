@@ -1,6 +1,6 @@
 """regression_packets.py - fixed replays that a prompt or rule change must not make worse (WP6, 2026-10-24).
 
-scripts/evals/packets/*.json each hold one owner line that once went wrong (example's card, example's contact, example's
+scripts/evals/packets/*.json each hold one owner line that once went wrong (Corwin's card, Wren's contact, Delia's
 send), the deeds a good turn makes (`expect_deeds`: tool kinds Sage must call), phrases a good reply never contains
 (`forbid_phrases`) and, optionally, phrases it must (`require_phrases`). Two modes:
 

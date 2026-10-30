@@ -41,15 +41,15 @@ check("tracking.json loads with defaults filled", c["chase"]["max_follow_ups"] =
 
 # ------------------------------------------------------------------ drift: ledger vs editor
 ledger = {"projects": {
-    "2026-10-03_example": {"couple": "example Underhill 's Project", "wedding_date": "2026-06-20", "stage": "booked", "honeybook_status": "client"},
-    "2026-10-10_Belinda": {"couple": "belinda's Project", "wedding_date": "2026-10-10", "stage": "inquiry", "honeybook_status": "lead"},
-    "2026-10-03_Sara": {"couple": "Ellis Merriweather's Project", "wedding_date": "2026-10-03", "stage": "pre-shoot", "honeybook_status": "client"},
-    "2025-01-01_Old": {"couple": "Old Couple", "wedding_date": "2025-01-01", "stage": "booked", "honeybook_status": "client"},
+    "2026-10-03_Sloane": {"couple": "Sloane Underhill 's Project", "wedding_date": "2026-06-20", "stage": "booked", "crm_status": "client"},
+    "2026-10-10_Belinda": {"couple": "belinda's Project", "wedding_date": "2026-10-10", "stage": "inquiry", "crm_status": "lead"},
+    "2026-10-03_Sara": {"couple": "Ellis Merriweather's Project", "wedding_date": "2026-10-03", "stage": "pre-shoot", "crm_status": "client"},
+    "2025-01-01_Old": {"couple": "Old Couple", "wedding_date": "2025-01-01", "stage": "booked", "crm_status": "client"},
 }}
 d = {"enabled": True, "ledger": str(TMP / "ps.json"), "event_grace_days": 2, "post_event_stage": "ingest", "max_days_past": 120}
-fs = drift.ledger_stage(d, NOW, ledger=ledger, folders=["example_example", "_selftest"])
+fs = drift.ledger_stage(d, NOW, ledger=ledger, folders=["Sloane_Bram", "_selftest"])
 keys = {f["key"]: f for f in fs}
-check("editor project -> ledger says edit", "ledger:2026-10-03_example:edit" in keys and keys["ledger:2026-10-03_example:edit"]["fix"]["stage"] == "edit", list(keys))
+check("editor project -> ledger says edit", "ledger:2026-10-03_Sloane:edit" in keys and keys["ledger:2026-10-03_Sloane:edit"]["fix"]["stage"] == "edit", list(keys))
 check("booked couple, wedding passed -> ingest", "ledger:2026-10-03_Sara:ingest" in keys)
 check("a lead whose date passed is not ours", not any(k.startswith("ledger:2026-10-10_Belinda") for k in keys))
 check("a wedding older than max_days_past is history", not any("Old" in k for k in keys))
@@ -69,13 +69,23 @@ keys = {f["key"] for f in fs}
 check("wedding passed, HB pre-event stage -> manual finding", "crm:p1:post" in keys)
 check("client in a lead stage -> finding", "crm:p2:lead" in keys)
 check("Completed / lead / archived are not findings", not ({"crm:p3:post", "crm:p4:post", "crm:p5:post"} & keys), keys)
-check("CRM findings carry an hb_stage fix (2026-10-18: the tap moves the stage through the connector)",
-      all((f.get("fix") or {}).get("op") == "hb_stage" and (f["fix"].get("workspace_id") == f["key"].split(":")[1]) and f["fix"].get("desc") for f in fs), [f.get("fix") for f in fs])
+check("CRM findings carry a crm_stage fix (2026-10-18: the tap moves the stage through the connector)",
+      all((f.get("fix") or {}).get("op") == "crm_stage" and (f["fix"].get("thread_id") == f["key"].split(":")[1]) and f["fix"].get("desc") for f in fs), [f.get("fix") for f in fs])
 check("fix targets: lead-stage client -> Proposal Signed, past wedding -> File Management",
       {f["key"]: f["fix"]["stage"] for f in fs}.get("crm:p2:lead") == "Proposal Signed" and {f["key"]: f["fix"]["stage"] for f in fs}.get("crm:p1:post") == "File Management")
-check("drift.apply dry-runs an hb_stage fix through hb_exec", (lambda r: r and r[0]["op"] == "hb_stage" and r[0]["ok"] and r[0]["dry"])(
-      drift.apply([{"op": "hb_stage", "key": "crm:p1:post", "workspace_id": "03ca993ad76ecf08ab4acf52", "stage": "File Management", "desc": "move P1 to 'File Management' in HoneyBook"}], dry=True)))
-check("drift.apply refuses an hb_stage fix without a workspace", not drift.apply([{"op": "hb_stage", "stage": "x", "desc": "d"}], dry=True)[0]["ok"])
+import crm as _crm_drift
+class _DriftConn:
+    CRM = True; SERVICE = "test-crm"
+    @staticmethod
+    def apply_stage(tid, stage, dry=False): return (True, "DRY_RUN_OK") if dry else (True, "OK")
+_saved_drift_plugins = _crm_drift._plugins
+_crm_drift._plugins = lambda: [_DriftConn()]
+_crm_drift._ALIASES = None
+check("drift.apply dry-runs a crm_stage fix through crm.apply_stage",
+      (lambda r: r and r[0]["op"] == "crm_stage" and r[0]["ok"] and r[0]["dry"])(
+          drift.apply([{"op": "crm_stage", "key": "crm:p1:post", "thread_id": "03ca993ad76ecf08ab4acf52", "stage": "File Management", "desc": "d"}], dry=True)))
+_crm_drift._plugins = _saved_drift_plugins; _crm_drift._ALIASES = None
+check("drift.apply refuses a crm_stage fix without a stage", not drift.apply([{"op": "crm_stage", "thread_id": "03ca993ad76ecf08ab4acf52", "desc": "d"}], dry=True)[0]["ok"])
 
 # ------------------------------------------------------------------ drift: reminders still armed
 fu_state = {"items": {"fu_1": {"id": "fu_1", "sop": "money", "step": "bill-due", "status": "waiting", "lane": "money",
@@ -95,9 +105,9 @@ cal = {"events": [{"uid": "e1", "title": "Coffee with Marcus about the Ojai venu
                   {"uid": "e3", "title": "Dentist", "date": "2026-10-14", "time": "15:00", "owner": "owner6", "all_day": False},
                   {"uid": "e4", "title": "Trip", "date": "2026-10-14", "time": None, "owner": "owner1", "all_day": True},
                   {"uid": "e5", "title": "Glenrock wedding", "date": "2026-10-14", "time": "14:00", "owner": "owner1", "all_day": False, "booking": "booked"},
-                  {"uid": "e6", "title": "Call with example", "date": "2026-10-14", "time": "16:00", "owner": "owner1", "all_day": False}]}
+                  {"uid": "e6", "title": "Call with Teo", "date": "2026-10-14", "time": "16:00", "owner": "owner1", "all_day": False}]}
 fs = drift.past_event({"enabled": True, "min_days_past": 1, "max_days_past": 4, "skip_title_words": ["delivery"]}, NOW, cal=cal, seen={},
-                      mentions=["Had the call with example, he wants the 8 min film"])
+                      mentions=["Had the call with Teo, he wants the 8 min film"])
 keys = {f["key"]: f for f in fs}
 check("a timed event nobody mentioned since -> ask", "event:e1" in keys and keys["event:e1"]["manual"] == "ask")
 check("skip words, all-day, weddings and mentioned events are left alone", not ({"event:e2", "event:e4", "event:e5", "event:e6"} & set(keys)), set(keys))
@@ -116,7 +126,7 @@ old = time.time() - 3 * 86400
 live_cards = [{"id": "qold", "ts": old, "status": "open", "questions": [{"header": "Text reply: staff1", "lane": "wedding", "audience": "client", "question": "Send?"}]},
               {"id": "qnew", "ts": time.time() - 3600, "status": "open", "questions": [{"header": "Fresh", "lane": "wedding", "question": "x"}]},
               {"id": "qstuck", "ts": old, "status": "open", "questions": [{"header": "Stuck items", "lane": "personal", "question": "x"}]}]
-tickets = {"tk1": {"id": "tk1", "status": "staged", "lane": "wedding", "kind": "edit_gate", "title": "example edit waiting at review", "summary": "", "updated": (NOW - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")},
+tickets = {"tk1": {"id": "tk1", "status": "staged", "lane": "wedding", "kind": "edit_gate", "title": "Sloane edit waiting at review", "summary": "", "updated": (NOW - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")},
            "tk2": {"id": "tk2", "status": "staged", "lane": "personal", "kind": "imessage_in", "title": "Text from owner6", "summary": "", "updated": (NOW - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")},
            "tk3": {"id": "tk3", "status": "staged", "lane": "personal", "kind": "stuck_work", "title": "3 stuck", "summary": "", "updated": (NOW - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")},
            "tk4": {"id": "tk4", "status": "staged", "lane": "money", "kind": "mail", "title": "Insurance renewal", "summary": "", "updated": (NOW - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")}}
@@ -212,9 +222,9 @@ check("tick at 03:00 posts nothing (quiet hours)", r["posted"] == [] , r)
 
 # ------------------------------------------------------------------ weekly: readback + hygiene card
 C.save_state("drift", {"ts": "x", "findings": [
-    {"key": "ledger:k:edit", "kind": "drift", "lane": "wedding", "title": "example: editing has started", "text": "The editor has a project for example but the ledger still says 'booked'.",
-     "why": "start the delivery clock", "fix": {"op": "ledger_stage", "ledger": str(TMP / "ps.json"), "key": "k", "stage": "edit", "desc": "example: ledger stage booked -> edit"}, "age_days": 10},
-    {"key": "crm:p1:post", "kind": "drift", "lane": "wedding", "title": "Avery: wedding was 9/26", "text": "Avery's wedding was 9/26; HoneyBook still shows 'Questionnaire Sent'.", "why": "move it along", "fix": None, "manual": "honeybook", "age_days": 20},
+    {"key": "ledger:k:edit", "kind": "drift", "lane": "wedding", "title": "Sloane: editing has started", "text": "The editor has a project for Sloane but the ledger still says 'booked'.",
+     "why": "start the delivery clock", "fix": {"op": "ledger_stage", "ledger": str(TMP / "ps.json"), "key": "k", "stage": "edit", "desc": "Sloane: ledger stage booked -> edit"}, "age_days": 10},
+    {"key": "crm:p1:post", "kind": "drift", "lane": "wedding", "title": "Avery: wedding was 9/26", "text": "Avery's wedding was 9/26; the CRM still shows 'Questionnaire Sent'.", "why": "move it along", "fix": None, "manual": "crm", "age_days": 20},
     {"key": "event:e1", "kind": "drift", "lane": "personal", "title": "Coffee with Marcus (10/14)", "text": "'Coffee with Marcus' was on the calendar 10/14 and nothing came up since.", "why": "anything to follow up?", "fix": None, "manual": "ask", "age_days": 2},
 ]})
 text = weekly.readback_text(NOW)
@@ -242,7 +252,7 @@ check("weekly: not on Thursday", r.get("skipped") == "not the day", r)
 
 # ------------------------------------------------------------------ apply (the write behind an approved ticket)
 ps = TMP / "ps.json"
-C.save_json(ps, {"projects": {"k": {"couple": "example", "stage": "booked"}}})
+C.save_json(ps, {"projects": {"k": {"couple": "Sloane", "stage": "booked"}}})
 fu_path = TMP / "followups" / "state.json"
 C.save_json(fu_path, {"items": {"fu_1": {"id": "fu_1", "sop": "money", "step": "bill-due", "status": "waiting", "subject": "SoCal Edison"}}})
 res = drift.apply([{"op": "ledger_stage", "ledger": str(ps), "key": "k", "stage": "edit", "desc": "d"}, {"op": "followup_done", "id": "fu_1", "desc": "d"}, {"op": "nope"}], dry=True)

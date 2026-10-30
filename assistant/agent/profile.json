@@ -2,7 +2,7 @@
  "_doc": "Everything particular to THIS agent lives here, in people.json, prompt.md and state/. The code in this folder carries no household or business specifics, so a new agent is a copy of the folder with these files rewritten.",
  "name": "Sage",
  "slug": "sage",
- "household": "owner1 and owner6 example (home in example; business example-org, wedding videography in example)",
+ "household": "owner1 and owner6 example (home in Brackwater; business example-org, wedding videography in Port Alder)",
  "claude_account": "max5x",
  "claude_account_fallback": "max20x",
  "home_space": "spaces/AAQA6LAmbsA",

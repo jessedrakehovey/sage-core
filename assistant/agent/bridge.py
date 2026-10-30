@@ -176,7 +176,7 @@ def poll() -> list:
 def _dedup(msgs: list) -> list:
     """One copy of each message. The HTTP endpoint, Pub/Sub and the space reader can all hand
     over the same Chat message, and Chat re-delivers what it thinks went unanswered (2026-10-07:
-    'Fix HoneyBook connector' x3 in one turn, then three more answers). A message already in
+    'Fix the CRM connector' x3 in one turn, then three more answers). A message already in
     seen_messages.json, or repeated in this batch by name, or by (place, sender, text) when it
     has no name, is dropped."""
     seen = set(space_reader._seen())
@@ -201,7 +201,7 @@ def _human_exchange_in_progress(convo: str, thread: str, person: dict) -> str:
     """The name of the human who wrote the LAST line of this thread when that line @mentions (or
     opens with the name of) another human, not the agent and not themselves: the sender's next
     line answers THAT person, not the agent. '' otherwise. Ported from example's bridge
-    (2026-10-16, her dream c20-c24: example '@the owner ... better question for example', the owner 'I will
+    (2026-10-16, her dream c20-c24: Hollis '@the owner ... better question for Lucan', the owner 'I will
     ask him' -> example posted 'Got it.' into their exchange)."""
     name = core.profile().get("name", "Agent")
     rows = core.transcript_thread(convo, thread, 6) if thread else core.transcript_tail(convo, 6)
@@ -336,7 +336,7 @@ def _is_thread_root(message_name: str) -> bool:
     """A top-level Chat message is named spaces/S/messages/ID.ID (the thread's id twice); a reply
     in that thread is spaces/S/messages/ID.OTHER. Comparing only the thread part called every
     reply a root, so a reply in a doer report's thread was never looked up (2026-10-16 21:15:
-    the owner's 'Please stop trying to do this' met a guess about the HoneyBook template)."""
+    the owner's 'Please stop trying to do this' met a guess about the CRM template)."""
     m = re.match(r"spaces/[^/]+/messages/([^/.]+)\.([^/.]+)$", str(message_name or ""))
     return bool(m) and m.group(1) == m.group(2)
 
@@ -413,7 +413,7 @@ def card_context(card: dict) -> str:
     lines = [f"[THIS REPLY IS IN THE THREAD OF CARD {card['id']}" + ("" if status == "open" else f", which is already {status}") + "] "
              + chat_push.card_line(card)]
     if status != "open":
-        try:                     # how it closed, truly: a tapped Send is never "closed unsent" (2026-10-18, the example text)
+        try:                     # how it closed, truly: a tapped Send is never "closed unsent" (2026-10-18, the Hollis text)
             import exec_store as es
             import place
             lines.append("Where it stands: " + place._card_state(card, cards._answers_index(), es.fold()) + ".")
@@ -682,7 +682,7 @@ def evidence_text(qid: str) -> str:
     bits = [f"Card {q}: \"{a.get('option')}\" at {str(a.get('ts') or '')[11:16]} -> {row.get('kind', '').replace('_', ' ')} {outcomes.icon(row.get('state'))} {row.get('state')}"]
     if last.get("detail"):
         bits.append(f"last check {str(last.get('ts') or '')[11:16]}: {last['detail']}")
-    ids = {k: v for k, v in ev.items() if k in ("message_id", "hb_id", "outbox", "sent", "confirmed_by", "cells", "retry_ticket", "owner_said")}
+    ids = {k: v for k, v in ev.items() if k in ("message_id", "crm_id", "outbox", "sent", "confirmed_by", "cells", "retry_ticket", "owner_said")}
     if ids:
         bits.append("evidence: " + ", ".join(f"{k} {v}" for k, v in ids.items()))
     return ". ".join(bits) + "."
@@ -1121,7 +1121,7 @@ def handle(msg: dict, pre_ack: str = "") -> None:
                 corr_ask = correction.original_ask(convo, thread, person)
                 corr_expected = correction.expected_deed(corr_ask.get("text", "")) if corr_ask else ""
                 # "where is the card" in a thread the card already landed in: point at it, never a second card
-                # (2026-10-18, the example text: tapped Send, then told it "closed unsent" and made again)
+                # (2026-10-18, the Hollis text: tapped Send, then told it "closed unsent" and made again)
                 corr_here = correction.card_in_thread(thread, corr_ask) if corr_kind == "card" and thread else {}
                 if corr_here:
                     corr_expected = ""
@@ -1264,7 +1264,7 @@ def handle(msg: dict, pre_ack: str = "") -> None:
                 actions.LAST_APPLIED.append({"kind": "do", "what": text.strip()[:160], "ref": tid})
                 log(f"forced a doer job for {person['key']} (lane {lane}): the brain promised the doer and sent nothing")
         # a forwarded marketplace lead (a zola.com/z link, 2026-10-27) is a doer job by code, never "what's the date
-        # and venue?": the doer reads the page, checks HoneyBook, and a paid Connect is its checkpoint card here
+        # and venue?": the doer reads the page, checks the CRM, and a paid Connect is its checkpoint card here
         lead_url = claims.marketplace_lead(text) if r.get("ok") and direct and not tcard and core.can(person, "task") else ""
         if lead_url and not any(a.get("kind") == "do" for a in actions.LAST_APPLIED):
             try:
@@ -1273,7 +1273,7 @@ def handle(msg: dict, pre_ack: str = "") -> None:
             except Exception as e:  # noqa: BLE001
                 tid, _ = "", log(f"lead intake do failed: {type(e).__name__}: {str(e)[:120]}")
             if tid:
-                actions.LAST_APPLIED.append({"kind": "do", "what": "reading the new lead's page and checking the date in HoneyBook", "ref": tid})
+                actions.LAST_APPLIED.append({"kind": "do", "what": "reading the new lead's page and checking the date in the CRM", "ref": tid})
                 r["reply"] = _deed_lead(actions.LAST_APPLIED[-1:])
                 log(f"lead intake: sent {person['key']}'s forwarded marketplace lead to the doer by code")
         if corr_kind:

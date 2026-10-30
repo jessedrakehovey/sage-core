@@ -88,14 +88,14 @@ ok(POSTS[-1][0] == "spaces/DMOWNER1", "an explicit space (the ask's own) wins")
 # ---------------------------------------------------------------- 3. commitments report through the receipt of the row's ref
 owner1 = core.person_for(handle="owner1")
 POSTS.clear(); PATCHES.clear()
-commitments.register_applied([{"kind": "task", "what": "a reply to example about the proposal", "ref": "tk-example"}], owner1,
+commitments.register_applied([{"kind": "task", "what": "a reply to Corwin about the proposal", "ref": "tk-corwin"}], owner1,
                              {"convo": HOME, "thread": TH})
 from datetime import datetime, timedelta  # noqa: E402
 later = datetime.now() + timedelta(minutes=commitments.DEADLINE_MIN["task"] + 5)
 said = commitments.check(receipts.poster(), now=later.replace(hour=12))
 ok(said and POSTS and POSTS[-1][2] == TH and POSTS[-1][1] == said[0]["text"] and "not going to keep repeating" not in said[0]["text"],
    "a task that never made it says so ONCE, in its thread, through the receipt, in plain words")
-ok(receipts.status("tk-example")["text"] == said[0]["text"], "the slipped line is the row's receipt (a later outcome edits it, never a second line)")
+ok(receipts.status("tk-corwin")["text"] == said[0]["text"], "the slipped line is the row's receipt (a later outcome edits it, never a second line)")
 lines = [commitments.line_for({"kind": k, "what": "x", "reports": 0}, "slipped", "") for k in ("build", "do", "task")]
 ok(all("repeating" not in ln and "retrying on my own" not in ln for ln in lines), "no 'I'm not going to keep repeating it' anywhere")
 ok(commitments._builder_said("anything at all that used to match") is False, "the builder's transcript note no longer silences the build's confirmation")
@@ -113,7 +113,7 @@ ok(len(POSTS) == 1 and PATCHES and "4411" in PATCHES[-1][1], "a second report on
 ok("about 36 s" in chat_push.goes_out_line("imessage_send", hour=12) and "phone" in chat_push.goes_out_line("imessage_send", hour=12), "a text says about 36 s to the phone")
 ok("within 10 minutes" in chat_push.goes_out_line("email_send", hour=12) and "overnight" in chat_push.goes_out_line("email_send", hour=12), "an email says the next pass, within 10 minutes, held overnight")
 ok("Held until 7:00 AM" in chat_push.goes_out_line("imessage_send", hour=22) and "phone" in chat_push.goes_out_line("imessage_send", hour=22), "a text tapped at night says it is held until 7:00 AM (owner1 2026-10-24)")
-ok("35 s" not in chat_push.goes_out_line("hb_note"), "nothing says 35 s any more")
+ok("35 s" not in chat_push.goes_out_line("acme_note"), "nothing says 35 s any more")
 
 # ---------------------------------------------------------------- 6. notes: new lines while a job runs, capped, in the thread (2026-10-28)
 POSTS.clear(); PATCHES.clear()

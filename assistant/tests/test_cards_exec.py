@@ -53,8 +53,8 @@ r = cards.post([bad], "test")
 check("EXEC_VERBATIM refused", not r["posted"] and "EXEC_VERBATIM" in r["reason"])
 
 # 3. exec card from a forbidden identity is refused at post time
-bad = json.loads(json.dumps(EXEC_Q)); bad["exec"]["payload"]["from"] = "example@example.com"
-bad["question"] = bad["question"].replace("owner3@example.invalid", "example@example.com")
+bad = json.loads(json.dumps(EXEC_Q)); bad["exec"]["payload"]["from"] = "example@other-business.invalid"
+bad["question"] = bad["question"].replace("owner3@example.invalid", "example@other-business.invalid")
 r = cards.post([bad], "test")
 check("forbidden identity refused", not r["posted"] and "EXEC_KEYS" in r["reason"], r.get("reason"))
 
@@ -109,7 +109,7 @@ try:
 except PermissionError:
     check("refuse non-owner1", True)
 try:
-    es.enqueue("hb_delete", {"x": 1}, "owner1", "card:q1"); check("refuse unknown kind", False)
+    es.enqueue("crm_delete", {"x": 1}, "owner1", "card:q1"); check("refuse unknown kind", False)
 except ValueError:
     check("refuse unknown kind", True)
 
@@ -143,7 +143,8 @@ ok, msg = es.verify_ledger()
 check("ledger tamper detected", not ok, msg)
 
 # 13. rulings lookup finds a standing ruling
-check("ruling found", bool(rulings.find("should I ask which inbox, owner4 or example.invalid?")))
+if rulings.FILE.is_file():                                  # the organization's own rulings: absent in the bare engine
+    check("ruling found", bool(rulings.find("should I ask which inbox, owner4 or example.invalid?")))
 check("generic word alone no match", not rulings.find("please publish"))
 
 # 14. sweep closes the ticket that was staged on a card once the card is answered; an
@@ -244,7 +245,7 @@ cards.sweep()
 cards.UNDO_S = 30
 check("'Wait a week, then nudge' becomes a ticket to act on",
       len([t for t in tickets._load().values() if t["kind"] == "card_answer" and t["source_id"] == rw["qid"]]) == 1)
-ro = cards.post([dict(JQ, question="example has not sent a timeline. Ask again?", header="example")], "test")
+ro = cards.post([dict(JQ, question="Teo has not sent a timeline. Ask again?", header="teo")], "test")
 for c in cards._live():
     if c["id"] == ro["qid"]:
         cards._retire(c, "expired")
@@ -255,7 +256,7 @@ cards.sweep()
 check("...exactly once", len([t for t in tickets._load().values() if t["kind"] == "card_expired"]) == 1)
 
 # 15. a typed answer survives a busy queue (spilled, then queued on the next sweep)
-rc = cards.post([dict(JQ, question="Emery has been quiet 7 days. Send the final check-in?", header="Emery")], "test")
+rc = cards.post([dict(JQ, question="Emery has been quiet 7 days. Send the final check-in?", header="emery")], "test")
 cards.answer(rc["qid"], "Wait", text="call her instead, she prefers the phone")
 real_add = tickets.add_many
 tickets.add_many = lambda items, owner: -1
@@ -308,7 +309,7 @@ check("a busy sweep keeps both the claimed and the newly parked text", "early-pa
 cards.sweep()
 
 # spill holes (2026-10-02): a crash between harvest and the queue write, an unreadable spill file
-rz = cards.post([dict(JQ, question="Tatum's timeline is missing. Ask her planner?", header="Tatum")], "test")
+rz = cards.post([dict(JQ, question="Tatum's timeline is missing. Ask her planner?", header="tatum")], "test")
 cards.answer(rz["qid"], "Wait", text="ask her mom, not the planner")
 tickets.add_many = lambda items, owner: (_ for _ in ()).throw(RuntimeError("queue write crashed"))
 cards.UNDO_S = 0
@@ -329,10 +330,10 @@ cards.SPILL.unlink()
 
 # alarm cards close themselves once the SAME check passes again (scout proposal 3, 2026-10-06)
 def _conn(state, checked_epoch):
-    cards._write(cards.CONN_STATUS, {"connections": {"honeybook": {"name": "HoneyBook", "state": state, "detail": "last good 5 min ago",
+    cards._write(cards.CONN_STATUS, {"connections": {"acme-crm": {"name": "AcmeCRM", "state": state, "detail": "last good 5 min ago",
                                                                     "checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(checked_epoch))}}})
-alarm = [{"question": "The HoneyBook connector is down. Re-authorise it?", "header": "HoneyBook down", "lane": "wedding",
-          "clears_when": {"connection": "honeybook"}, "options": [{"label": "Open the sign-in window (Recommended)"}, {"label": "Leave it"}]}]
+alarm = [{"question": "The AcmeCRM connector is down. Re-authorise it?", "header": "AcmeCRM down", "lane": "wedding",
+          "clears_when": {"connection": "acme-crm"}, "options": [{"label": "Open the sign-in window (Recommended)"}, {"label": "Leave it"}]}]
 ra = cards.post([dict(alarm[0])], "operator", lane="wedding")
 check("alarm card posts", ra.get("posted"), ra)
 rd = cards.post([dict(alarm[0])], "operator", lane="wedding")
@@ -345,7 +346,7 @@ _conn("live", time.time() + 5)
 check("live after the alarm: resolved", cards.resolve_alarms() == 1 and not any(c["qid"] == ra["qid"] for c in cards.pending())
       and (cards._read(cards.DONE / f"{ra['qid']}.json") or {}).get("status") == "resolved")
 plain = cards.post([{"question": "Which date is real for the Glenrock wedding?", "header": "Glenrock date", "lane": "wedding",
-                     "options": [{"label": "Use the HoneyBook date (Recommended)"}, {"label": "Use the contract date"}]}], "operator", lane="wedding")
+                     "options": [{"label": "Use the CRM date (Recommended)"}, {"label": "Use the contract date"}]}], "operator", lane="wedding")
 check("a card without clears_when is never auto-closed", cards.resolve_alarms() == 0 and any(c["qid"] == plain["qid"] for c in cards.pending()))
 check("an unknown probe never clears anything", cards._probe_clear({"clears_when": {"bogus": 1}}, 0) == "")
 
@@ -364,12 +365,12 @@ r = _dec("Text reply: Jonathan", "Jonathan asks: any tie? What do you want to sa
          ["Regular it is, tie comes later (Recommended)", "Regular it is, tie is on me", "Skip"])
 check("TEXT_NEEDS_DRAFT: a reply card without the draft is refused", not r["posted"] and "TEXT_NEEDS_DRAFT" in r["reason"])
 r = _dec("staff1: St Marisol", "staff1 texted 'St Marisol' with no context.",
-         ["Hey staff1, what's in Santa Marisol? Also I'll get back to you on camera 2 soon (Recommended)", "I'll text him myself", "Skip"])
+         ["Hey staff1, what's in Vale Ynwood? Also I'll get back to you on camera 2 soon (Recommended)", "I'll text him myself", "Skip"])
 check("OPTIONS_ARE_DRAFTS: a message as a button is refused", not r["posted"] and "OPTIONS_ARE_DRAFTS" in r["reason"])
-r = _dec("Shoot clash 11/26", "example's wedding is booked but owner1 is away. Who shoots it?",
-         ["owner6 shoots it (Recommended)", "Hiring a shooter", "Not a real booking"], lane="wedding", subject="example")
+r = _dec("Shoot clash 11/26", "Teo's wedding is booked but owner1 is away. Who shoots it?",
+         ["owner6 shoots it (Recommended)", "Hiring a shooter", "Not a real booking"], lane="wedding", subject="teo")
 check("a real decision with system actions posts", r["posted"], r)
-r2 = _dec("Shoot clash 11/26", "example's wedding is booked but owner1 is away. Who shoots it?",
+r2 = _dec("Shoot clash 11/26", "Teo's wedding is booked but owner1 is away. Who shoots it?",
           ["owner6 shoots it (Recommended)", "Hiring a shooter", "Not a real booking"], lane="wedding")
 check("DUPLICATE_SUBJECT: the same open decision is refused, naming the open card",
       not r2["posted"] and "DUPLICATE_SUBJECT" in r2["reason"] and r2.get("qid") == r["qid"])
@@ -388,11 +389,11 @@ cards.UNDO_S = 0
 cards.answer(r["qid"], "owner6 shoots it (Recommended)")
 cards.sweep()
 cards.UNDO_S = 30
-r4 = _dec("Shoot clash 11/26", "example's wedding is booked but owner1 is away. Who shoots it?",
-          ["owner6 shoots it (Recommended)", "Hiring a shooter", "Not a real booking"], lane="wedding", subject="example")
+r4 = _dec("Shoot clash 11/26", "Teo's wedding is booked but owner1 is away. Who shoots it?",
+          ["owner6 shoots it (Recommended)", "Hiring a shooter", "Not a real booking"], lane="wedding", subject="teo")
 check("ALREADY_ANSWERED: the question answered today is refused with the answer",
       not r4["posted"] and "ALREADY_ANSWERED" in r4["reason"] and "owner6 shoots it" in r4["reason"], r4)
-r5 = cards.post([{"question": "example's wedding is booked but owner1 is away. Who shoots it?", "header": "Shoot clash 11/26", "lane": "wedding", "subject": "example",
+r5 = cards.post([{"question": "Teo's wedding is booked but owner1 is away. Who shoots it?", "header": "Shoot clash 11/26", "lane": "wedding", "subject": "teo",
                   "options": [{"label": "owner6 shoots it (Recommended)"}, {"label": "Hiring a shooter"}]}], "operator", lane="wedding", replaces=r3["qid"])
 check("replaces=<qid> (the revise flow) skips the subject guards", r5["posted"], r5)
 

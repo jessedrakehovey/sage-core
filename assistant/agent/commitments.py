@@ -204,7 +204,7 @@ def outcome(it: dict, now: datetime | None = None) -> tuple:
             return "failed", "it never made it into the queue"
         st, note = str(t.get("status") or ""), _last_note(t)
         if kind == "task" and st in ("done", "staged") and _REFUSED.search(note) and not re.search(r"\bcard q[0-9a-f]{12}\b", note, re.I):
-            # the card was refused (the 24-hour recipient limit, 2026-10-21: example's revised proposal never came and
+            # the card was refused (the 24-hour recipient limit, 2026-10-21: Corwin's revised proposal never came and
             # nothing said so): no card is in front of the owner, so this is a failure the thread hears about at once
             return "failed", "the card was blocked: " + note
         if st == "done":
@@ -222,7 +222,7 @@ def outcome(it: dict, now: datetime | None = None) -> tuple:
             return "owner", note
         said = _answered_in_chat(it)
         if said:
-            # 2026-10-23 22:55: Sage answered "Add example ... send the questionnaire" in the thread (example already on,
+            # 2026-10-23 22:55: Sage answered "Add Wren ... send the questionnaire" in the thread (Wren already on,
             # the rest blocked, "Need from you: ..."), the operator ticket stayed new, and at 07:00 the receipt said
             # "That draft never came back, so nothing went out". An ask already answered in its thread is with the
             # owner, not slipped.
@@ -377,7 +377,7 @@ def line_for(it: dict, verdict: str, detail: str) -> str:
             # built is replaced by the build's commit message, else left out.
             asked = _asked(it)
             done = _what_changed(it, detail)
-            mine = str(it.get("by") or "") in (core.load(core.AGENT / "people.json", {}).get("users") or {})
+            mine = str(it.get("by") or "") in (core.load(core.PEOPLE, {}).get("users") or {})
             # One short natural line (2026-10-10): what was asked, the gist of the change, no assumptions.
             line = (f"That's built now: \"{asked}\"." if mine
                     else f"I built a fix for this one: \"{asked}\".")

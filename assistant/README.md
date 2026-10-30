@@ -21,19 +21,19 @@ Traffic is low, so nothing loops. Three tiers:
    carries the project's newest word from memory / the tracker / the owners' chat so the nudge names
    the step the owner is really on, and a newest word saying not to nudge him (within `hold_days`, 14)
    means no ticket and its open edit tickets dismissed, 2026-10-21),
-   `sense_honeybook.py` (reads the HoneyBook snapshot `dashboard/data/honeybook.json`
-   that `hb_snapshot.py` refreshes every 2 h, 07:00-22:00, through the READ-ONLY connector
-   (spine job `hb-snapshot`; haiku as transport only, the script parses + validates the tool
+   `sense_crm.py` (reads the CRM snapshot `dashboard/data/crm.json`
+   that the connector's snapshot job refreshes every 2 h, 07:00-22:00, through the READ-ONLY connector
+   (spine job `crm-snapshot`; haiku as transport only, the script parses + validates the tool
    result and installs it atomically; until 2026-10-01 only the Ad Scout pass refreshed it,
    twice a week, with a stale task list; since 2026-10-07 a connector timeout only marks
-   HoneyBook down after 3 misses in a row, and the connector gets 90 s to start; since 2026-10-11 it also follows
+   the CRM down after 3 misses in a row, and the connector gets 90 s to start; since 2026-10-11 it also follows
    claude's newer "Output has been saved to <file>" note for an oversized result, whose rewording read as
-   "no snapshot" for 3 days and looked like a lost login; since 2026-10-25 it reads only the HoneyBook
+   "no snapshot" for 3 days and looked like a lost login; since 2026-10-25 it reads only the CRM
    call's own result, never another tool's, and a miss says why - connector not connected, tool never
    called, or no snapshot in its result - instead of quoting the transcript's tail): new inquiries, quiet
    leads, shoots entering prep, one weekly overdue-tasks ticket, one weekly balance
    ticket; also seeds `project_state.json` with booked future projects; since 2026-10-08
-   `lead_meetings.py` matches HoneyBook's upcoming meetings/calls to the quiz leads, writes
+   `lead_meetings.py` matches the CRM's upcoming meetings/calls to the quiz leads, writes
    `meeting` + `meeting_note` onto `data/leads/<token>.json` so drafts confirm the booked call
    instead of asking them to schedule one, and posts one "Add to calendar" card per new meeting;
    a lead with a booked meeting gets no proposal nudge, reply chase or quiet-lead ticket at all
@@ -41,16 +41,16 @@ Traffic is low, so nothing loops. Three tiers:
    outcome, the first held nudge fires a day later and the rest are closed),
    `sense_typeform.py` (2026-10-01: new Package Finder quiz leads straight from the Typeform API
    every 10 min via the Day Spine; prices each with `pricing/engine.py`, mints an
-   `hb_proposal_draft` exec ticket so a priced DRAFT of Videography Collection Details lands in
-   the couple's HoneyBook project, adds an `inquiry_new` ticket with the brief for a team member, arms the
+   `crm_proposal_draft` exec ticket so a priced DRAFT of Videography Collection Details lands in
+   the couple's CRM project, adds an `inquiry_new` ticket with the brief for a team member, arms the
    2 h reply SLA and posts a card; token = User env `TYPEFORM_TOKEN`; `config.json -> leads`).
-   **2026-10-06 standing rule:** weekend (Sat/Sun) wedding + date open in HoneyBook -> after the
+   **2026-10-06 standing rule:** weekend (Sat/Sun) wedding + date open in the CRM -> after the
    draft lands, `collection_autosend.py` (called from drain.py) re-checks the date and queues ONE
    source-bound `agent_run` for the doer to Publish & share it with the "Custom Package email (quiz
    version)" template, no card; held 21:00-07:00. Any mismatch on screen falls back to a checkpoint card.
-   A draft whose HoneyBook write times out or errors is **read back** (`hb_exec.py readback`, read-only)
+   A draft whose CRM write times out or errors is **read back** (the connector's readback, read-only)
    instead of dead-ending: one unsent file made by that run with every quoted price = done, auto-send
-   proceeds; anything else stays an exception for the owner (example, 2026-10-19). Each adds
+   proceeds; anything else stays an exception for the owner (Odette, 2026-10-19). Each adds
    id-keyed tickets to one queue and exits.
 2. **Operator (Sonnet, only when the queue is non-empty)** - `operator_cron.ps1`
    starts one headless `claude -p` run that claims tickets, dismisses noise, stages
@@ -75,8 +75,8 @@ Traffic is low, so nothing loops. Three tiers:
    carries its draft (`TEXT_NEEDS_DRAFT`, `OPTIONS_ARE_DRAFTS`); the same decision open (`DUPLICATE_SUBJECT`, by header +
    `subject`/entities) or answered in the last 20 h (`ALREADY_ANSWERED`, quoting his answer) is refused. The same holds by PERSON
    whatever the header (`scripts/decision_keys.py`, 2026-10-19: an open card about that lead/couple, a Drop still standing until
-   HoneyBook moves, a nudge offer within 3 days of an approved message, the same draft already open or already sent to that
-   number/address); sense_honeybook leaves dropped leads out of its tickets. Tests: `tests/test_repeat_asks.py`. Dead connections are
+   the CRM moves, a nudge offer within 3 days of an approved message, the same draft already open or already sent to that
+   number/address); the CRM sensor leaves dropped leads out of its tickets. Tests: `tests/test_repeat_asks.py`. Dead connections are
    carded BY CODE (`sentinels._conn_card` -> `cards.connection_card`: Set it up now / Leave it off / Something else; the
    sweep's `_act_on_setup` carries the tap out: connect.py's chat steps or setup_actions' recipe, said in chat; a connection with a chat setup gets "Say 'set up plaid' in chat" (`setup.chat.say`) and a
    detail with no command line or item id, 2026-10-18). Chase nudges
@@ -140,7 +140,7 @@ Ported in shape from the property OS's comms agent after the owner said he liked
 misses incoming communication and is quick to reply to text messages". Three zero-LLM pieces
 around the same operator:
 
-- **`comms_probe.py`** - scheduled task "the organization", every minute 07:00-21:30
+- **`comms_probe.py`** - scheduled task "example-org Comms Probe (assistant)", every minute 07:00-21:30
   (`tasks/CommsProbe.xml`). When a claimable ticket of a human kind (`imessage_in`, `email`,
   `inquiry_new`, `card_answer`, `the owner_request`) is younger than 30 min and not yet woken for, it
   starts `operator_cron.ps1 -Comms` at once. Guards: the `.operator_running` in-flight marker (one
@@ -152,15 +152,15 @@ around the same operator:
   awaiting_party / closed) and SLA band. A thread past its SLA with no card open gets ONE
   `sla_breach` ticket + a Chat note (latched). Rebuilt by the probe every minute and by the spine
   every 10 (`comms-state`). `data/comms_state.json`.
-  An owner telling Sage they replied themselves (phone, HoneyBook: a memory fact by the owner or owner,
+  An owner telling Sage they replied themselves (phone, the CRM: a memory fact by the owner or owner,
   about that contact, after their last text) makes the thread `awaiting_party` with `owner_replied`: no
-  reply card and no chase; their next text opens it again (example, 2026-10-25).
+  reply card and no chase; their next text opens it again (Sloane, 2026-10-25).
 - **`text_gate.py`** - wedding-only texts on the owner's iPhone (2026-10-08): a text there becomes a
   ticket / card only if the number is a lead, a booked couple, a phone in `Wiki/Couples` or
-  `Wiki/Vendors`, or a HoneyBook client (then laned `wedding`). Friends, family and group chats
+  `Wiki/Vendors`, or a CRM client (then laned `wedding`). Friends, family and group chats
   stay in the thread log only: no card, no SLA, no unconfirmed-send sentinel; Sage still drafts
   any thread on request. Family is never wedding work even if a source lists them (2026-10-10:
-  the owners, a HoneyBook contact on an owner's email, phones in `Wiki/People/Family and Friends.md`).
+  the owners, a CRM contact on an owner's email, phones in `Wiki/People/Family and Friends.md`).
   Their texts are never ticketed on any phone or lane (2026-10-11); Mission Control restarts itself
   when any script module it has loaded changes, so a gate fix is live within 10 minutes.
   Since 2026-10-11 this covers owner's iPhone and every lane too: only a wedding client, lead or
@@ -170,17 +170,17 @@ around the same operator:
   A number in a `Wiki/People/` note tagged `family` or `friends` counts as family even when it is
   a past client, and a newer text card to the same number on the same phone closes the older open
   one as superseded (`text_gate.supersede_older`, 2026-10-15). A text card's hint copied word for
-  word from another person's card (AJ got example's "gift exchange" hint) is swapped for a plain
+  word from another person's card (AJ got Marisa's "gift exchange" hint) is swapped for a plain
   "Edit & send changes the words first." (`text_gate.own_advice`, 2026-10-28).
-  Our own team (an `org.json` person who is not an owner: Marlo, example, a team member) always comes through,
+  Our own team (an `org.json` person who is not an owner: Marlo, Corwin, a team member) always comes through,
   laned `wedding` on either phone; a reply card to someone texted from a card in the last 6 h posts
   into that card's Chat thread (`chat_push.reply_thread`, Marlo 2026-10-24).
   `config.json -> phone.triage_all_texts: true` turns every text back on.
 - **`whois.py`** - who is this number (2026-10-23). One answer with the evidence for the bridge, the
   operator and Sage: owners, aliases an owner taught in chat (`data/people_aliases.json`, Sage's `identify`
   deed), the iPhone books (`contacts.py`), `Wiki/People` (table rows and "## the owner's dad" headings),
-  `Wiki/Couples`, `Wiki/Vendors`, Sage's memory facts, the quiz leads, the tracker, HoneyBook's contacts, and
-  the texts themselves (the name the phone sent, "Hey example" in the owner's own texts, "example:" and
+  `Wiki/Couples`, `Wiki/Vendors`, Sage's memory facts, the quiz leads, the tracker, the CRM's contacts, and
+  the texts themselves (the name the phone sent, "Hey Marisa" in the owner's own texts, "Mira Tsai:" and
   "Hey, it's Dave" signatures, group texts stitched from tapbacks that quote another member, vocatives
   inside the group, short codes / codes / promos / campaign markers, a number one digit from a known
   person's). `resolve()` -> name, relation, kind, confidence, evidence, candidates, group, hints, label;
@@ -225,9 +225,9 @@ now on besides one drop down card with them all together once a week."
   owner is waiting on it); a revision of a card that already reached Chat; a standing text's preview card
   (`hold_text`: time-bound, gone by itself before any digest).
 - **The new-prospect text is the urgent card** (`texts.card_kinds: ["lead_intro"]`): the minute a lead with
-  a phone lands (quiz or HoneyBook inquiry) `client_texts.lead_intro` posts "New lead: <couple>" - the
+  a phone lands (quiz or CRM inquiry) `client_texts.lead_intro` posts "New lead: <couple>" - the
   intro text verbatim under `[TEXT PREVIEW]`, the lead brief (date, venue, budget, recommended collection,
-  what happened in HoneyBook) in its details, **Send now / Skip**; his tap mints the sha-bound
+  what happened in the CRM) in its details, **Send now / Skip**; his tap mints the sha-bound
   `imessage_send` (drain holds it 07:00 if it is night). One card per number, ever (the dedupe record is
   written before the card). The "Hot lead - what next?" card is only posted for a lead with no number.
   The other five standing texts still go by themselves.
@@ -237,7 +237,7 @@ now on besides one drop down card with them all together once a week."
   no `card_expired` ticket, no re-post, its staged ticket is closed. The sentinel never reports a held card
   as stale. A held card the digest never showed (spine down 3 weeks) expires at `DIGEST_HOLD_MAX_S`.
 - **Week-old items ride the digest, never a mid-week line** (2026-10-20 14:46: "three things have sat for a
-  week ... say 'nudge the cold leads'"). `sense_honeybook.weekly_card` posts ONE held "Cold leads" card and
+  week ... say 'nudge the cold leads'"). `sense_crm.weekly_card` posts ONE held "Cold leads" card and
   ONE "Outstanding balance" card a week by code (no more leads_cold / balance_outstanding tickets): Draft the
   nudges / Check the open invoices hands the work to Sage as one ticket, Leave keeps those leads off next
   week's card. The cold count leaves out leads dropped on a card, leads Sage's memory records as dropped,
@@ -273,15 +273,15 @@ guards apply at mint time as always.
   and insists the time is on the card in words (EXEC_VERBATIM), and `_answer_locked` passes it to
   `exec_store.enqueue(not_before=...)`. A tap after the time has passed mints nothing (the answer records
   `mint_error`): a new card, not a late send.
-- **A conditional send (2026-10-28).** "Text example at 4 if he and example haven't replied": the draft (or the
+- **A conditional send (2026-10-28).** "Text Teo at 4 if he and Wren haven't replied": the draft (or the
   `approve` deed) carries `hold_if_reply` with its time; `actions._remember_hold` stores the condition by card in
-  `data/send_conditions.json` (who, and HoneyBook's questionnaire / meeting state at that moment). The tap is still
+  `data/send_conditions.json` (who, and the CRM's questionnaire / meeting state at that moment). The tap is still
   needed. `scripts/send_hold.py` (spine job `send-hold`, long group, right before `drain`) checks every such ticket
   due within the next pass for anything from them since the card was made: a text (phone threads / `imessage_in`),
-  a mail from any address the project ledger has for the couple or a HoneyBook notification naming them, an
-  `hb_message_in`, the questionnaire now completed, a new meeting on their project. Anything -> the ticket is
+  a mail from any address the project ledger has for the couple or a CRM notification naming them, an
+  inbound CRM message, the questionnaire now completed, a new meeting on their project. Anything -> the ticket is
   cancelled and one "Not done: I held this back because ..." line goes in the card's thread; nothing -> the drain
-  sends it as approved. The CRM checks are the plugin's (`crm_honeybook.reply_watch` / `reply_baseline` /
+  sends it as approved. The CRM checks are the plugin's (`crm.plugin.reply_watch` / `reply_baseline` /
   `reply_evidence`), so the engine file stays org-free. Tests: `test_send_hold.py`, `test_send_hold_crm.py`.
 - **A scheduled local job.** `assistant/jobs.json` is the allow-list of fixed commands with named values
   (today: `handoff_build`, `handoff_return` - the editor-handoff skill). Sage's `job` tool
@@ -291,7 +291,7 @@ guards apply at mint time as always.
   `job_runner.py` (a build renders for hours) with its output in `data/jobs/<key>_<stamp>.log`; the runner
   says the outcome in chat and on Mission Control (`cards.say`, owner `jobs`) and ledgers it. No shell, no
   free-form command: an op not in the registry is only recorded, as before. Add a job to `jobs.json`,
-  never to code. By hand: `python assistant/scripts/jobs.py run handoff_build couple="example"`.
+  never to code. By hand: `python assistant/scripts/jobs.py run handoff_build couple="Sloane & Bram"`.
 - Tests: `test_cards_exec.py` (scheduled card, waiting ticket, undo, past time, job card) and
   `test_intents.py` (send_at in quiet hours, job tool, the cards both post).
 
@@ -320,28 +320,27 @@ anywhere in the approve-and-execute path.
    Outbound held 21:00-07:00. Failures: PERMANENT -> exception (+ an `exec_exception`
    ticket), transient -> retry x2.
 4. **Ledger** - `data/audit_ledger.jsonl` is hash-chained: `exec_store.py verify-ledger`.
-5. **HoneyBook writes** (2026-09-30) - kinds `hb_note` (internal note on a workspace) and
-   `hb_project_update` (date / location / details / guest count) run through `hb_exec.py`: the
-   TypeScript is built from the approved payload by a fixed template, and one headless
-   `claude -p` allowed ONLY `mcp__honeybook__take_action` carries it to the connector. No
+5. **CRM writes** (2026-09-30) - the CRM connector's note and project-update kinds run through the
+   connector's exec script: the TypeScript is built from the approved payload by a fixed template, and one headless
+   `claude -p` allowed ONLY the CRM connector's MCP action carries it to the connector. No
    template deletes. A failed or unverified write goes straight to exception (never blind-retried).
-   **`hb_message` (2026-10-15)**: a reply to a couple inside HoneyBook (`CommunicationsAdapter.createCommunication`,
-   email channel, threaded on their last message by `in_reply_to_id`), sent by HoneyBook from the owner's
+   **CRM message kind (2026-10-15)**: a reply to a couple inside the CRM (via `crm.message_exec`,
+   email channel, threaded on their last message by `in_reply_to_id`), sent by the CRM from the owner's
    account the moment he taps Approve. OUTBOUND like an email (quiet hours, resend guard); the card
-   must carry `[HONEYBOOK MESSAGE PREVIEW]` + the body verbatim. Built after the owner asked for a
-   HoneyBook reply to example and the operator could only offer "paste it in yourself".
-   When the connector refuses it, the words go through HoneyBook's web composer (`scripts/honeybook/hb_send_message.py`);
-   once the thread shows them, any other still-queued `hb_message` with the same words to that couple is marked done
-   with that evidence and its open card closed, so the drain never sends it twice (example & example, 2026-10-29).
+   must carry `[CRM MESSAGE PREVIEW]` + the body verbatim. Built after the owner asked for a
+   CRM reply to Delia and the operator could only offer "paste it in yourself".
+   When the connector refuses it, the words go through the CRM's web composer (the connector's browser-send script);
+   once the thread shows them, any other still-queued CRM message with the same words to that couple is marked done
+   with that evidence and its open card closed, so the drain never sends it twice (Teo & Wren, 2026-10-29).
    Moving a pipeline stage stays manual.
    **Evidence after a send (2026-10-15)**: when drain finishes any send (`email_send` Message-ID,
-   `hb_message` HoneyBook message id + time, `imessage_send` hand-off, other `hb_*` record id),
+   CRM message id + time, `imessage_send` hand-off, other CRM record id),
    `drain._report_result` posts one line in the tapped card's own Chat thread (`chat_push.push_result`)
    and a card note, so "sent" is always backed by the record (the owner 2026-10-14: confirm sends with
-   evidence). The tapped card's mark follows it (2026-10-24, example): ⏳ while the send waits,
+   evidence). The tapped card's mark follows it (2026-10-24, Delia): ⏳ while the send waits,
    ✅ only when that evidence line comes in, ❌ when it was refused or failed ("Not done ..." or
    a mint error), ⚠️ when the read-back disagrees (`chat_push.answered_icon`).
-   **Not yet proven live**: the first real run happens on the owner's first approved HoneyBook card
+   **Not yet proven live**: the first real run happens on the owner's first approved CRM card
    (the nested CLI cannot authenticate from inside a session; dry-run + templates are tested).
 
 Exactly-once rules (2026-10-01 hardening; each only tightens the path):
@@ -367,7 +366,7 @@ Exactly-once rules (2026-10-01 hardening; each only tightens the path):
 - **Uncertain means stop.** `email_send.py` prints `NOT_SENT` (before hand-over: retried),
   `SENT=1`, or `DELIVERY_UNVERIFIED`. Drain retries only the first; an unknown failure, a
   timeout, or a ticket orphaned by a killed drain becomes an exception ("check Sent mail" /
-  "check the HoneyBook project"), never a second send. One drain at a time (`.drain.lock`).
+  "check the CRM project"), never a second send. One drain at a time (`.drain.lock`).
 - **A tap is an instruction.** A tap on a decision card (2+ options, no exec) becomes a
   `card_answer` ticket the operator carries out; an expired card nothing tracks becomes a
   `card_expired` ticket.
@@ -391,8 +390,8 @@ staged "asked in chat" never closed. `assistant/scripts/outcomes.py` owns ONE ro
 state a read of the record justifies: `claimed -> verifying -> verified | unverified | failed | abandoned`
 (`assistant/data/outcomes.jsonl`, append-only, folded; every change is a link in the audit ledger).
 
-- **Executors prove, by kind** (`outcomes.verdict_from_exec`): `email_send` needs `SENT=1 <Message-ID>`; `hb_*`
-  the record id and its read-back token (`MEMBER=yes`, `VERIFIED=yes`, `ARCHIVED=yes`); `sheet_set`
+- **Executors prove, by kind** (`outcomes.verdict_from_exec`): `email_send` needs `SENT=1 <Message-ID>`; CRM kinds
+  need the record id and their read-back token (`MEMBER=yes`, `VERIFIED=yes`, `ARCHIVED=yes`); `sheet_set`
   `VERIFIED=yes`. A hedged read-back (`MEMBER=no`, `VERIFIED=no`) is a **failure**: `drain.py` marks the ticket
   `exception` (`PERMANENT: READBACK: ...`), the card comes back for a retry, nothing is marked done. A
   text (`imessage_send`) is only `claimed` at hand-off; its verifier reads the phone outbox: a reply or an ack
@@ -423,7 +422,7 @@ The property OS's lanes never let a failure sit: a channel that fails twice is p
 clock is changed, and a dead cron is noticed from outside the machine. Ported, tools only:
 
 - **A circuit breaker per send channel** (`drain._breaker_note`, `assistant/data/breaker.json`): two TRANSIENT
-  failures in a row on one lane (email, phone, honeybook, sheets, ads, doer) trip it; the rest of that lane is held
+  failures in a row on one lane (email, phone, crm, sheets, ads, doer) trip it; the rest of that lane is held
   with attempts untouched, ONE "<channel> paused" card is posted by code (`cards.breaker_card`, Try again now /
   Leave it until it recovers), one probe ticket runs per pass, and the first success closes it and clears the card
   (`clears_when: {"breaker": lane}`). PERMANENT failures are the payload's fault and never count.
@@ -441,7 +440,7 @@ clock is changed, and a dead cron is noticed from outside the machine. Ported, t
   plain line a day in Sage's voice ("Still waiting on you: ..."). No LLM run stands between a failure and the owner.
 - **The spine cannot starve itself** (`spine.py`): a pass has a budget (`PASS_BUDGET_S`, 17 min inside the 20-min
   kill); a job that would not fit is skipped this pass and runs first next time. `doer-tick` and `drain` are
-  `"group": "long"` and run from their own task, **the organization** (`spine.py --group
+  `"group": "long"` and run from their own task, **example-org Day Spine - long jobs (assistant)** (`spine.py --group
   long`, every 10 min, 25-min limit, `assistant/tasks/SpineLong.xml`, `spine_long.ps1`). A job that declares
   `"expect": "<prefix>"` (the sweep, the drain, the sentinels, the settle) must end with that line; exit 0 without
   it is `silent` and counts toward `fails`.
@@ -459,16 +458,16 @@ Tests: `assistant/tests/test_escalation.py`.
 ## Steps read the record before they fire (WP3, 2026-10-24)
 
 The property OS's follow-ups fire on time or on an email, and its world model only ranks; ours did the same, so a
-questionnaire reminder went to example for a questionnaire he never had and a chain gate counted "the reminder fired"
+questionnaire reminder went to Teo for a questionnaire he never had and a chain gate counted "the reminder fired"
 as "the step happened". Now:
 
 - **`action.satisfied_when`** on a SOP step (`data/sop_map.json`) is read by `assistant/scripts/preconditions.py`
   in `followups._fire` before anything else: `satisfied` = the item is done `by_record` (no ticket, no text);
   `moot` (the ledger says cancelled / lost) = dismissed; `open` / `unknown` = it fires with what was read as its
   evidence (`record checked: ...` / `record unreadable: ...`), so the operator's ticket starts from the record.
-  Checks: `questionnaire_answered` (a completed questionnaire file on their HoneyBook project), `timeline_on_file`
+  Checks: `questionnaire_answered` (a completed questionnaire file on their CRM project), `timeline_on_file`
   (the ledger, the wedding page, or a completed questionnaire), `outbound_since` (`days` or `since: anchor`; an
-  email / HoneyBook message / text to them, read from the exec ledger and not failed in the outcome ledger),
+  email / CRM message / text to them, read from the exec ledger and not failed in the outcome ledger),
   `touches_sent`. Shipped on questionnaire-reminder (both), timeline-request, thank-you, week-of-confirm,
   prep-checkin, finishing-touches. `python assistant/scripts/preconditions.py <check> <unit>` by hand.
 - **Every fired step is an outcome row** (`followups._outcome_followup`, verifier `followup`): by record =
@@ -476,7 +475,7 @@ as "the step happened". Now:
 - **Chains stop trusting a fired reminder** (`tracking/chains.py`): a follow-up `done` counts as evidence only when it
   was done by record or its ticket was completed (`any_done: true` on a rule keeps the old reading).
 - **Two more inbound facts** (`sop_map.inputs`): `file_received` (a sent timeline / list closes the timeline
-  request, a HoneyBook note, the couple page) and `yes_to_proposal` (a note; the quote follow-ups close; the
+  request, a CRM note, the couple page) and `yes_to_proposal` (a note; the quote follow-ups close; the
   proposal / contract step is the operator's reply). `chain_book` tickets have their own section in
   `prompts/operator.md` (before this nothing told the operator what one was).
 - **An unconfirmed text is not a missing reply** (`comms_state.build`): a text handed to the phone and not yet
@@ -502,8 +501,8 @@ Tests: `assistant/tests/test_followups.py` (8c), `test_triage_next.py`.
   counts edits of that card kind in the 30 days before and after; a lesson that did not reduce edits is flagged
   ("no effect") for the review to reword or retire.
 - **Graduation, offered never assumed** (`assistant/scripts/graduation.py`, `tracking.json -> graduation`; the
-  property's followups/graduation.py scaled down): an allowlisted internal exec kind (`hb_add_participant`,
-  `hb_set_stage`, `sheet_set`, `hb_note`, `hb_project_update`) with `min_samples` (10) resolved taps, 90%+ approved,
+  property's followups/graduation.py scaled down): an allowlisted internal exec kind (the CRM connector's add-participant,
+  stage, note and project-update kinds, plus `sheet_set`) with `min_samples` (10) resolved taps, 90%+ approved,
   zero edits, zero undone and zero failed outcomes in 90 days is offered ONCE a month as a card ("Make it
   automatic?", Make it automatic (Recommended) / Keep asking). The tap grants it (`cards._act_on_graduation`), and
   `triage_next` then queues that kind under the standing ref `standing:graduation <kind> (owner tap <ts>)`; the
@@ -528,7 +527,7 @@ Tests: `assistant/tests/test_scorecard.py`.
   result line, digest and say already goes through it. The bridge's own inbound path (Pub/Sub pull, taps) still
   imports `gchat` directly: that is the remaining WP4 work for a second channel.
 - **Slash surface** (`bridge.command`, zero-LLM): `/open`, `/failed` (WP2), `/evidence <card>` (the tap, the
-  ledger state, the Message-ID / HoneyBook id / outbox id), `/who <number or name>` (whois.explain), `/switch <job>
+  ledger state, the Message-ID / CRM id / outbox id), `/who <number or name>` (whois.explain), `/switch <job>
   on|off|run` (switches.py, owners only), `/digest now` (post the weekly drop-down early), `/quiet until <time>` /
   `/quiet off` (no chases, outcome asks or stall lines until then; cards still post and urgent ones still reach Chat;
   honoured by `outcomes._quiet` and `commitments._window_ok`), `/signin <site>` (opens the agent's browser on the PC
@@ -555,10 +554,10 @@ Tests: `assistant/tests/test_channels.py`.
   their history). `assistant/tests/test_new_org_boot.py` proves it: Acme Bakery scaffolds in one command, its
   spine lists its jobs, its ledger, cards, follow-ups, deadman and sentinels run, `exec_store` resolves Acme's
   identities, and nothing of the organization is left in its data.
-- **Still WP5 work (not built):** the service adapters (`services/crm.py` over `hb_exec` + the snapshot, forms,
+- **Still WP5 work (not built):** the service adapters (`scripts/crm.py` over the CRM connector + the snapshot, forms,
   phone, calendar, mail) and the host adapter (schtasks / PowerShell / Credential Manager): today a second
-  organization without HoneyBook edits `sop_map.inputs`, `tracking.json` and the HoneyBook-specific sensors
-  (`sense_honeybook.py`, `client_texts.py`, `hb_exec.py`) rather than swapping one adapter. The generic SOP
+  organization without a CRM edits `sop_map.inputs`, `tracking.json` and the CRM-specific sensors
+  (`sense_crm.py`, `client_texts.py`, the connector's exec script) rather than swapping one adapter. The generic SOP
   template is the wedding one with the names scrubbed; a bakery edits its steps.
 
 ## Lifecycle autopilot (Phase 3, 2026-09-30) - follow-ups + sentinels
@@ -579,13 +578,13 @@ T+14 after delivery), `inquiry` (2 h reply SLA, proposal nudges at 48 h and 7 d)
 `personal` (reminder, awaiting-reply mail trigger).
 
 Producers: `sense_local.py` arms the wedding chain for every tracked, undelivered project;
-`sense_honeybook.py` arms the inquiry SLA for new inquiries and the proposal nudges for
+`sense_crm.py` arms the inquiry SLA for new inquiries and the proposal nudges for
 leads at "Proposal Sent". `followups.py tick` and `sentinels.py` run every operator tick
 after the sensors. `sentinels.py` is the stuck-work watchdog: staged tickets > 5 d, cards
 open > 36 h, approved exec tickets queued > 6 h, exec exceptions, quiet sensors -> ONE
 daily digest ticket, latched for 2 days per item. An item an earlier digest still covers
 (its ticket not yet carded, or its card still open, in any lane) is skipped, never re-carded.
-A staged item live status shows is already fixed is dropped before it reaches a card (the HoneyBook
+A staged item live status shows is already fixed is dropped before it reaches a card (the CRM
 connector is refreshing, or memory records calendar sync on), and no finding line carries terminal or
 /mcp steps: it points at Setup on Mission Control instead (2026-10-16).
 
@@ -627,35 +626,35 @@ The immediate kinds (lead_intro, collection_sent) keep the plain heads-up line a
 
 | kind | when | who fires it |
 |------|------|--------------|
-| `lead_intro` | the minute a quiz lead with a phone lands ("I just saw your wedding form come through..."); also a HoneyBook contact-form inquiry whose contact arrived with the project (`texts.intro_on_honeybook_inquiry`) | `sense_typeform.handle` / `sense_honeybook.arm_inquiry_followups` (`_form_contact`). The hot-lead card then says it went and no longer offers to draft one; the 2 h reply SLA is not armed. |
-| `collection_sent` | right after the Collection Details went out: the doer's standing send (`doer._after_standing` on DOER_DONE) or HoneyBook showing a lead moved to Proposal Sent within 2 days (`texts.collection_on_hb_stage`) | doer / sense_honeybook |
-| `questionnaire_reminder` | wedding-lifecycle `questionnaire-reminder` (T-30) and `-2` (T-21): the operator checks the Wedding Questionnaire in HoneyBook, then runs `client_texts.py send questionnaire_reminder --unit <key>` (refuses a second send inside 7 days, and refuses unless the HoneyBook snapshot's `questionnaires` list shows a sent questionnaire file in their project; then the operator posts one card offering to send the questionnaire template with the scheduler link it finds itself) | followups -> operator -> CLI |
-| `checkin` | wedding-lifecycle `checkin-text` (T-14), `action.auto: client_texts:checkin`: `followups._fire` sends it by itself and marks the duty done; only when it cannot (no number) does the operator get the ticket. Since 2026-10-24 it is signed "the owner" (no rose) and carries the Touch Point Call booking link instead of asking what time works (`texts.checkin_body` + `texts.checkin_scheduler_link`, an https honeybook.com / hbportal.co link); with no real link it is held and the operator posts ONE card | followups auto hook |
-| `meeting_reminder` | the day before (16-30 h ahead) every HoneyBook meeting / call with a client (the meeting's own client phone) or a hold on our calendar whose title is a call / check-in / shoot with a known couple | spine job `client-texts` (every 10 min, 07-21) |
-| `touches_followup` | after HoneyBook confirms the Finishing Touches file went out | `drain` (hb_touches_send done) |
+| `lead_intro` | the minute a quiz lead with a phone lands ("I just saw your wedding form come through..."); also a CRM contact-form inquiry whose contact arrived with the project (`texts.intro_on_crm_inquiry`) | `sense_typeform.handle` / `sense_crm.arm_inquiry_followups` (`_form_contact`). The hot-lead card then says it went and no longer offers to draft one; the 2 h reply SLA is not armed. |
+| `collection_sent` | right after the Collection Details went out: the doer's standing send (`doer._after_standing` on DOER_DONE) or the CRM showing a lead moved to Proposal Sent within 2 days (`texts.collection_on_crm_stage`) | doer / sense_crm |
+| `questionnaire_reminder` | wedding-lifecycle `questionnaire-reminder` (T-30) and `-2` (T-21): the operator checks the Wedding Questionnaire in the CRM, then runs `client_texts.py send questionnaire_reminder --unit <key>` (refuses a second send inside 7 days, and refuses unless the CRM snapshot's `forms` list shows a sent questionnaire file in their project; then the operator posts one card offering to send the questionnaire template with the scheduler link it finds itself) | followups -> operator -> CLI |
+| `checkin` | wedding-lifecycle `checkin-text` (T-14), `action.auto: client_texts:checkin`: `followups._fire` sends it by itself and marks the duty done; only when it cannot (no number) does the operator get the ticket. Since 2026-10-24 it is signed "the owner" (no rose) and carries the Touch Point Call booking link instead of asking what time works (`texts.checkin_body` + `texts.checkin_scheduler_link`, an https CRM portal link); with no real link it is held and the operator posts ONE card | followups auto hook |
+| `meeting_reminder` | the day before (16-30 h ahead) every CRM meeting / call with a client (the meeting's own client phone) or a hold on our calendar whose title is a call / check-in / shoot with a known couple | spine job `client-texts` (every 10 min, 07-21) |
+| `touches_followup` | after the CRM confirms the Finishing Touches file went out | `drain` (crm_touches_send done) |
 
 **The Finishing Touches file (T-60, `finishing-touches`):** two months out (one month is too soon), the
 touches a couple's collection does NOT include (full toasts & speeches film, aerial cinematography,
 second cinematographer, iPhone content creator, feature film, raw footage, vows reaction angles,
-couple's session) go out as a HoneyBook smart file built like the Videography Collection Details:
-the **Finishing Touches** template (`58a564a164ef00679d925dc7`, designed 2026-10-18 through the
+couple's session) go out as a CRM smart file built like the Videography Collection Details:
+the **Finishing Touches** template (designed 2026-10-18 through the
 connector: every page rewritten for touches, 7 priced touches, no discount or payment plan, scheduler
 optional; page deletes / tab names are editor-only, see `client_texts.json -> touches.template_copy._doc`),
 choose-any selection, **prices hidden until checkout**,
 picks flow to the invoice, due on the wedding date. Nothing client-facing says "add-ons" (the owner: it has
-to sound upscale). The operator confirms the booked collection (HoneyBook read-only / the couple note)
+to sound upscale). The operator confirms the booked collection (CRM read-only / the couple note)
 and runs `client_texts.py touches --unit <key> --package <id> [--has ...] [--skip ...]`, which mints ONE
-standing `hb_touches_send` exec ticket (OUTBOUND: quiet hours + resend guards) -> `drain` -> `hb_exec`
--> `pricing/hb_touches.py`: find the contact + project (never creates them), skip if a Finishing
+standing `crm_touches_send` exec ticket (OUTBOUND: quiet hours + resend guards) -> `drain` -> the CRM exec script
+-> `pricing/crm_touches.py`: find the contact + project (never creates them), skip if a Finishing
 Touches file was already published or sent, create from the template, set items + selection + schedule,
-send with the owner's email (`createCommunication` + `smart_file_id` publishes the draft as part of the
-send). Evidence `HB_DONE=<file> SENT=<message>`; then the follow-up text. Prices: `client_texts.json ->
+send with the owner's email (the CRM's send API with the smart file publishes the draft as part of the
+send). Evidence `CRM_DONE=<file> SENT=<message>`; then the follow-up text. Prices: `client_texts.json ->
 touches.catalog.<id>.price` overrides the sheet; an item with no price anywhere (the toasts film until
 the owner sets one) is left off and named in the ticket's `unpriced`.
 
 Phone resolution (`resolve_phone`): the ledger entry's `phone`, then the quiz lead file (email, or
-date + first name), then the HoneyBook contact (email, `workspace_ids` link, or the one contact
-whose name matches). `hb_snapshot.py` now records `created_at` + `workspace_ids` per contact.
+date + first name), then the CRM contact (email, `workspace_ids` link, or the one contact
+whose name matches). The connector's snapshot job now records `created_at` + `workspace_ids` per contact.
 Owners' numbers are never texted; an inquiry is never texted a per-wedding kind.
 Tests: `python assistant/tests/test_client_texts.py`.
 
@@ -675,12 +674,12 @@ everything tunable is in [tracking.json](tracking.json) so another organization 
   measured active hours (`rhythm.py`, from his card answers and chat lines), never in quiet hours. Personal
   texts and the sentinels' own digests are never chased (ruling 13; `chase.exclude_tickets`).
 - **`drift.py`** - the record says one thing, the evidence says it happened: the delivery ledger vs the
-  editor, HoneyBook's stage after a wedding that passed, a bill reminder still armed after "payment
+  editor, the CRM's stage after a wedding that passed, a bill reminder still armed after "payment
   received", a timed calendar event with nothing logged since. Cached every 3 h for the weekly card.
 - **`weekly.py`** - **Friday** readback (what moved, what stalled, done-but-not-closed) to the shared
   space, then ONE "Weekly record check" card; its approve mints a **`tracking_fix`** executor ticket
   (`exec_store` kind, local lane, never outbound) and `drain` runs `drift.py apply`: a ledger stage or a
-  closed reminder, nothing that reaches a person. HoneyBook stage moves stay the owner's hand.
+  closed reminder, nothing that reaches a person. CRM stage moves stay the owner's hand.
 - **`advice.py`** - the 💡 line now rendered on every card (`chat_push.card_body`, `card_line`).
 
 Spine jobs `tracking-drift` / `tracking-chase` / `tracking-weekly`. State: `data/tracking/`. Tests:
@@ -690,7 +689,7 @@ Spine jobs `tracking-drift` / `tracking-chase` / `tracking-weekly`. State: `data
 
 - **`chains.py` + [chains.json](chains.json)** - declared next-step chains, example's `next_step` shape: a
   chain is an ordered list of gates, each with a due offset (from the wedding date, the day a lead
-  reached its stage, or a tax date) and the evidence that satisfies it (ledger, HoneyBook, the editor
+  reached its stage, or a tax date) and the evidence that satisfies it (ledger, the CRM, the editor
   pipeline, calendar, follow-ups, tickets, sends, the owners' own chat lines, the registers, the owner's
   tap). Four ship: **shoot** (timeline, second shooter, rentals, travel, cards; asked T-14 / T-7 / T-3),
   **edit** (ingested -> music -> first cut wk 5 -> review -> revisions -> delivery wk 8), **lead**
@@ -699,8 +698,8 @@ Spine jobs `tracking-drift` / `tracking-chase` / `tracking-weekly`. State: `data
   ask time, gets ONE card: Booked / Book it for me / Not yet / Drop (max 2 per lane per day). "Book it
   for me" mints a `chain_book` ticket for the operator / doer, never a send. Drop on a **lead** gate
   latches the lead: no later gate is carded and its proposal nudges (`inquiry` quote follow-ups) are
-  dismissed, until HoneyBook shows a new stage or activity after the tap. A **cold lead** (its step due
-  more than `stale_days` (60) ago, or no HoneyBook activity in that time) gets no booking card: ONE
+  dismissed, until the CRM shows a new stage or activity after the tap. A **cold lead** (its step due
+  more than `stale_days` (60) ago, or no CRM activity in that time) gets no booking card: ONE
   held "Archive this lead?" card for the Monday digest instead (Archive latches it; Keep asks as usual),
   and it drops out of the world model's open loops (2026-10-29). `chains.py gaps` prints
   every entity's chain; `--dry-run` the cards it would post.
@@ -731,7 +730,7 @@ All zero-LLM, all in `scripts/tracking/`, every word list in JSON so another org
 - **`mining.py`** (ruling 3; the shape of the property OS's `vendor_threads.py`) - the first pass over
   everything new since the last run: every inbound text (`data/phone_threads.json`, personal ones
   included, plus the `imessage_in` tickets the 60-per-contact thread log has rotated out), mail and
-  HoneyBook inquiry tickets, and HoneyBook client messages when the snapshot carries them. The owners'
+  CRM inquiry tickets, and CRM client messages when the snapshot carries them. The owners'
   own chat with Sage is not mined (2026-10-17, `sources.chat` off: Sage already hears those lines). A date beside a commitment word from a couple / planner / vendor /
   family / friend / owner becomes ONE `calendar_hold` card ("Date from Mom: ... Put a hold on the
   calendar for 10/18 at 5 PM?"). Holds are only for the owners' own plans (2026-10-28): a prayer request
@@ -759,23 +758,23 @@ All zero-LLM, all in `scripts/tracking/`, every word list in JSON so another org
   `config.json -> phone.personal_exceptions {enabled, time, money, include_family}`; words in
   `mining.json -> personal_text_exception`. The operator prompt says what to do with such a ticket.
 - **`scheduling.py`** (ruling 12) - "set up a call with X" / a lead asking for a call: reads both
-  owners' Google calendars (the agent's token) plus `data/calendar.json`, the HoneyBook meetings in
+  owners' Google calendars (the agent's token) plus `data/calendar.json`, the CRM meetings in
   the desk snapshot, `data/holds.json` and the times already offered to someone else; picks 2-3 open
   slots on different days inside `tracking.json -> scheduling.windows`; posts ONE card with the
-  drafted message carrying them, exec `imessage_send` / `email_send` / `hb_message` as the thread
+  drafted message carrying them, exec `imessage_send` / `email_send` / the CRM connector's message kind as the thread
   dictates (templates per channel and audience in `scheduling.templates`, lint-clean, first names,
   no price / date / turnaround). The tick (`tracking-scheduling`, every 15 min) reads their reply:
   a picked time ("Tuesday works", "the 2 pm one", "option 2") -> the confirmation message card AND a
   `calendar_hold` card; "none of those" -> logged, left to the operator; no answer in
   `proposal_ttl_days` -> expired, slots freed. One open offer per person. A lead who already booked
-  through the HoneyBook scheduler (`lead_meetings`) is never offered times. Triggers: the operator
+  through the CRM scheduler (`lead_meetings`) is never offered times. Triggers: the operator
   (`scheduling.py propose --ticket <id>` / `--with "<name>" --channel ... --to ...`, see
   prompts/operator.md "Scheduling a call") and Sage's SUGGEST `call` field (`agent/actions.py`;
   `claims.py` holds a reply that promises times to that field).
 - **`probation.py`** (ruling 9) - the 20-right-in-a-row tally per class from the card answers joined
   to the cards and the executor ledger. Classes in `tracking.json -> probation.classes`:
-  `record_write` (tracking_fix, calendar_hold, hb_note, hb_project_update, local) and
-  `routine_client_send` (email / text / HoneyBook sends whose follow-up step is the thank-you, the
+  `record_write` (tracking_fix, calendar_hold, CRM note / project-update kinds, local) and
+  `routine_client_send` (email / text / CRM sends whose follow-up step is the thank-you, the
   ingest gate or the 48 h quote follow-up, or whose header says so; a reply to a lead never counts).
   AS-IS = the exec's own approve label, no edit, no typed note, no Skip, the ticket not undone;
   anything else resets the class to zero. At the bar ONE "Make it automatic?" card
@@ -840,7 +839,7 @@ Wiki note: `Wiki/Integrations/Bank Feed (SimpleFIN).md`.
   account) and a price jump.
 - **Quarterly** `quarterly.py`: YTD Schedule C profit -> annualized federal (SE, standard deduction,
   QBI, brackets) + CA; the next due date armed as `money / quarterly-estimate` (T-10d) with the amount
-  in `data/money/quarterly.json`; a set-aside card after each HoneyBook payment lands, netting out
+  in `data/money/quarterly.json`; a set-aside card after each CRM payment lands, netting out
   Relay's split once `relay.splits_pct` is filled in.
 - **Monthly** `monthly.py`: the 1st-of-month readback to the shared space via `agent/bridge.post`.
 - **Relay from the phone, in chat** (2026-10-16, `scripts/money/plaid_wizard.py`): say "set up Plaid" or
@@ -884,7 +883,7 @@ secret for example": the card was answered under a Python without the `keyring` 
   never in quiet hours; the counter resets when the outbox empties. The deferred re-nudge timer inside
   the answering process dies with that process (a CLI answer exits at once), so the probe is the path
   that survives. Tests: `tests/test_phone_bridge.py` (re-nudge block).
-Still phone-side: the "the organization" shortcut has never POSTed `/api/phone/ack`
+Still phone-side: the "example-org Send Texts" shortcut has never POSTed `/api/phone/ack`
 (`phone_bridge.acks_ever`), so the PC cannot tell WHEN the phone sent; step 5 of
 `the owner_IPHONE_SETUP.md` (Get Contents of URL -> /api/phone/ack) is missing or failing on the phone.
 
@@ -894,7 +893,7 @@ Still phone-side: the "the organization" shortcut has never POSTed `/api/phone/a
 Tailscale Serve, at **https://<this-pc>.<tailnet>.ts.net:9443** (tailnet only: the owner's own
 devices; nobody else can reach it). Zero LLM at runtime. It only does what `cards.py` already
 lets the owner do from the CLI: answer / undo a card (`POST /api/cards/answer`, `/api/cards/undo`)
-serve the Desk at `/desk` (HoneyBook strip, leads, edit bay, nagging; links both ways),
+serve the Desk at `/desk` (CRM strip, leads, edit bay, nagging; links both ways),
 and queue a request for the operator (`POST /api/ask` -> ticket kind `the owner_request`, which the
 operator answers with a card on its next tick). Every card on the page has its option buttons,
 a note box, and a 30 s undo after a tap. If the full page cannot be built (a malformed
@@ -918,7 +917,7 @@ setup: [owner_IPHONE_SETUP.md](owner_IPHONE_SETUP.md)).
 - **Out:** Approve (the owner or owner; `by` records the Tailscale login) mints an
   `imessage_send` ticket (lane `phone`, account allow-list `owner-iphone`, duplicate windows
   2 min same contact / 1 d identical text). `drain.py` puts it in `data/phone_outbox.json`;
-  her "the organization" shortcut GETs `/api/phone/outbox` (which first drains phone tickets
+  her "example-org Send Texts" shortcut GETs `/api/phone/outbox` (which first drains phone tickets
   older than the 30 s undo window), sends with Send Message, POSTs `/api/phone/ack`.
 - **At most once:** an item is `handed` on fetch and never re-offered. Handed-but-unacked
   after 30 min becomes a sentinel finding (check her Messages before re-sending).
@@ -930,24 +929,33 @@ setup: [owner_IPHONE_SETUP.md](owner_IPHONE_SETUP.md)).
 
 Tests: `python assistant/tests/test_phone_bridge.py` (30 checks, scratch dirs, includes the HTTP token door).
 
-## HoneyBook -> Wiki/Couples sync (2026-09-30)
+## CRM -> Wiki/Couples sync (2026-09-30)
 
-`scripts/honeybook/hb_couples_sync.py` runs nightly from `dream_cron.ps1` (and on demand):
-every booked, not-completed HoneyBook project within the last 60 days or in the future gets a
-`Wiki/Couples/YYYY-MM-DD <Lastname>.md` note. Existing notes are matched by `honeybook_id`
+`scripts/crm/crm_couples_sync.py` runs nightly from `dream_cron.ps1` (and on demand):
+every booked, not-completed CRM project within the last 60 days or in the future gets a
+`Wiki/Couples/YYYY-MM-DD <Lastname>.md` note. Existing notes are matched by `crm_id`
 (or adopted when a hand-written note on that date has no id yet); only the
-`<!-- hb:begin -->...<!-- hb:end -->` block and `updated` change, so the owner's and dreaming's
+`<!-- crm:begin -->...<!-- crm:end -->` block and `updated` change, so the owner's and dreaming's
 text is never touched. New notes are `status: draft`. Lints, then commits its own notes.
+
+## CRM
+
+The engine ships no CRM. When an owner names theirs during onboarding, the builder writes
+`assistant/scripts/crm_<id>.py` — a connector module that declares the CRM's service name,
+snapshot path, field aliases, exec kinds, MCP servers, and optional hooks. The neutral layer
+`assistant/scripts/crm.py` routes every CRM call through the active connector so the rest of
+the engine never names the provider. See [assistant/CRM_CONTRACT.md](CRM_CONTRACT.md) for the
+full connector contract, snapshot shape, and the list of helpers `crm.py` exposes.
 
 ## Day Spine (Phase 5, 2026-09-30) - one zero-LLM housekeeping task
 
 `assistant/scripts/spine.py` + `assistant/spine_jobs.json`, fired every 10 min 06:00-23:30 by
-the task **"the organization"** (ported from the vault's night_ops/runner.py). Each
+the task **"example-org Day Spine (assistant)"** (ported from the vault's night_ops/runner.py). Each
 job has its own cadence, window and timeout, and a state row in `data/spine_state.json`
 (`spine.py --list`). The task only fires 06:00-23:30, so a job `window` must sit inside those
 hours (rescue-kit sat at 02:00-06:00 and never ran until 2026-10-01). `sentinels.py` reads the
 state file: a job that fails 3 runs in a row, a spine that stops firing, or a scheduled task
-whose last run exited non-zero becomes a stuck-work finding. Jobs: hb-snapshot, cards-sweep + drain (10 min: approved sends leave within minutes,
+whose last run exited non-zero becomes a stuck-work finding. Jobs: crm-snapshot, cards-sweep + drain (10 min: approved sends leave within minutes,
 not at the next LLM tick), mc-keepalive, followups-tick, sentinels, heartbeat, gate-health,
 graphify, log-rotate, dashboard-rebuild. It replaced four separate Windows tasks (Graphify,
 Heartbeat, Gate Health, Mission Control keepalive); their XMLs stay on disk. Log:
@@ -977,9 +985,8 @@ each one and writes `data/connections_status.json`: `live`, `dead`, `not_configu
 `manual`. Mission Control shows them in the **Connections** panel; `sentinels.py` turns any
 `dead` connection into a finding with the fix. A never-configured connection is not a
 finding (it is backlog: [CONNECTIONS.md](../CONNECTIONS.md)). Details carry error types only,
-never a secret. The old HoneyBook browser-login probe (`dashboard.py --hb-check`) is retired:
-HoneyBook signs in through Google, so the connector is the path and its snapshot age is the
-health signal. Add a row to the registry in the same change that adds a connection.
+never a secret. The old CRM browser-login probe is retired:
+the CRM connector is the path and its snapshot age is the health signal. Add a row to the registry in the same change that adds a connection.
 **The brief's CONNECTIONS line (2026-10-18 evening, plan section 2):** `python assistant/scripts/connect.py brief`
 prints ONE sentence naming what is not connected (or stopped working) and the fix the owner taps or says for each:
 the row's `setup.chat.say` phrase when it has one ("say \"set up plaid\" here"), else the Setup-page button
@@ -1064,7 +1071,7 @@ more tries) before the owner hears it stopped, and then hears how far it got. Do
   `login_fill.py` types them into the page from a separate process; the model turn can only run that
   script, never read the vault. TOTP is automatic; SMS/email codes come back as a card.
 - **Belt** (gate target `doer`, frozen in `gate_baseline.json`): explicit allow list, `--strict-mcp-config`,
-  no mail / HoneyBook / web fetch / evaluate / file upload, Bash only for `login_fill.py`,
+  no mail / CRM / web fetch / evaluate / file upload, Bash only for `login_fill.py`,
   `report.py checkpoint`, `vault.py has`; writes only under `assistant/out/doer/`. The tier call itself is
   the model following the prompt, so tier C is drawn wide and every run is logged (`~/.claude/doer-wv.log`).
 - Connections `doer-vault` and `doer-browser` are in the registry; the Connections panel shows them.
@@ -1112,47 +1119,47 @@ Test: `tests/test_chat_thread.py` (the real 2026-10-29 thread as the fixture, a 
 ## Every input leads to its next action (2026-10-18) - the triage lanes, ported
 
 the owner: *"Take a lesson from the triage lanes in property management and learn how every input leads to the
-next logical action as opposed to our system that received example's contact info and did nothing with it."*
+next logical action as opposed to our system that received Wren's contact info and did nothing with it."*
 `scripts/triage_next.py` is that engine, zero-LLM, hooked into `tickets.add_many`: the moment an inbound
-ticket lands (a text, an email, a HoneyBook inquiry) it is sorted. **Party** (whose couple / lead it is: the
-ledger's phones and emails, the quiz lead files, the HoneyBook contacts) -> **facts** (a contact, "copy X
+ticket lands (a text, an email, a CRM inquiry) it is sorted. **Party** (whose couple / lead it is: the
+ledger's phones and emails, the quiz lead files, the CRM contacts) -> **facts** (a contact, "copy X
 on everything", the questionnaire is done, they went another direction, a date or venue change; the words
 live in `data/sop_map.json -> inputs.facts`) -> **actions** (`inputs.actions`, three gates: `auto` = code
 does it now and records it: `also_notify` on the ledger entry, the contact on the couple's wedding page,
-closing a questionnaire reminder, stopping a lost lead's follow-ups, an internal HoneyBook note; `card` =
-code posts the exec card now (`hb_add_participant`, `hb_set_stage lost`), the owner's tap runs it; `operator` =
+closing a questionnaire reminder, stopping a lost lead's follow-ups, an internal CRM note; `card` =
+code posts the exec card now (the CRM connector's add-participant kind, `crm.apply_stage` with "lost"), the owner's tap runs it; `operator` =
 left for the drafter: the reply, a date/venue update). The ticket's `payload.triage` records all of it, the
-operator prompt says to do only what is left, and Sage's prompt carries the rule. Replaying example's two
-10-18 texts (`triage_next.py --dry --from +1555-031-6831 --prior "Here is example's number..." --text "And email: ..."`)
+operator prompt says to do only what is left, and Sage's prompt carries the rule. Replaying Teo's two
+10-18 texts (`triage_next.py --dry --from +15550316831 --prior "Here is Wren's number..." --text "And email: ..."`)
 yields: participant card, couple page, also_notify, reply draft. Couple-page writes are queued and filed by
 the spine (`triage-drain`, 10 min) because a wiki write lints and commits. Switch off: env `WV_NO_TRIAGE=1`.
 Vocabulary and targets are data, so another business edits `sop_map.json`, never the code.
 Tests: `tests/test_triage_next.py`.
 
-### HoneyBook by connector, never by clicking (2026-10-18)
+### CRM by connector, never by clicking (2026-10-18)
 
-Four doer browser runs failed on HoneyBook's "Add" button while the connector could do it in one call. New
-exec kinds in `hb_exec.py` / `exec_store.py` / `drain.py` / `cards.py`: **`hb_add_participant`**
-{workspace_id|project_id, email, name?, phone?} (find-or-create the contact, add its user to the workspace,
-read the member list back; HoneyBook mails the invite, so card-gated) and **`hb_set_stage`** {workspace_id|
-project_id, stage, reason?} (a pipeline stage by NAME, read back; or `lost` / `archived` = archive with a
-reason, since the owner's pipeline has no Lost stage; card-gated, a stage's automation may run). `hb_note` takes
-`project_id` too (resolved through the desk snapshot). The weekly record check's lagging HoneyBook stages are
-now **fixes** (`drift.py` op `hb_stage` -> `hb_set_stage`), not "[HoneyBook, your hand]"; targets in
+Four doer browser runs failed on the CRM's "Add" button while the connector could do it in one call. New
+exec kinds in the connector's exec script / `exec_store.py` / `drain.py` / `cards.py`: the connector's
+**add-participant** kind {thread_id|project_id, email, name?, phone?} (find-or-create the contact, add its
+user to the workspace, read the member list back; the CRM mails the invite, so card-gated) and the connector's
+**stage** kind {thread_id|project_id, stage, reason?} (a pipeline stage by NAME, read back; or `lost` /
+`archived` = archive with a reason; card-gated, a stage's automation may run). The connector's note kind takes
+`project_id` too (resolved through the desk snapshot). The weekly record check's lagging CRM stages are
+now **fixes** (`drift.py` op `crm_stage` -> `crm.apply_stage`), not "[CRM, your hand]"; targets in
 `tracking.json -> drift.crm_stage.booked_stage / post_event_stage`.
 
 **Preflight.** Emery's approved follow-up died twice on `comms.createCommunication is not a function`:
-`hb_exec.py` pinned SDK 0.20.6, which had no such method (now 0.21.4). `hb_exec.py selftest` runs ONE
-read-only headless check that every function each kind's template calls exists (`KIND_FUNCS`), writes
-`data/hb_exec_status.json`, and says one line in chat when the shape changes; `cards.post` refuses an hb_*
-card whose kind the self-test found dead (`HB_PATH_DEAD`), `hb_exec` refuses the run, and a live "is not a
-function" marks its kind dead on the spot. Spine job `hb-send-selftest`, daily. Tests: `tests/test_hb_exec.py`.
+the connector's exec script pinned SDK 0.20.6, which had no such method (now 0.21.4). The connector's exec
+selftest runs ONE read-only headless check that every function each kind's template calls exists (`KIND_FUNCS`),
+writes `data/crm_exec_status.json`, and says one line in chat when the shape changes; `cards.post` refuses a
+CRM kind card whose kind the self-test found dead (`CRM_PATH_DEAD`), the connector refuses the run, and a live
+"is not a function" marks its kind dead on the spot. Spine job `crm-send-selftest`, daily. Tests: `tests/test_crm_exec.py`.
 
 ### Couple notes, the builder's state, standing meeting guests, re-queues (2026-10-18)
 
 - `agent/wiki_writer.py`: a Couples page takes notes inside a sync-safe **`## Story and notes`** region
-  (`sage:notes` markers) that `hb_couples_sync.py` never touches; note type `couple`, `couple_notes(name, body)`,
-  loose lookup (`find_couple("example and example")`). example & example's meeting recording is filed there.
+  (`sage:notes` markers) that the CRM connector's sync script never touches; note type `couple`, `couple_notes(name, body)`,
+  loose lookup (`find_couple("Teo and Wren")`). Teo & Wren's meeting recording is filed there.
   Tests: `tests/test_couple_notes.py`.
 - `agent/builder.py`: `save_state()` merges with the file, so an owner's tap during a long run is never
   clobbered (09:34 approvals were overwritten by the 09:23 run's save). `scripts/builds_requeue.py` (spine
@@ -1161,8 +1168,8 @@ function" marks its kind dead on the spot. Spine job `hb-send-selftest`, daily. 
 - `scripts/meeting_guests.py` (spine `meeting-guests`, `config.json -> meetings.guests`): the standing guests
   (a team member) on every upcoming client video call that is also on the owner's Google calendar, by Calendar API with
   `sendUpdates=none` (they get the Meet on their calendar and join without knocking). A Meet that exists only
-  inside HoneyBook is said once in chat: co-hosting there needs a HoneyBook team seat, the owner's call.
-- The doer: `prompt.md` says HoneyBook and Google are connector-first (it stops and asks to be re-routed),
+  inside the CRM is said once in chat: co-hosting there needs a CRM team seat, the owner's call.
+- The doer: `prompt.md` says the CRM and Google are connector-first (it stops and asks to be re-routed),
   a click that times out twice on "waiting for element to be stable" is forced once through `browser_evaluate`
   and then given up with the page state; `doer.py plain_error()` turns a max-turns / crash result into one
   plain sentence (no JSON in chat). Tests: `tests/test_doer.py`.
@@ -1170,7 +1177,7 @@ function" marks its kind dead on the spot. Spine job `hb-send-selftest`, daily. 
 ## sage-core: the engine, the pack, the supervisor, onboarding (2026-10-27)
 
 the owner: "a copy of what Sage is and how it works but not org specific; remove any features that are specifically
-niche to my org or system"; "no need for a HoneyBook connector module, that can be set by the user if desired."
+niche to my org or system"; "no need for a CRM connector module built in, that can be set by the user if desired."
 The plan and its critique: [SAGE_CORE_PLAN_2026-10-27.md](SAGE_CORE_PLAN_2026-10-27.md). What is built, all tested end to
 end on a fixture organization by `assistant/tests/test_sage_core.py` (37 checks: export, new_org from the export,
 every command below, update, modules):
@@ -1181,7 +1188,7 @@ every command below, update, modules):
   Schema, the generic skills). PACK = the organization's own files (data, state, learnings, agent skills, profile /
   people / prompt / google / org / config / connections / tracking / chains / mining / spine_jobs, Wiki, Memory, Raw,
   Context, Schema/mistakes.md, task XMLs): an update never touches them. MODULES (`money`, `typeform`) ship with
-  their jobs off. NICHE never ships: the wedding skills and templates, every HoneyBook script, the Resolve editor,
+  their jobs off. NICHE never ships: the wedding skills and templates, every CRM connector script, the Resolve editor,
   card ingest, ads, lots, travel, taxes, rentals, shoot-day, the phone setup notes, planning history.
   `export <dst>` writes a clean `sage-core` (root path as `{{ORG_ROOT}}`, hosts / domains / owners scrubbed from docs
   and wrappers, never from code; `engine_manifest.json` with a sha per file; `--git` commits it). `update <org>
@@ -1190,10 +1197,10 @@ every command below, update, modules):
 - **`new_org.py` is the pack creator** (from this vault or from an exported engine): `install_tree` + the pack
   files, `org.json` with the machine keys the code used to hard-wire (`keyring_service`, `python`, `semantic_python`,
   `secrets_dir`, `google_home`, `lanes`, `lifecycle`, `modules`), `config.json` at maximum gating (shadow on, buttons
-  off, texts held, cards to the owners' keys, no HoneyBook / meetings / projects / editor sections), the SOP map
+  off, texts held, cards to the owners' keys, no CRM / meetings / projects / editor sections), the SOP map
   reduced to the generic inquiry follow-through on the business lane, module jobs and jobs whose script did not ship
   disabled with the reason on the row, the niche hook dropped from `.claude/settings.json`, generic Context / Memory /
-  Schema/mistakes.md, the manifest. `alib`, `google_api`, `space_reader`, `gmcp` / `wiki_writer`, `hb_exec`, `drain`,
+  Schema/mistakes.md, the manifest. `alib`, `google_api`, `space_reader`, `gmcp` / `wiki_writer`, the connector's exec script, `drain`,
   `doer` read those keys (this organization's literals stay their fallback, so nothing changed here).
 - **Hidden by default (engine rule, the owner 2026-10-28: "run processes in background and hidden by default unless the user
   needs to interact").** Nothing the engine starts opens a window: daemons run under `pythonw` (comms probe, relay
@@ -1215,7 +1222,7 @@ every command below, update, modules):
   `serve` is the owner's call (the tasks and serve would double-run the same jobs).
 - **`catalog.py` + `catalog/*.json`: the connector catalog** (24 tools; tier 1 connector / API, 2 CLI, 3 export /
   forwarding / webhook / device, 4 browser last resort; reads, writes, what ALWAYS waits for a card; `built` only
-  where this code exists). HoneyBook is an entry (MCP connector, tier 1), not engine code.
+  where this code exists). A CRM is an entry (MCP connector, tier 1), not engine code.
 - **`onboarding.py`: Discovery, Training, never-list, shadow week, go-live.** `discover` (one conversation over the
   14 business functions in `onboarding/discovery.json`; the catalog picks the tier), `map` (the capability map),
   `coverage` / `train` (the lifecycle skeleton for the business type, `onboarding/lifecycles/`: service studio,
@@ -1281,7 +1288,7 @@ every command below, update, modules):
   organization's own names from `org.json` / `people.json` (hosts, domains, addresses, owners -> "the owner", staff ->
   "a team member"), and so are the comments and docstrings of code (`engine.export` leaves code alone); a **working
   line** of code that carries the organization's identity or its niche vocabulary (`core_sync.json -> niche_terms`:
-  wedding, couple, HoneyBook, venue, Resolve ...) is a change that only applies to this business, so the file is
+  wedding, couple, venue, Resolve ...) is a change that only applies to this business, so the file is
   **held** at its last clean version in sage-core and ONE build request is filed through the capability loop (the
   builder moves the code behind `org.json` / `config.json` / a module / a niche path); the next sync after that lands
   releases the hold by itself, and every generic change that waited with it lands at once. Lines already there before
@@ -1332,14 +1339,14 @@ every command below, update, modules):
   `config.json -> lanes[0]` (`alib.business_lane()`, the business lane). Niche code sits behind
   **`config.json -> plugins.modules`**: modules under `assistant/scripts` the engine asks for hooks by attribute
   (`alib.plugin_map / plugin_set / plugin_call / plugin_each`) and runs the same without. This organization's two are
-  niche paths (`core_sync.json -> niche_paths`, never exported): `crm_honeybook.py` (the HoneyBook ticket kinds,
+  niche paths (`core_sync.json -> niche_paths`, never exported): the organization's CRM connector module (ticket kinds,
   validators, executors, result lines, after-done follow-ups, stale-write reason, card button words, the agent turn's
-  MCP server, sentinel findings, the doer's standing Publish & share step) and `texts_honeybook.py` (who a standing text
+  MCP server, sentinel findings, the doer's standing Publish & share step) and the organization's texts plugin module (who a standing text
   goes to: lead files, the snapshot's contacts, project_state; the questionnaire file, meeting reminders, the Finishing
   Touches file). `text_gate` speaks of the business party now (`business_only / business_numbers / is_business`), the
   doer's sign-in window is `config.json -> doer.signin_window`, and `the owner_request` is an `allow_terms` identifier (a
   ticket kind the code shares, as `test_new_org_boot` already says). Left as they are, on purpose: the allow / deny lists
-  in `brain.py` and `doer.py` that `check_gates.py` freezes (six lines naming the HoneyBook connector tools).
+  in `brain.py` and `doer.py` that `check_gates.py` freezes (six lines naming the CRM connector tools).
 - **Card taps without Tailscale (2026-10-28).** The Apps Script relay (`agent/gchat_relay/Code.gs`) has a **pull
   mode**: events queue in the script's cache, `scripts/relay_poll.py` (serve job `relay-poll`) fetches them through the
   relay's web app URL every few seconds, hands each to Mission Control's `/gchat/events` on loopback and posts the
@@ -1418,8 +1425,8 @@ every command below, update, modules):
 
 - **Mission control** (`dashboard.py`): one brand-styled static page - needs-you list,
   latest brief, next 14 days, bookings, queue by lane, system health (sensors, creds,
-  HoneyBook session, task registration, last tick, budget), notifications, log tail.
-  Read-only, zero LLM. The morning run adds `--hb-check` (HoneyBook session probe).
+  CRM connector status, task registration, last tick, budget), notifications, log tail.
+  Read-only, zero LLM. The morning run adds a CRM connector health check.
 
 - `python scripts/open_loops.py` (the "what's open" roll-up) lists the queue: staged
   tickets under BLOCKED (your move), new/claimed under WAITING.

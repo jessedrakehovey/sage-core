@@ -21,14 +21,14 @@
       "key": "day-spine",
       "name": "Day Spine",
       "what": "every 10 minutes 06:00-23:30: the standing jobs that keep the day moving (follow-ups, reminders, sentinels, builds)",
-      "task": "example-org",
+      "task": "example-org Day Spine (assistant)",
       "aliases": ["spine", "the spine", "example day spine"]
     },
     {
       "key": "comms-probe",
       "name": "Comms Probe",
       "what": "every minute 07:00-21:30: wakes the operator within a minute of a text, email, lead or tap",
-      "task": "example-org",
+      "task": "example-org Comms Probe (assistant)",
       "aliases": ["comms probe", "probe", "the probe"]
     },
     {

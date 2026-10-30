@@ -1,7 +1,7 @@
 """whois.py - who is this number? One answer, with the evidence, from everything the house knows (2026-10-23).
 
 the owner: "Sage has a difficult time sorting through and deducing who people are from inbound text
-messages." Until now the only name lookup was the phone book (never imported) plus HoneyBook's
+messages." Until now the only name lookup was the phone book (never imported) plus the CRM's
 contacts, so 50 of 59 text threads had no name, and what Sage had already learned about a number
 ("the owner's dad texts from +1 555-063-5563") sat in memory prose that nothing read back. This module
 is the one place that question is answered, for the phone bridge, the operator and Sage alike.
@@ -13,10 +13,10 @@ Sources, strongest first (each read on its own; a missing one never hides the ot
   the wiki          Wiki/People/*.md (Family and Friends: table rows and headings), Wiki/Couples, Wiki/Vendors
   memory            assistant/agent/state/memory.json    (numbers next to a name or "the owner's dad")
   leads / tracker   assistant/data/leads/*.json, scripts/projects/project_state.json
-  HoneyBook         dashboard/data/honeybook.json contacts (hb_snapshot.py)
+  CRM               snapshot contacts (crm.snapshot, contacts.crm_people)
   the texts         assistant/data/phone_threads.json: the name the phone sent; how the owner addressed
-                    them ("Hey example", "I love you too Dad"); how they signed ("Hey, it's Dave",
-                    "example: Hi the owner"); group texts (tapbacks quoting another thread's message);
+                    them ("Hey Marisa", "I love you too Dad"); how they signed ("Hey, it's Dave",
+                    "Mira Tsai: Hi the owner"); group texts (tapbacks quoting another thread's message);
                     automated senders (short codes, codes, promos, campaign texts)
   neighbours        a number one digit from a known person's (a family plan) is a hint, never a name
 
@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from alib import DATA, VAULT, load_json, save_json  # noqa: E402
+import crm
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -340,7 +341,7 @@ class Index:
                 if rel:
                     heading_name = rel.group(2).title()      # "## the owner's dad" -> Dad
                 elif len(hm.group(1)) >= 2 and not generic and _namey(section.strip()):
-                    heading_name = section.strip()           # "## example" -> example
+                    heading_name = section.strip()           # "## Marisa" -> Marisa
                 else:
                     heading_name = ""
                 row_name, row_rel = "", ""
@@ -480,19 +481,20 @@ class Index:
         except Exception as e:  # noqa: BLE001
             self.errors.append(f"tracker: {type(e).__name__}")
 
-    def load_honeybook(self):
+    def load_crm(self):
+        crm_src = crm.name().lower()
         try:
             import contacts
             for c in contacts.crm_people():
                 if any(str(e.get("value") or "").lower() in self.owner_emails for e in c.get("emails", [])):
                     continue
-                ev = "a HoneyBook contact" + (f" ({c['org']})" if c.get("org") else "")
+                ev = f"a {crm.name()} contact" + (f" ({c['org']})" if c.get("org") else "")
                 for ph in c.get("phones") or []:
-                    self.add(ph.get("value"), _cand(c["name"], "honeybook", 0.85, "client", "", ev))
+                    self.add(ph.get("value"), _cand(c["name"], crm_src, 0.85, "client", "", ev))
                 for em in c.get("emails") or []:
-                    self.add(em.get("value"), _cand(c["name"], "honeybook", 0.83, "client", "", ev))
+                    self.add(em.get("value"), _cand(c["name"], crm_src, 0.83, "client", "", ev))
         except Exception as e:  # noqa: BLE001
-            self.errors.append(f"honeybook: {type(e).__name__}")
+            self.errors.append(f"crm: {type(e).__name__}")
 
     def load_threads(self):
         try:
@@ -553,7 +555,7 @@ class Index:
         self.load_memory()
         self.load_leads()
         self.load_tracker()
-        self.load_honeybook()
+        self.load_crm()
         self.load_threads()
         self._groups = _group_threads(self.threads)
         self._group_vocatives()
@@ -662,7 +664,7 @@ class Index:
                 if kd in ("family", "friend") and g["kind"] in ("contact", "unknown"):
                     g["kind"] = kd
                 if full and g["sources"] == ["texts"] and g["confidence"] < SURE:
-                    # "Hey example" + a example in the People notes: that is her
+                    # "Hey Marisa" + a Marisa in the People notes: that is her
                     g["confidence"] = round(min(0.99, 1 - (1 - g["confidence"]) * 0.4), 2)
                     g["evidence"].append(f"a {full} is in the People notes" + (f" ({rel})" if rel else ""))
                 if full and len(_norm_name(g["name"]).split()) == 1 and len(_norm_name(full).split()) > 1:
@@ -724,7 +726,7 @@ class Index:
         for rx, hint in _CLUES:
             if rx.search(blob) and hint not in hints:
                 hints.append(hint)
-        # a known first name they mention or address ("Thanks for doing all this example!")
+        # a known first name they mention or address ("Thanks for doing all this Hollis!")
         mentioned = []
         for w in re.findall(r"\b([A-Z][a-z]{2,})\b", blob):
             full = self.known_names.get(w.lower())
@@ -890,7 +892,7 @@ def _qkey(t: str) -> str:
 
 # ------------------------------------------------------------------ labels
 def label_of(r: dict, book_loaded: bool = False, short: bool = False) -> str:
-    """'Dad (the owner's dad, +1 555-063-5563)'; 'probably example (+1 ...)'; '+1 555-072-6472 (not known; writes like a partner)'."""
+    """'Dad (the owner's dad, +1 555-063-5563)'; 'probably Marisa (+1 ...)'; '+1 555-072-6472 (not known; writes like a partner)'."""
     num = r.get("pretty") or r.get("handle") or ""
     name, conf, kind = r.get("name") or "", float(r.get("confidence") or 0), r.get("kind") or "unknown"
     rel = r.get("relation") or ""
@@ -973,7 +975,7 @@ def who_block(handle, text: str | None = None) -> dict:
 
 
 _SYN = {"dad": ("dad", "father", "papa", "pops"), "father": ("dad", "father"), "mom": ("mom", "mother", "mama"), "mother": ("mom", "mother"),
-        "stepmom": ("stepmom", "stepmother", "example"), "stepmother": ("stepmom", "stepmother"), "wife": ("owner6", "wife"),
+        "stepmom": ("stepmom", "stepmother", "marisa"), "stepmother": ("stepmom", "stepmother"), "wife": ("owner6", "wife"),
         "husband": ("owner1", "husband"), "mil": ("mother-in-law",), "mechanic": ("mechanic", "car", "oil", "shop"),
         "editor": ("editor", "draft", "edit"), "grandma": ("grandma", "grandmother", "nana"), "grandpa": ("grandpa", "grandfather")}
 
@@ -1051,7 +1053,7 @@ def explain(handle_or_query: str, n_texts: int = 6) -> str:
     """One readable answer for Sage / the operator / the CLI."""
     rs = find(handle_or_query)
     if not rs:
-        return f"Nothing known about {handle_or_query!r}: not in the contacts, the wiki, memory, HoneyBook, the leads or the text log."
+        return f"Nothing known about {handle_or_query!r}: not in the contacts, the wiki, memory, the CRM, the leads or the text log."
     out = []
     for i, r in enumerate(rs[:3]):
         head = r["label"] if i == 0 else f"also possible: {r['label']}"
@@ -1097,7 +1099,7 @@ def directory(days: int = 30, limit: int = 45) -> str:
         humans.append(r)
     humans.sort(key=lambda r: r.get("activity", {}).get("last", ""), reverse=True)
     lines = [f"PEOPLE WHO TEXT (the owners' iPhones, last {days} days; the name is the best match from contacts, memory, the wiki, "
-             "HoneyBook, the leads and the texts themselves. 'probably' = say your best guess in one clause and act on it; "
+             "the CRM, the leads and the texts themselves. 'probably' = say your best guess in one clause and act on it; "
              "'not known' = use the clue, never ask who it is if the texts say. `who_is` gives the evidence; `identify` saves a name an owner tells you.):"]
     for r in humans[:limit]:
         a = r.get("activity") or {}

@@ -6,11 +6,11 @@ went dark for a month in Aug 2026 and its "Email a team member" Zap never fired 
 Every run: read completed responses of the Film Package Finder form straight from the
 Typeform API, and for each one not seen before:
   1. price it (pricing/engine.py - the owner's sheet is the source of every number)
-  2. mint ONE exec ticket `hb_proposal_draft`: drain.py -> hb_exec.py puts a priced DRAFT of
-     "Videography Collection Details" in the couple's HoneyBook project. This program never publishes.
-     Provenance: the owner's standing rule of 2026-09-29 (every HoneyBook action except deletions).
+  2. mint ONE CRM draft exec ticket (connector's PROPOSAL_DRAFT_KIND): the CRM executor puts a priced DRAFT of
+     "Videography Collection Details" in the couple's CRM project. This program never publishes.
+     Provenance: the owner's standing rule of 2026-09-29 (every CRM action except deletions).
      2026-10-06: collection_autosend.decide() rides on that payload; for a weekend wedding date that
-     is open in HoneyBook, drain.py then hands the doer ONE pre-approved Publish & share (no card).
+     is open in the CRM, drain.py then hands the doer ONE pre-approved Publish & share (no card).
   3. add an `inquiry_new` ticket (lane wedding) carrying the brief for a team member + the first text
   4. arm the inquiry reply-SLA follow-up (2 h) and put a card on Mission Control
   5. when config leads.auto_email is true, mint an `email_send` to config leads.alert_to
@@ -37,13 +37,14 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent / "pricing"))
 
 from alib import DATA, config, load_json, now_iso, save_json  # noqa: E402
+import crm
 
 VAULT = HERE.parent.parent
 FORM_ID = "SnWy5WAe"
 SEEN = DATA / "typeform_seen.json"
 STATUS = DATA / "typeform_status.json"
 LEADS = DATA / "leads"
-STANDING_REF = "standing:honeybook-actions-allowed (owner1 2026-09-29: all HoneyBook actions except deletions)"
+STANDING_REF = "standing:crm-actions-allowed (owner1 2026-09-29: all CRM actions except deletions)"
 SOLICIT_MARKS = ("white-label", "white label", "editing team", "outsourc", "trial edit", "our services",
                  "post production house", "seo ", "backlink")
 
@@ -104,18 +105,18 @@ def pacific(iso: str) -> str:
 
 def availability(d: str | None) -> tuple[str, str | None]:
     """(line for the brief, flag or None). Is that wedding date already booked? Read-only, from
-    the HoneyBook snapshot (booked-category stages, test projects and locally cancelled ones
+    the CRM snapshot (booked-category stages, test projects and locally cancelled ones
     excluded). The old Apps Script 'failed open'; this never says a date is free when it could
     not look: an unreadable or stale snapshot is itself a flag."""
     if not d:
         return "no wedding date given", None
     try:
-        snap = load_json(VAULT / "dashboard" / "data" / "honeybook.json", None)
+        snap = load_json(crm.snapshot_path(), None)
         ts = datetime.fromisoformat(str(snap["ts"])[:19]).replace(tzinfo=timezone.utc)
         age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
         booked_stage = {s["stage_id"] for s in snap["stages"] if s.get("category") == "booked" and s.get("name") != "Completed"}
         state = load_json(VAULT / "scripts" / "projects" / "project_state.json", {}).get("projects", {})
-        cancelled = {str(v.get("honeybook_id")) for v in state.values() if isinstance(v, dict) and v.get("stage") == "cancelled"}
+        cancelled = {crm.project_id(v) for v in state.values() if isinstance(v, dict) and v.get("stage") == "cancelled" and crm.project_id(v)}
         undated = sum(1 for p in snap["projects"] if not p.get("date") and p.get("stage_id") in booked_stage)
         hits = [p.get("name", "?") for p in snap["projects"]
                 if p.get("date") == d and p.get("stage_id") in booked_stage
@@ -126,8 +127,8 @@ def availability(d: str | None) -> tuple[str, str | None]:
     if hits:
         return f"ALREADY BOOKED that day: {'; '.join(hits)[:120]}", f"DATE CONFLICT: {d} already has a booked project ({'; '.join(hits)[:80]}) - check before replying"
     if age_h > 36:
-        return f"NOT checked (HoneyBook snapshot is {age_h:.0f} h old)", f"availability NOT checked (HoneyBook snapshot {age_h:.0f} h old) - confirm {d} is open"
-    return (f"no booked project on {d} (HoneyBook, {age_h:.0f} h ago"
+        return f"NOT checked ({crm.name()} snapshot is {age_h:.0f} h old)", f"availability NOT checked ({crm.name()} snapshot {age_h:.0f} h old) - confirm {d} is open"
+    return (f"no booked project on {d} ({crm.name()}, {age_h:.0f} h ago"
             + (f"; {undated} booked project(s) have no date and were not checked" if undated else "") + ")"), None
 
 
@@ -176,7 +177,7 @@ PRICING (from the pricing sheet; date multiplier x{q['multipliers']['total']}, t
 {('CHECK FIRST: ' + '; '.join(q['flags'])) if q['flags'] else 'Nothing flagged.'}
 Date check: {q.get('availability') or 'not checked'}
 
-HONEYBOOK
+CRM
 {q.get('draft_note') or q.get('send_note') or DRAFT_NOTE_YES}
 
 {meeting}FIRST TEXT
@@ -196,13 +197,13 @@ class QueueBusy(RuntimeError):
 DRAFT_NOTE_YES = ('A priced DRAFT of "Videography Collection Details" is being placed in their project (it is not\n'
                   'sent). Open the project, read the four collections, then publish and send it yourself.')
 DRAFT_NOTE_AUTO = ('A priced "Videography Collection Details" is being placed in their project and will be SENT to them\n'
-                   'automatically (Publish & share, Custom Package email - quiz version): weekend date, open in HoneyBook.\n'
+                   'automatically (Publish & share, Custom Package email - quiz version): weekend date, open in the CRM.\n'
                    "owner1's standing rule of 2026-10-06. You get a 'Done' message when it has gone.")
 
 
 def handle(item: dict, cfg: dict, opts: dict, dry: bool, progress: dict | None = None) -> dict:
     """progress: what an earlier, interrupted attempt at this lead already minted. A retry
-    must not mint a second HoneyBook draft or a second alert email."""
+    must not mint a second CRM draft or a second alert email."""
     progress = progress if progress is not None else {}
     import engine
     lead = engine.parse_response(item)
@@ -215,7 +216,7 @@ def handle(item: dict, cfg: dict, opts: dict, dry: bool, progress: dict | None =
         q["status"] = "needs_review"
     q["answers"] = lead.answers
     q["lead"].update({"phone": lead.phone, "submitted_at": item.get("submitted_at", "")})
-    try:                                  # booked a call in HoneyBook already? (lead_meetings.py, 2026-10-08)
+    try:                                  # booked a call in the CRM already? (lead_meetings.py, 2026-10-08)
         import lead_meetings as lm
         snap = load_json(lm.SNAP, None)
         if lm.usable(snap) is not None:
@@ -225,7 +226,7 @@ def handle(item: dict, cfg: dict, opts: dict, dry: bool, progress: dict | None =
     when = pacific(item.get("submitted_at", ""))
     vision = str(lead.answers.get("vision") or "").lower()
     solicit = any(m in vision for m in SOLICIT_MARKS)
-    # the brief must say what will really happen in HoneyBook, not always promise a draft
+    # the brief must say what will really happen in the CRM, not always promise a draft
     if solicit:
         q["draft_note"] = "NO draft was placed: the answers read like a solicitation. If this is a real couple, price it by hand."
     elif not opts["create_drafts"]:
@@ -276,9 +277,12 @@ def handle(item: dict, cfg: dict, opts: dict, dry: bool, progress: dict | None =
     if "exec" in progress:
         out["exec"] = progress["exec"]
     elif opts["create_drafts"] and lead.email and not solicit:
+        draft_kind = crm._hook("PROPOSAL_DRAFT_KIND") or ""
         try:
-            out["exec"] = es.enqueue("hb_proposal_draft", {"response_token": tok, "quote": {k: v for k, v in q.items() if k not in ("draft_note", "send_note", "auto_send", "meeting", "meeting_note", "meeting_card", "intro_text")},
-                                                           "auto_send": auto},
+            if not draft_kind:
+                raise ValueError("no CRM connector provides PROPOSAL_DRAFT_KIND")
+            out["exec"] = es.enqueue(draft_kind, {"response_token": tok, "quote": {k: v for k, v in q.items() if k not in ("draft_note", "send_note", "auto_send", "meeting", "meeting_note", "meeting_card", "intro_text")},
+                                                  "auto_send": auto},
                                      es.APPROVER, STANDING_REF)["id"]
         except (ValueError, PermissionError) as e:
             out["exec"] = f"REFUSED {e}"
@@ -330,10 +334,10 @@ def _lead_brief(lead, q, when, auto) -> str:
     """The lead facts for the urgent send card's details (what the what-next card used to say)."""
     try:
         L = q.get("lead") or {}
-        draft = ("No HoneyBook draft (see the brief)." if q.get("draft_note")
-                 else "The priced Collection Details goes into HoneyBook and is SENT to them automatically (weekend date, open)."
+        draft = (f"No {crm.name()} draft (see the brief)." if q.get("draft_note")
+                 else f"The priced Collection Details goes into {crm.name()} and is SENT to them automatically (weekend date, open)."
                  if (auto or {}).get("ok")
-                 else "A priced DRAFT proposal goes into HoneyBook, not sent: " + str((auto or {}).get("reason") or "held") + ".")
+                 else f"A priced DRAFT proposal goes into {crm.name()}, not sent: " + str((auto or {}).get("reason") or "held") + ".")
         tiers = ", ".join(f"{t['name']} ${t['price']:,}" for t in (q.get("tiers") or []) if t.get("price"))
         return (f"Quiz lead submitted {when}. Wedding {L.get('date') or '?'}"
                 f"{(' at ' + str(L.get('venue'))) if L.get('venue') else ''}, budget {getattr(lead, 'budget_label', '?')}, "
@@ -352,10 +356,10 @@ def hot_lead_card(lead, q, when, subject, body, out) -> str:
     qid = ""
     try:
         import cards
-        draft = ("No HoneyBook draft (see the brief)." if q.get("draft_note")
-                 else "The priced Collection Details is going into HoneyBook and will be SENT to them automatically (weekend date, open)."
+        draft = (f"No {crm.name()} draft (see the brief)." if q.get("draft_note")
+                 else f"The priced Collection Details is going into {crm.name()} and will be SENT to them automatically (weekend date, open)."
                  if (q.get("auto_send") or {}).get("ok")
-                 else "A priced DRAFT proposal is going into HoneyBook (not sent: "
+                 else f"A priced DRAFT proposal is going into {crm.name()} (not sent: "
                       + str((q.get("auto_send") or {}).get("reason") or "held") + ").")
         tiers = ", ".join(f"{t['name']} ${t['price']:,}" for t in (q.get("tiers") or []) if t.get("price"))
         texted = str(out.get("text") or "").startswith(("tk-", "AT "))

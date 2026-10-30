@@ -21,7 +21,7 @@ nothing on record said which approaches were dead; the back-tax upload was re-qu
   outcome), `next` (what, kind, due, an optional `then`), `approaches` (untried fallbacks in order), what counts as solved,
   the owners' notes, the thread it lives in. Every change is a ledger row with an undo (`core.undo -> project_restore`).
 - **The deed** `project` (gmcp -> `intents._validate_project` -> `actions.apply` -> `projects.apply_deed`): `open` the turn
-  an owner describes something recurring or stuck for days ("the Elantra registration keeps failing", "example's film has
+  an owner describes something recurring or stuck for days ("the Elantra registration keeps failing", "Sloane's film has
   been stuck in review for weeks", "our ad leads go quiet"); `update` when they add a fact, correct the thinking, name a way
   to try, or after a step ends; `park` / `close` / `resume`. A duplicate title folds. Owners only. A doer/task step that pays,
   moves money, deletes or handles a credential is refused (kind owner is theirs). "Where are we on X" is answered from the
@@ -112,7 +112,7 @@ the owner, the same day the reflex landed: "Sage still sends me lots of system n
 with Sage should feel exactly like interacting with a real person." The three days before, from the transcript: 81
 cards and 128 code-posted lines reached the home space, about half of them the machinery talking ("Heads up: the
 comms probe has stopped", "Drain ran: DRAIN ran=0 done=0", "Still waiting on you: card open 39h unanswered", "Still
-not built: ...", "Not done: NOT_CONFIGURED smtp:personal (set with setup_creds.py ...)", "Text to +1555-073-4973 handed
+not built: ...", "Not done: NOT_CONFIGURED smtp:personal (set with setup_creds.py ...)", "Text to +15550734973 handed
 to the phone", the same "I built a fix" in two threads a minute apart, cards headed "Not confirmed: agent run",
 "A nightly self-test failed", "Spine job cards-sweep failing"). Every poster had its own words and its own idea of
 urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": True`.
@@ -122,7 +122,7 @@ urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": T
   System talk never reaches Chat: status lines, raw job output, chase lines, scorecards, review summaries, slipped
   builds, unconfirmed outcomes, the morning digest (their Mission Control note is written before the gate, so nothing
   is lost; `voice.recent()` counts what was held, shown by `/reflex`). Lines a person would say are reworded: "Texted
-  Quinn Heathcote at 12:19 PM, from your phone"; "Emailed example example IV at 4:45 PM" (the Message-ID stays on the
+  Quinn Heathcote at 12:19 PM, from your phone"; "Emailed Corwin Castellan IV at 4:45 PM" (the Message-ID stays on the
   card note); "Done: approval cards now show an hourglass ..." for a build receipt (a receipt whose "what changed" is
   a truncated title says "Done, that's built: ..."); "I need the 6-digit MyDMV code ... Reply with it here" for a doer
   waiting on a code; a blocked doer line quotes the job cut at a word; "On it." for a tap ack; a routine drops its
@@ -207,7 +207,7 @@ model took each correction as conversation. `assistant/agent/correction.py`, zer
   first; the deed the ask implied is **queued from the original ask's words** when the turn still has none (a task,
   a doer job; "Again:" in front so the ticket is not a duplicate of the first try) and the reply gets the lead line
   ("I'm getting that drafted..."). Nothing is ever forced for a question or a fact.
-- **The card is already there** (`card_in_thread`, 2026-10-18 the example text): "where is the card" in a thread a card
+- **The card is already there** (`card_in_thread`, 2026-10-18 the Hollis text): "where is the card" in a thread a card
   landed in since the ask (open, or tapped) is pointed at, never made again (one that expired untapped is made again); the brain gets `here_note` with
   how it stands (`place._card_state`: open / tapped and sent), nothing is forced or re-run, and the ledger row's
   `card_here` keeps the reflex from filing a build. A closed card's own thread context says how it closed too, so a
@@ -286,7 +286,7 @@ around the same read-only brain:
   inbox is a `do` with the site, who and the full reply; the doer writes it there and stops at Send for the tap.
 - **A forwarded marketplace lead goes straight to the doer (2026-10-27).** Paige and Casey's zola.com/z text came back
   "need date/venue". A Zola, The Knot or WeddingWire link from an owner is now a `do` that turn, by code when the turn
-  sent none (`claims.marketplace_lead`): the doer reads the page, checks the date in HoneyBook and reports in that thread;
+  sent none (`claims.marketplace_lead`): the doer reads the page, checks the date in the CRM and reports in that thread;
   a paid Connect is its checkpoint card there. `test_capability.py` section 18.
 
 - **The brain names its own blockers (`blocked` deed, same day).** The regexes above were the first detector; the
@@ -315,7 +315,7 @@ they have, and the tap on a "Build needs your OK" card when a build must touch t
 
 ## One turn, one thread (2026-10-21)
 
-the owner, after four asks for the example card got no card and a reply in example's thread was answered as
+the owner, after four asks for the Corwin card got no card and a reply in Corwin's thread was answered as
 a team member's: "post the approval card instantly here in the thread, where we are talking about it... standard
 practice". The turn was rebuilt around three rules code enforces (details in HANDOFF 2026-10-21):
 
@@ -338,7 +338,7 @@ practice". The turn was rebuilt around three rules code enforces (details in HAN
   their full name) is linted as a vendor message, so a shooter's pay offer is not refused as a price
   promise to a lead (2026-10-24); leads and couples are checked as before. The `task` tool runs the card's
   exec check and draft lint first (`actions.draft_blocker`, read-only): a draft cards.post would refuse is
-  answered "refused: no card was posted, because ..." and never "posted below" (example's proposal,
+  answered "refused: no card was posted, because ..." and never "posted below" (Corwin's proposal,
   2026-10-22 12:49, refused DRAFT_LINT after Sage had said it was below). A `task` without a draft still goes to the
   operator, whose ticket now carries `space` and `asked` (`cards.py post --space --asked`).
 - **No system voice under the reply.** The bulleted code lines are gone; only a failure after the turn (a
@@ -371,7 +371,7 @@ the owner: "Sage is not responding. I also added it to a new Google space called
   block says it is a team space. An owner asking something personal there is told it stays in their DM.
   Tests: `tests/test_staff_role.py` (team-space section).
 - **A card asked for in a team-space thread lands in that thread.** `chat_push.push_card` posts a card whose
-  `chat_thread` belongs to another space into that thread's own space, not the home space (10-26: the example
+  `chat_thread` belongs to another space into that thread's own space, not the home space (10-26: the Odette
   card handed to the operator after a draft-lint refusal opened a new thread in the home space). `tests/test_chat_push.py`.
 
 ## Never assume what they mean: thread, recency, last cards (2026-10-25)
@@ -410,28 +410,28 @@ Read against the transcript, the tickets and the logs; every item below is a cod
   probe and the spine, `bridge.py --ensure`) and tells an owner only if it is still stale afterwards.
 - **"Approved item not run ... still queued after 7h"** on a two-minute ticket (16:45, 18:08): `sentinels._age_h`
   read local timestamps as UTC. Local now.
-- **A reply card refused as "card #3 to them in 24h"** (example said yes, 16:46) and **a reply held for Monday**
+- **A reply card refused as "card #3 to them in 24h"** (Corwin said yes, 16:46) and **a reply held for Monday**
   while the owner was mid-conversation about Marlo (15:35): `cards._is_reply` (a "Reply to" / "Text reply" header,
   or "X replied / asked / texted") is exempt from the recipient limit, and a reply to someone we sent something in
   the last 24 h (`_live_conversation`, from the exec tickets) is urgent: Chat now, never the digest.
 - **"Tell them to please ignore the previous email"** one minute after the tap (18:07) was refused
   ALREADY_ANSWERED while the email still sat in the 10-minute drain queue. `card_revise` on an answered card
   whose ticket is still queued now recalls the ticket (`cards.undo`) and posts the revision. The follow-up to
-  example AND example (she asked for every email) is on a card in that thread.
+  Teo AND Wren (she asked for every email) is on a card in that thread.
 - **"You should have given me reminders about it since I gave you the information"** (Tony's party, 16:56).
   `agent/event_reminders.py` (bridge minute tick, config `reminders`): one line to the owner 45 min before every
   timed event on a connected owner calendar, place included; client meetings stay with `meeting_reminder.py`;
   all-day events are the brief's. An event Sage adds itself also gets a once-reminder (`actions._event_reminder`).
 - **"We already sent him an example handoff; you should be aware of that"** (16:55): `brain.sent_block()`, a
-  SENT RECENTLY block in every owner turn (texts, emails, HoneyBook sends of the last 30 h, from the exec
+  SENT RECENTLY block in every owner turn (texts, emails, CRM sends of the last 30 h, from the exec
   tickets), so one thread knows what another sent.
-- **Noise cards from one-off failures** ("HoneyBook in the doer's browser down", "Mail: owner3@example.invalid
+- **Noise cards from one-off failures** ("CRM connector in the doer's browser down", "Mail: owner3@example.invalid
   down: TimeoutError"): `conn_check` keeps a connection live with a strike on the first failed check after a
   live one; two in a row is down.
-- **"HoneyBook connector down (code fault ... no snapshot in the transcript)"** (09:04): every headless run
+- **"CRM connector down (code fault ... no snapshot in the transcript)"** (09:04): every headless run
   loaded the machine's user-scope MCP servers, and the `rea` server's 30 s connect timeout sat in each one.
-  `hb_snapshot.py`, `hb_exec.py` and the brain's turns now pass `--strict-mcp-config` with only the servers they
-  use (`assistant/mcp_honeybook.json`; the brain adds the HoneyBook server to its own per-turn config). A forced
+  The connector's snapshot script, exec script and the brain's turns now pass `--strict-mcp-config` with only the servers they
+  use (the brain adds the CRM connector's MCP server to its own per-turn config via `crm.MCP_SERVERS`). A forced
   snapshot ran clean right after (78 projects).
 - Also closed: the "the organization email for a team member" decision card (the owner made the mailbox himself).
   Tests: `tests/test_day2.py`; `test_outcomes.py` and `test_conn_check.py` updated to the new rules.
@@ -467,7 +467,7 @@ owner. You should have zero access to my personal life information." `people.jso
 
 ## "Sage needs to be able to do everything I asked it today" (2026-10-24)
 
-the owner's asks from the 10-23 evening and 10-24, read against the transcript, the tickets and HoneyBook, and
+the owner's asks from the 10-23 evening and 10-24, read against the transcript, the tickets and the CRM, and
 what each one needed:
 
 - **"Send it at 8am" (the Marlo text) -> "I can't time a send".** The chain already took `exec.send_at`
@@ -480,44 +480,44 @@ what each one needed:
   the Brian title-text thread got "tap Skip, I can't skip it for you". `approve` with `skip: true` closes the
   thread's card on its own non-approve button (`intents.skip_label`), nothing sent; any open card, since a
   skip sends nothing. `bridge.card_context` and both prompts say so. **Fix it and send (2026-10-28, gap g-b436c2):**
-  after the approved example & example follow-up failed, "Fix it and send" got "you'll get the card in a few minutes" and the
+  after the approved Teo & Wren follow-up failed, "Fix it and send" got "you'll get the card in a few minutes" and the
   operator reopened it in another thread. `approve` now also takes a card the owner already approved whose send failed
   (`intents.failed_send`: consumed, newest ticket an exception, nothing queued or done; found by itself when the thread has
   no card): the same card comes back (`cards.reopen`) and is approved on their words that turn. An UNVERIFIED failure only
-  qualifies for `hb_message`, whose executor reads the HoneyBook thread before sending.
+  qualifies for the CRM connector's message kind, whose executor reads the CRM thread before sending.
 - **Marlo got two texts (12:19 and 13:10).** The first card was approved on the owner's words in a Claude
   session; at 13:09 Sage drafted a fresh card off his 1 PM reminder without looking and he tapped it.
   `intents.recent_text_to()` + `_check_draft`: a text draft to a number that got one in the last 24 h is
   REFUSED with the earlier text quoted, unless the ask says resend / again / follow-up. The prompt says to
   tell the owner the earlier one went.
-- **HoneyBook replies never sent (example x2 on 10-24, Emery x3 on 10-18).** The connector pauses every
+- **CRM replies never sent (Delia x2 on 10-24, Emery x3 on 10-18).** The connector pauses every
   client message for an approval card only a live Claude window can show, so headless `createCommunication`
-  is always "the member did not approve this change". `hb_exec.py` now falls through to
-  `scripts/honeybook/hb_send_message.py send`: the approved words go through HoneyBook's own email composer
+  is always "the member did not approve this change". The CRM connector's exec script now falls through to
+  the CRM browser-send script: the approved words go through the CRM's own email composer
   in the doer's signed-in browser (CDP), the feed is read before (no double send) and after (evidence
-  `HB_DONE=<stamp> STATUS=browser`). Proven live on the Harper Oakhurst workspace (its only client is the owner's
-  own alias); the connector listed the message afterwards. example herself was answered by a team member in HoneyBook
+  `CRM_DONE=<stamp> STATUS=browser`). Proven live on the Harper Oakhurst workspace (its only client is the owner's
+  own alias); the connector listed the message afterwards. Delia herself was answered by a team member in the CRM
   at 12:15 (his message is the newest in her thread).
-  The connector's newer wording ("Approval not available for this run ... requires createCommunication approval", example & example 10-28) is caught in `crm_honeybook.py` too, so it takes the same browser route instead of an exception card.
-- **"Add a team member to every new HoneyBook project" (11:00; the builder asked for an OK and the tap was lost).**
-  Built by hand: kind `hb_add_team_member` (addWorkspaceMember by user id, idempotent, no contact, nothing
+  The connector's newer wording ("Approval not available for this run ... requires createCommunication approval", Teo & Wren 10-28) is caught in the CRM connector module too, so it takes the same browser route instead of an exception card.
+- **"Add a team member to every new CRM project" (11:00; the builder asked for an OK and the tap was lost).**
+  Built by hand: the CRM connector's add-team-member kind (addWorkspaceMember by user id, idempotent, no contact, nothing
   emailed by us; a team member is `ce9827d493d83824f4ef5036`), `assistant/scripts/team_on_projects.py` on the spine
   every 30 min: every open project (lead / lead_sent / client with a future date or activity in 60 days)
-  gets a ticket under the standing rule (config `honeybook_team.team_on_projects`), 4 per run, failures
-  retried once a day up to 3 times; example's project went first. `tests/test_team_on_projects.py`.
+  gets a ticket under the standing rule (config `crm.team_on_projects`), 4 per run, failures
+  retried once a day up to 3 times; Teo's project went first. `tests/test_team_on_projects.py`.
 - **"Include a real touch point scheduling link"** -> Sage could not find one. It is the Touch Point Call
-  session on HoneyBook > Tools > Scheduler: `https://example.hbportal.co/schedule/4dccd85cd2847c3de5656860`,
+  session in the CRM scheduler: `<the CRM scheduler's public booking link>`,
   now `config.texts.checkin_scheduler_link` (so the T-14 text goes by itself again) and in memory; a card
-  with that link as a follow-up text to example was posted in his thread (the 11:30 text had gone without it).
-- **"Send the questionnaire"** -> HoneyBook's own automation on example's project is holding "Send file via
-  email: Questionnaire (default)" for an Approve (Home > Automations 2.0 > Pending; the old-generation
-  tasks API does not list it). Kind `hb_automation_approve` = `hb_send_message.py approve-step` (one click,
-  the row must disappear), card-gated; the card is in example's thread.
+  with that link as a follow-up text to Teo was posted in his thread (the 11:30 text had gone without it).
+- **"Send the questionnaire"** -> the CRM's own automation on Teo's project is holding "Send file via
+  email: Questionnaire (default)" for an Approve (the CRM's automation queue; the old-generation
+  tasks API does not list it). The CRM connector's automation-approve kind runs the approve step (one click,
+  the row must disappear), card-gated; the card is in Teo's thread.
 - **"That draft never came back, so nothing went out"** on an ask Sage had answered in the thread at 22:55
-  (example already on, the rest blocked, "Need from you"). `commitments._answered_in_chat`: an agent reply in
+  (Wren already on, the rest blocked, "Need from you"). `commitments._answered_in_chat`: an agent reply in
   that thread within 20 min carrying Tried / Blocked because / Need from you / already on is "with the
   owner", never a slipped draft. `tests/test_commitments_chat.py`.
-- **A blocked card is said in its thread at once** (example's revised proposal, 10-21: the operator's card was
+- **A blocked card is said in its thread at once** (Corwin's revised proposal, 10-21: the operator's card was
   refused by the 24-hour recipient limit, the ticket was staged with that note, and it read as "a card is up").
   `commitments._REFUSED`: a task ticket staged/done with a card refusal and no card id is "failed", and the
   thread gets one plain line naming what blocked it, without waiting for the deadline. Owner-asked cards
@@ -556,7 +556,7 @@ them) came down to six gaps, each closed in code:
   (the same net that forces a `task` for a message ask), so the doer reports back as usual.
 - **A revision asked for in a thread always posts.** `actions.revise_card` passes `asked=True` (and the
   DM space): urgent where asked, superseding the old card instead of tripping the 24-hour recipient
-  limit that refused example's revised proposal card twice while Sage said it was below.
+  limit that refused Corwin's revised proposal card twice while Sage said it was below.
 - **Prompt:** `switch` covers run-now; "if your reply says a job goes to the doer, the `do` call is in
   the same turn"; a change inside a service with a connector (a stage move, a participant, a note) is a
   `task` without draft, nothing "stays manual"; read BUILDS before saying you cannot see the builder.
@@ -568,7 +568,7 @@ What stays a line in chat, by design: a sign-in with a password, a tap on a card
 ## "Was Sage able to do everything I requested today?" (2026-10-23, evening)
 
 A read of the day's transcript against the logs. Of the owner's asks, five were done as asked (the a team member text, the
-example breakdown email, the ad cap to $400, closing a team member's camera-2 offer, the meeting summary on the second
+Corwin breakdown email, the ad cap to $400, closing a team member's camera-2 offer, the meeting summary on the second
 try) and the rest hit six gaps, each closed in code:
 
 - **A turn lost to a dead bridge is replayed.** 14:24 "Look at the meeting notes" went to a worker thread; the
@@ -578,17 +578,17 @@ try) and the rest hit six gaps, each closed in code:
   left (`replay_inflight`, under 3 h old, oldest first) and the reply opens with REPLAY_LINE. `step()` is
   guarded so one bad poll cannot take the process down, and the detached bridge's stderr goes to
   `~/.claude/agent-bridge.err.log`. The terminal channel and slash commands never replay.
-- **The owner's build request is built first.** 18:20 "create a skill that creates deliverables for example"
+- **The owner's build request is built first.** 18:20 "create a skill that creates deliverables for Corwin"
   was filed as a build request and Sage said "being built now"; the run took the two OLDEST open requests
-  (`collect()[:2]`) and example's waited for a day that had no runs left. `builder.run(first=key)` /
+  (`collect()[:2]`) and Corwin's waited for a day that had no runs left. `builder.run(first=key)` /
   `kick(first=...)` / `--first`: the request an owner just filed heads the run `actions.apply` kicks.
-- **A reply to someone who just wrote in is never "the 3rd card to them in 24 h".** example said yes at 16:10;
+- **A reply to someone who just wrote in is never "the 3rd card to them in 24 h".** Corwin said yes at 16:10;
   the card answering him was refused FRESHNESS_REPEAT_RECIPIENT and Sage asked in chat. `cards._post` fills
   `last_inbound_ts` from the comms board (`data/comms_state.json`, zero-LLM) when the author left it blank;
   the inbound side only, so it can relax the repeat guard and never refuse a card.
 - **The phone never acks, so stop chasing every text.** 123 outbox fetches since Oct 6, zero
-  `/api/phone/ack` calls: the owner's "the organization" Shortcut has no ack step, and the sentinel chased every
-  text 30 min after it went (a team member 10:15; example's Oct 18 text again on Oct 23). `phone_bridge.acks_ever(account)`
+  `/api/phone/ack` calls: the owner's "example-org Send Texts" Shortcut has no ack step, and the sentinel chased every
+  text 30 min after it went (a team member 10:15; Teo's Oct 18 text again on Oct 23). `phone_bridge.acks_ever(account)`
   decides the window: 30 min on a phone that acks, 4 h on one that never has (`HANDED_STALE_NOACK_MIN`),
   and nothing older than 72 h (`HANDED_GIVEUP_H`). The finding carries the date, says the text almost
   certainly went, names the Shortcut step to add (the owner_IPHONE_SETUP.md step 5), and is `once: True`.
@@ -669,7 +669,7 @@ Tests: `assistant/tests/test_receipts.py`.
   ("Still on it; this one needs a look at the records"); a crashed turn edits its placeholder to one honest
   line instead of leaving "is typing" up for good; a voice note shows "typing" before the transcription.
 - **`texts_search`**: a read tool over the phone thread log (both iPhones) by words, number or saved name,
-  so "my dad texted" / "example texted, let's reply" resolve without asking. Every line is labelled by
+  so "my dad texted" / "Marisa texted, let's reply" resolve without asking. Every line is labelled by
   `whois.py` ("Dad (the owner's dad, +1 555-063-5563)", "probably Nicole (+1 ...)").
 - **Who is texting (2026-10-23).** the owner: "Sage has a difficult time sorting through and deducing who people
   are from inbound text messages." Three pieces, all on `assistant/scripts/whois.py` (its docstring is the
@@ -680,8 +680,8 @@ Tests: `assistant/tests/test_receipts.py`.
     to know that +1 555-063-5563 is Dad.
   - **`who_is`** (read tool): one number or email, or a description ("the mechanic", "the one asking about
     the Nikon"), answered with the evidence: contacts, memory, the wiki People / Couples / Vendors notes, the
-    leads, the tracker, HoneyBook, and the texts themselves (how the owner opened a text to them, "Hey
-    example"; how they signed, "example: Hi the owner"; who the group addresses, "Praying for you, Nicole"; a
+    leads, the tracker, the CRM, and the texts themselves (how the owner opened a text to them, "Hey
+    Marisa"; how they signed, "Mira Tsai: Hi the owner"; who the group addresses, "Praying for you, Nicole"; a
     number one digit from a known one; promo / code / campaign markers). Candidates are merged noisy-or
     style, so two weak clues that agree become a sure name.
   - **`identify`** (deed): "that's my dad" / "that was Diane, Frank's wife" saves the alias
@@ -706,7 +706,7 @@ assistant to other organizations some day".
 - **Nothing of this organization in the code**: owner words for the safety regexes (`core._OWNER_WORDS`),
   the fallback DM (`core.first_owner()`), the tool enums and mailbox lists (`gmcp.OWNERS`, `_mailboxes`) all
   come from `people.json` / `google.json`; the deed tools speak of "a service they use" and `channel:
-  service` (HoneyBook here; `honeybook` still accepted), the generic prompt names no organization.
+  service` (the CRM connector's channel; connector-provided aliases accepted via `CHANNEL_ALIASES`), the generic prompt names no organization.
   `assistant/tests/test_template.py` enforces it (no `"dm:the owner"` literals, no owner names in a regex, no
   organization or service in a tool description or the generic prompt).
 - **From the phone**: `/health` (zero-LLM: heartbeat, turns today and their timing, open and held cards,
@@ -742,7 +742,7 @@ The model never writes and never sends. "Saved" is only ever said by the code th
 | `wiki_writer.py` | the only path into `Wiki/`: schema front matter, `status: draft`, lint, scoped commit; appends to an existing note, never rewrites one |
 | `followups.py` | check-backs on something a person is meant to do or answer, and promise-keeping (the code example and example run, ported) |
 | `routines.py` | schedules the agent makes (`say` = fixed text, `prompt` = a fresh read-only look-up); fired by the bridge every minute |
-| `meeting_reminder.py` | ~10 min before a lead vision call or HoneyBook meeting (Google calendars + the HoneyBook snapshot), one line to the owner hosting it: start time, Meet link, who else is expected; once per meeting, fired by the bridge every minute |
+| `meeting_reminder.py` | ~10 min before a lead vision call or CRM meeting (Google calendars + the CRM snapshot), one line to the owner hosting it: start time, Meet link, who else is expected; once per meeting, fired by the bridge every minute |
 | `google_api.py`, `gmcp.py` | Google calendars and mail; `gmcp.py` is a private read-only MCP server attached to the model turn |
 | `gchat.py` | the Google Chat channel (Pub/Sub pull, posts as the app) |
 | `space_reader.py` | reads shared spaces and fetches attachments with the owner's example sign-in; local voice-note transcription |
@@ -794,7 +794,7 @@ robotic", after Sage answered one message three times. Three things follow from 
 - **One answer per message.** Chat and the Apps Script relay re-deliver an event they think went
   unanswered; `gchat.queue_inbound` keeps one copy per message name, and `bridge._dedup` drops
   anything already in `seen_messages.json` or repeated in a batch (by name, or by place + sender +
-  text when there is no name). Before this, 2026-10-07, "Fix HoneyBook connector" arrived three
+  text when there is no name). Before this, 2026-10-07, "Fix the CRM connector" arrived three
   times in one turn and Sage answered each.
 - **No code-made announcements.** `actions.apply` adds a line under the reply only when something
   could not be done; successes are Sage's to phrase ("Got it, I'll remember that"). Undo ids live in
@@ -874,7 +874,7 @@ Read from the property vault's `scripts/turn_agent/` by path (tools only, none o
   finding's title before the colon (the couple), else the lane.
 - **Three rules** (`state/rules.json` r25-r27, ledger c170-c172, `/undo` works): "finishing today" is not
   done; "deal with it now" means answer in the same reply with options and drafts, not a check-back;
-  check the email thread as well as HoneyBook, texts and the calendar before saying there is no date.
+  check the email thread as well as the CRM, texts and the calendar before saying there is no date.
 - **Fold, don't park** (`tracking/chase.py` `folded`, `folded_line`; example's FOLD_AFTER): after
   `max_follow_ups` unanswered asks an item folds: no more cards, one quiet line a day per owner
   listing what folded (`tracking.json -> chase.fold_daily_line`), a tap on its old card still counts,
@@ -1026,7 +1026,7 @@ nothing put them in front of anyone. Now:
   builder's dropped requests, ages out asks nobody answered in 7 days, and posts one card per entry
   in the home space, at most 3 open at once (the stack folds them): a protected **rule** (Add the
   rule / Drop it), a **retirement** of a rule an owner taught (Retire it / Keep it), a review **ask**
-  (Have Sage do it: an operator ticket, outward steps still come back as cards; an ask about HoneyBook
+  (Have Sage do it: an operator ticket, outward steps still come back as cards; an ask about CRM
   Scheduler hosts, which no connector covers, goes to the doer's browser instead and reports the Preview
   slot count before and after; a check that needs eyes on a sheet or a site, like cells A1-A4 on the
   pricing sheet, goes to the doer read-only and reports what it sees / Drop it), a vault
@@ -1096,7 +1096,7 @@ resources upload option in chat." Three pieces, all around the unchanged read-on
 - **The Setup page (`scripts/setup_actions.py`, `scripts/setup_page.py`, Mission Control `/setup`).**
   One row per `connections.json` entry plus every org service with a url, sorted needs-attention first,
   with ONE button each: `terminal` (a console on the PC running the row's own setup command, the secret
-  typed hidden there), `env` (one hidden value -> User env var), `window` (the HoneyBook sign-in window),
+  typed hidden there), `env` (one hidden value -> User env var), `window` (a CRM sign-in window),
   `signin` (the agent's browser on screen at the site; the session persists in the doer profile),
   `open_url`, `mcp` / `text` (instructions). **Check** re-runs conn_check (or probes a service's url
   off-screen: a password field or a sign-in redirect = not signed in). **What the PC shows** fetches a
@@ -1132,16 +1132,16 @@ The code holds no names, no business facts and no household rules. To stand up a
 What does not transfer and must be decided per client: who may approve what, which actions
 are reversible enough to auto-apply, and the protected core.
 
-## Doing, not describing: attachments, Resolve, HoneyBook replies, evidence (2026-10-15)
+## Doing, not describing: attachments, Resolve, CRM replies, evidence (2026-10-15)
 
-the owner, 2026-10-15, after three asks stalled in one morning ("reply in HoneyBook to example", "use
-example's new audio in the beach timeline", "build everything you need so you can do stuff like
+the owner, 2026-10-15, after three asks stalled in one morning ("reply in the CRM to Delia", "use
+Corwin's new audio in the beach timeline", "build everything you need so you can do stuff like
 this in the future"): "fix Sage so it can do the last few things I requested and when it has
 evidence of completion report back". What changed, all in code around the same read-only brain:
 
-- A HoneyBook reply to a couple is a real send now: the operator cards it as `hb_message`
-  (`assistant/scripts/hb_exec.py`, threaded on the couple's last message) and HoneyBook sends it
-  from the owner's account on his tap. `prompt.md` rung 4 says so; "paste it into HoneyBook yourself"
+- A CRM reply to a couple is a real send now: the operator cards it using the CRM connector's
+  message kind (threaded on the couple's last message) and the CRM sends it
+  from the owner's account on his tap. `prompt.md` rung 4 says so; "paste it into the CRM yourself"
   is gone from the operator prompt.
 - Email attachments and the Google Drive links Gmail puts in a body are fetched to this PC by the
   computer-lane doer with `assistant/scripts/mail_attach.py`; audio on a Resolve timeline is
@@ -1150,7 +1150,7 @@ evidence of completion report back". What changed, all in code around the same r
   Drive links with the fetch command.
 - Every computer-lane DONE comes back with code-verified evidence (`computer.verify_evidence`:
   re-stat + re-hash of each file the turn claims, each check relayed), and every send that drain
-  finishes posts its record (Message-ID / HoneyBook message id + time) in the card's own thread.
+  finishes posts its record (Message-ID / CRM message id + time) in the card's own thread.
 - The doer's self-learning had been dead since 10-12 (`import learn` picked the wrong module);
   fixed in `doer._learn()`.
 

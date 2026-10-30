@@ -112,7 +112,7 @@ check refused once and allowed once the owner said "do everything".
     `assistant/agent/gchat_relay/README.md` ("Pull mode"). **This machine runs pull mode since 2026-10-28 12:28**
     (the owner: "Yes, switch example"): the add-on deployment is version 6, the web app deployment "pull mode: web app for
     the PC poller" (URL in `gchat.local.json` → `relay_webapp_url`), the ENDPOINT property deleted, the poller the
-    scheduled task "the organization" (`assistant/tasks/RelayPoll.xml`, every minute). First live taps:
+    scheduled task "example-org Relay Poll (assistant)" (`assistant/tasks/RelayPoll.xml`, every minute). First live taps:
     the Relay test card 12:30:30, an Edit & send dialog + submit 12:59-13:00. Rollback = put ENDPOINT back
     (Funnel :8443 is still up). 11b below is the push mode it ran before.
 11b. **Buttons (2026-10-05).** A Pub/Sub app never receives button taps on its cards (every tap
@@ -147,7 +147,7 @@ check refused once and allowed once the owner said "do everything".
     - **The fix that shipped (2026-10-06 14:22): the Apps Script relay.** Nothing on this machine
       moved. Chat API → Configuration → Connection settings is **Apps Script**, deployment ID in
       `gchat.local.json` (`relay_deployment_id`); the script (`assistant/agent/gchat_relay/`,
-      the owner's Drive, bound to GCP project 555-032-5432) forwards every event to the 8443 endpoint
+      the owner's Drive, bound to GCP project 5550325432) forwards every event to the 8443 endpoint
       with `X-Sage-Relay: <relay_secret>`. Button taps arrive as `card_answer` / `card_undo`
       calls with no `invokedFunction`, so `gchat.parse_click` infers the function from the
       relay stamp or the button parameters. First successful tap: 14:21:59, "click answer … ok=True".

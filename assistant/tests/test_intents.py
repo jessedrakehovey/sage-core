@@ -8,6 +8,7 @@ Scratch stores; no model, no Google, no Chat.
 import os as _os, tempfile as _tf
 _os.environ.setdefault("WV_LOG_DIR", _tf.mkdtemp(prefix="wv_logs_"))
 import json
+import re
 import os
 import sys
 import tempfile
@@ -149,13 +150,13 @@ ok(len([c for c in cs if c.get("status") == "open"]) == 1, "one open card to Jus
 # ---------------------------------------------------------------- 4. a task without a draft still goes to the operator, with the place
 def fake_run_task(prompt, resume="", model="", timeout=600):
     os.environ["AGENT_TURN"] = brain._TURN["path"]
-    ans = gmcp.call("task", {"lane": "wedding", "text": "Reply to example about the editing proposal; I could not find his email"})
+    ans = gmcp.call("task", {"lane": "wedding", "text": "Reply to Corwin about the editing proposal; I could not find his email"})
     assert ans.startswith("accepted") and "few minutes" in ans, ans
     return {"ok": True, "session": "S2", "text": "I'm getting that drafted; you'll have the card here in a few minutes."}
 
 
 brain._run_claude = fake_run_task
-bridge.handle({"channel": "gchat", "person": owner1, "text": "reply to example", "convo": "dm:owner1", "thread": "", "space": DM, "direct": True, "why": "DM"})
+bridge.handle({"channel": "gchat", "person": owner1, "text": "reply to Corwin", "convo": "dm:owner1", "thread": "", "space": DM, "direct": True, "why": "DM"})
 tix = [t for t in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values() if t["kind"] == "owner1_request"]
 ok(tix and tix[-1]["payload"].get("space") == DM and tix[-1]["payload"].get("asked") is True, "the operator ticket carries the DM and the asked flag")
 
@@ -180,15 +181,33 @@ r = core.rule_add("Never schedule a call before nine in the morning", "test", by
 after = [x["id"] for x in core.load(core.RULES, {}).get("rules", []) if x.get("active", True)]
 ok(r["status"] == "refused" and "active" in r["reason"] and set(before) <= set(after), "the ceiling refuses the rule that would pass it; no rule is retired")
 core.MAX_RULES = saved
-live = json.loads((ROOT / "agent" / "state" / "rules.json").read_text(encoding="utf-8"))
-act = {x["id"] for x in live["rules"] if x.get("active", True)}
-ok({"r4", "r5", "r6", "r12"} <= act, "the four owner rules the old cap retired are active again")
-ok(len([x for x in live["rules"] if x["id"] == "r67"]) == 1, "no duplicate rule id")
+LIVE_RULES = ROOT / "agent" / "state" / "rules.json"          # the organization's own state: absent in the bare engine
+if LIVE_RULES.is_file():
+    live = json.loads(LIVE_RULES.read_text(encoding="utf-8"))
+    act = {x["id"] for x in live["rules"] if x.get("active", True)}
+    ok({"r4", "r5", "r6", "r12"} <= act, "the four owner rules the old cap retired are active again")
+    ok(len([x for x in live["rules"] if x["id"] == "r67"]) == 1, "no duplicate rule id")
 
 # ---------------------------------------------------------------- 7. the prompt is generic + local, and says nothing about SUGGEST
+def _org_words(root):
+    """This organization's own name and people (org.json, people.json): what a generic file must never carry."""
+    out = set()
+    try:
+        n = str(json.loads((root / "org.json").read_text(encoding="utf-8-sig")).get("name") or "")
+        out |= {w for w in [n, n.split(" ")[0]] if len(w) >= 4}
+    except (OSError, ValueError):
+        pass
+    try:
+        for k, u in (json.loads((root / "agent" / "people.json").read_text(encoding="utf-8-sig")).get("users") or {}).items():
+            out |= {w for w in (k, str(u.get("name") or "").split(" ")[0]) if len(w) >= 3}
+    except (OSError, ValueError):
+        pass
+    return sorted(out, key=len, reverse=True)
+
+
 gen = (ROOT / "agent" / "templates" / "prompt.generic.md").read_text(encoding="utf-8")
 pm = (ROOT / "agent" / "prompt.md").read_text(encoding="utf-8")
-ok("example" not in gen and "HoneyBook" not in gen and "owner1" not in gen, "the generic prompt names no organization, service or person")
+ok(not re.search(r"\b(?:" + "|".join(map(re.escape, _org_words(ROOT) + ["the CRM"])) + r")\b", gen), "the generic prompt names no organization, service or person")
 ok("SUGGEST {" not in pm and "`task`" in pm and "`draft`" in pm, "prompt.md teaches the deed tools, not a SUGGEST line")
 ok("prompt.local.md" in brain.__file__ or "ORGANIZATION NOTES" in brain.context_block(), "the org notes ride into the context")
 ok(len(pm) < 20600, f"prompt.md is lean ({len(pm)} chars)")   # 20100 until 2026-10-29 (the thread is read from Chat itself, chat_thread tool); 19900 until 2026-10-28 late (hold_if_reply, send_hold.py); 19750 until 2026-10-28 night (fix it and send = approve, gap g-b436c2); 19600 until 2026-10-28 eve (skip a card in words, gap g-bdccf4); 19500 until 2026-10-28 (a code change is never a task; "results?" files the unfiled build); 19000 until 2026-10-27 night (the correction line, correction.py); 18000 until 2026-10-27 eve (the project deed, projects.py); 17800 until 2026-10-27 pm (the no-ids voice sentence, voice.py); 17500 until 2026-10-27 (the REFLEX line, reflex.py); 16600 until 2026-10-25 pm (approve-in-words, the no-guess resolution order over THIS THREAD / cards / JUST BEFORE THIS); 14000 until 2026-10-23 (the "who is texting" paragraph, whois.py); 16000 until 2026-10-25 (rung 5 builds the missing piece and compound asks, capability.py)
@@ -198,7 +217,7 @@ import builder  # noqa: E402
 import wiki_writer  # noqa: E402
 kicks = []
 builder.kick = lambda force=False, first="": kicks.append(force) or "BUILDER started"
-wiki_writer.write = lambda note, by="", commit=True: {"status": "applied", "path": f"Wiki/Builder/{note['title']}.md"}
+wiki_writer.write = lambda note, by="", commit=True, ask="": {"status": "applied", "path": f"Wiki/Builder/{note['title']}.md"}
 turn = intents.begin(owner1, "dm:owner1", "", space=DM)
 os.environ["AGENT_TURN"] = str(turn)
 r = gmcp.call("note", {"title": "Build request lead text timing", "body": "## Build request\nSend the intro text within a minute.\n\nEvidence: 40 min today."})
@@ -218,7 +237,7 @@ os.environ.pop("AGENT_TURN", None)
 # ---------------------------------------------------------------- 9. decide: a decision card with the recommendation first, never a chat question
 turn = intents.begin(owner1, "spaces/AAQAtest", THREAD)
 os.environ["AGENT_TURN"] = str(turn)
-good = {"header": "Second shooter for the example wedding", "question": "Book Maya as second shooter for the example wedding. Dan is free too but has not shot a ceremony with us.",
+good = {"header": "Second shooter for the Ashcombe wedding", "question": "Book Maya as second shooter for the Ashcombe wedding. Dan is free too but has not shot a ceremony with us.",
         "options": [{"label": "Book Maya", "description": "she shot the last three with us"}, {"label": "Book Dan", "description": "cheaper, untested"}, {"label": "Skip"}],
         "recommended": "Book Maya", "why": "She knows the ceremony setup and the venue.", "lane": "wedding"}
 r = gmcp.call("decide", dict(good, options=good["options"] + [{"label": "Ask both"}]))
@@ -248,7 +267,7 @@ def fake_run_decide(prompt, resume="", model="", timeout=600):
 
 
 brain._run_claude = fake_run_decide
-bridge.handle({"channel": "local", "person": owner1, "text": "who should second shoot the example wedding", "convo": "spaces/AAQAtest",
+bridge.handle({"channel": "local", "person": owner1, "text": "who should second shoot the Ashcombe wedding", "convo": "spaces/AAQAtest",
                "thread": THREAD, "space": "spaces/AAQAtest", "direct": True})
 cs = [c for c in live_cards() if c.get("status") == "open"]
 dc = max(cs, key=lambda c: c["ts"])
@@ -377,34 +396,34 @@ ok(r.startswith("accepted"), "the owner's 'resend' / 'again' lifts the guard" + 
 
 # ---------------------------------------------------------------- 14. no local in validate shadows a module function (2026-10-24)
 # a half-made edit bound `lanes = ...` inside validate, so every `lanes()` there raised UnboundLocalError: two text
-# drafts to example were refused at 15:35 (lane "wedding" and no lane alike) and no card could be made for minutes.
+# drafts to Corwin were refused at 15:35 (lane "wedding" and no lane alike) and no card could be made for minutes.
 import inspect as _inspect
 _fns = {n for n, v in vars(intents).items() if _inspect.isfunction(v) and v.__module__ == intents.__name__}
 _shadow = [n for n in intents.validate.__code__.co_varnames if n in _fns]
 ok(not _shadow, "validate binds no local named after a module function (lanes, _s, ...)" + " " + repr(_shadow))
 for _lane in ("wedding", None):
     os.environ["AGENT_TURN"] = str(intents.begin(owner1, "spaces/AAQAtest", THREAD))
-    _args = {"text": "Reply to example about the second shooter day",
-             "draft": {"channel": "text", "to": "+18055550177", "text": "Hey example, thanks for getting back to me."}}
+    _args = {"text": "Reply to Corwin about the second shooter day",
+             "draft": {"channel": "text", "to": "+18055550177", "text": "Hey Corwin, thanks for getting back to me."}}
     if _lane:
         _args["lane"] = _lane
     r = gmcp.call("task", _args)
     ok(r.startswith("accepted") and "Error" not in r, f"task+draft with lane {_lane!r} is accepted, never a Python error" + " " + repr(r))
 
 # ---------------------------------------------------------------- 15. a card that would be refused is refused by the tool (2026-10-22)
-# 12:49: the owner asked for the revised proposal card to example; the task tool said "a email card ... is posted in this
+# 12:49: the owner asked for the revised proposal card to Corwin; the task tool said "a email card ... is posted in this
 # thread", then cards.post refused it DRAFT_LINT (a "$" price in a wedding-lane email) and no card ever came.
 os.environ["AGENT_TURN"] = str(intents.begin(owner1, "spaces/AAQAtest", THREAD))
 _before = intents.count(os.environ["AGENT_TURN"])
-r = gmcp.call("task", {"text": "Revised proposal to example example IV", "lane": "wedding",
+r = gmcp.call("task", {"text": "Revised proposal to Corwin Castellan IV", "lane": "wedding",
                        "draft": {"channel": "email", "to": "lead.couple@example.com", "subject": "Revised proposal",
-                                 "text": "Hi example, the revised proposal is $1,800 for the full day. Let me know what you think."}})
+                                 "text": "Hi Corwin, the revised proposal is $1,800 for the full day. Let me know what you think."}})
 ok(r.startswith("refused") and "no card was posted" in r and "DRAFT_LINT" in r and "posted in this thread" not in r,
    "task+draft the draft lint would block: refused with the reason, never 'posted below'" + " " + repr(r))
 ok(intents.count(os.environ["AGENT_TURN"]) == _before, "the refused draft is not recorded, so apply posts nothing and says nothing false")
-r = gmcp.call("task", {"text": "Revised proposal to example example IV", "lane": "wedding",
+r = gmcp.call("task", {"text": "Revised proposal to Corwin Castellan IV", "lane": "wedding",
                        "draft": {"channel": "email", "to": "lead.couple@example.com", "subject": "Revised proposal",
-                                 "text": "Hi example, the revised proposal is attached. Let me know what you think."}})
+                                 "text": "Hi Corwin, the revised proposal is attached. Let me know what you think."}})
 ok(r.startswith("accepted"), "the same card without the price is accepted" + " " + repr(r))
 
 print(f"\nall {N} checks passed")

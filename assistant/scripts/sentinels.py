@@ -83,7 +83,8 @@ def _owner_names() -> list:
 def _owner_words() -> set:
     """The owners' keys and first names, lower-case: never a subject word, never a name in an ask."""
     out = set()
-    for k, u in (_people().get("users") or {}).items():
+    users = _people().get("users") or {}
+    for k, u in ((k, users.get(k)) for k in _owner_keys()):      # owners only: a staff member is someone an ask is about
         for w in (str(k), str((u or {}).get("name") or "").split(" ")[0]):
             w = re.sub(r"[^a-z]", "", str(w).lower())
             if w:
@@ -211,7 +212,7 @@ _CAL_SYNC_ON = re.compile(r"calendar sync (?:is on|was (?:already )?(?:done|turn
 
 
 def _resolved(t) -> bool:
-    """A staged ticket whose subject live status shows is already fixed: 'the HoneyBook connector is
+    """A staged ticket whose subject live status shows is already fixed: 'the CRM connector is
     down' while its last refresh is recent, or 'turn on calendar sync' once memory records it on.
     The 10-16 18:45 stuck card told the owner to re-auth in a terminal a connector that was live and
     to start a calendar sync that had been on since 10-14."""
@@ -227,7 +228,7 @@ def _resolved(t) -> bool:
 
 
 # ------------------------------------------------------------------ a week-old ask that already landed (2026-10-26)
-# Three 'Waiting 5d: add example to example and example's HoneyBook project' cards went up on 10-25/26 for a change made
+# Three 'Waiting 5d: add Wren to Teo and Wren's the CRM project' cards went up on 10-25/26 for a change made
 # and read back on 10-18 (and seen in the activity feed by the doer on 10-20), plus one for an expired date card from
 # a number memory flags as a likely scam. A staged ask is now matched on its subject: the names in it and its words.
 _STOP = {"the", "and", "for", "with", "his", "her", "she", "him", "they", "them", "their", "this", "that", "from", "into",
@@ -691,7 +692,7 @@ def act(a: dict, by: str = "owner") -> str:
         ok = [tickets._transition(str(i), "done", "sentinels", f"closed from its weekly card by {by}", {"staged", "new"}) for i in ids]
         return "Closed it." if any(ok) else "That one was already closed."
     if a.get("handoff"):
-        # a weekly card's first button (sense_honeybook.weekly_card, the staged-item cards): the work goes to Sage as
+        # a weekly card's first button (a connector sensor's weekly card, the staged-item cards): the work goes to Sage as
         # an operator ticket, one per card
         import tickets
         h = dict(a["handoff"])
@@ -762,7 +763,7 @@ def run(dry=False):
     chase = [f for f in fresh if _is_chase(f)]
     # A ticket staged for days is a held card that rides the Monday approvals digest, never a mid-week line
     # (2026-10-20 14:46: "three things have sat for a week ... say 'nudge the cold leads'").
-    # Several asks for the same job ride ONE card, on the oldest ask (three example cards on 10-25/26).
+    # Several asks for the same job ride ONE card, on the oldest ask (three Wren cards on 10-25/26).
     groups = _same_job_groups(found)
     for f in [f for f in chase if str(f.get("key")).startswith("staged:")]:
         head = next((k for k, rest in groups.items() if k == f["key"] or f["key"].split(":", 1)[1] in rest), f["key"])

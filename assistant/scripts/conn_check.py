@@ -265,7 +265,7 @@ def run(registry=REGISTRY, only=""):
             continue
         renew, owner = row.get("renew", ""), row.get("owner", "owner1")
         # A sensor error that is not about sign-in is a code fault: say so, and do not ask an owner
-        # to re-authorise. HoneyBook was "down, re-authorise it" for days on 10/9-10/13 while the
+        # to re-authorise. the CRM was "down, re-authorise it" for days on 10/9-10/13 while the
         # grant was fine (a slow start-up, a reworded transcript, an SDK rename).
         if state == DEAD and row.get("auth_errors") and row.get("fault_renew") and detail                 and not detail.startswith(("last good", "no timestamp", "check timed out"))                 and not re.search(row["auth_errors"], detail, re.I):
             renew, owner = row["fault_renew"], "claude"

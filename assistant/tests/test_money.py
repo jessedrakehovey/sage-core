@@ -45,6 +45,10 @@ def check(name, cond, extra=""):
 RULES_SRC = C.RULES_PATH
 C.RULES_PATH = TMP / "money_rules.json"
 C.RULES_PATH.write_text(RULES_SRC.read_text(encoding="utf-8-sig"), encoding="utf-8")
+_rl = json.loads(C.RULES_PATH.read_text(encoding="utf-8"))      # the fixture CRM's client payments (any organization's rules)
+_rl.setdefault("buckets", {}).setdefault("income:crm", {"label": "CRM client payment", "side": "business", "kind": "income", "line": "1"})
+_rl.setdefault("rules", []).insert(0, {"id": "r-test-crm", "match": "client portal", "sign": "in", "bucket": "income:crm"})
+C.RULES_PATH.write_text(json.dumps(_rl), encoding="utf-8")
 LEARN_MD = TMP / "learnings_money.md"
 
 # ------------------------------------------------------------------ config
@@ -56,7 +60,7 @@ check("money.json loads with defaults filled", c["feed"]["provider"] == "simplef
 check("account kinds: Relay buckets by name", C.account_kind("Relay Operating")[0] == "operating" and C.account_kind("Relay - Tax")[0] == "tax"
       and C.account_kind("Relay Savings")[0] == "savings" and C.account_kind("Chase Freedom Visa")[0] == "card")
 check("merchant key strips noise", C.merchant_key("SQ *BLUE BOTTLE COFFEE 0421 10/02") == "blue bottle coffee"
-      and C.merchant_key("ADOBE *CREATIVE CLOUD 555-020-8020") == "adobe creative cloud", (C.merchant_key("SQ *BLUE BOTTLE COFFEE 0421 10/02"), C.merchant_key("ADOBE *CREATIVE CLOUD 555-020-8020")))
+      and C.merchant_key("ADOBE *CREATIVE CLOUD 555-0208020") == "adobe creative cloud", (C.merchant_key("SQ *BLUE BOTTLE COFFEE 0421 10/02"), C.merchant_key("ADOBE *CREATIVE CLOUD 555-0208020")))
 
 
 # ------------------------------------------------------------------ simplefin: claim + merge + pull (no network)
@@ -68,18 +72,19 @@ class _Resp:
 
 
 calls = []
+ACCESS_URL = "https://u:pc6583a@example.invalid/simplefin"
 
 
 def fake_opener(req, timeout=0):
     calls.append((req.get_method(), req.full_url, dict(req.header_items())))
     if req.get_method() == "POST":
-        return _Resp(b"https://u:pc6583a@example.invalid/simplefin")
+        return _Resp(ACCESS_URL.encode())
     return _Resp(json.dumps(PAYLOAD).encode())
 
 
 tok = base64.b64encode(b"https://beta-bridge.simplefin.org/simplefin/claim/abc").decode()
 access = simplefin.claim(tok, opener=fake_opener)
-check("claim decodes the token and POSTs once", access.startswith("https://u:p@") and calls[0][0] == "POST")
+check("claim decodes the token and POSTs once", access == ACCESS_URL and calls[0][0] == "POST")
 try:
     simplefin.claim(base64.b64encode(b"http://evil/claim").decode(), opener=fake_opener)
     check("claim refuses a non-https claim URL", False)
@@ -97,18 +102,18 @@ def mk(days_ago, amount, desc, aid="op", tid=None, pending=False):
 
 
 op_txns = []
-op_txns += [mk(3, 2400.00, "HONEYBOOK PAYMENT 8821"), mk(40, 1800.00, "HoneyBook Payments"), mk(120, 3200.00, "HONEYBOOK PAYMENT 7710")]
+op_txns += [mk(3, 2400.00, "CLIENT PORTAL PAYMENT 8821"), mk(40, 1800.00, "Client Portal Payments"), mk(120, 3200.00, "CLIENT PORTAL PAYMENT 7710")]
 for n, amt in ((95, 59.99), (64, 59.99), (34, 59.99), (4, 69.99)):      # Adobe monthly, last one jumped
-    op_txns.append(mk(n, -amt, "ADOBE *CREATIVE CLOUD 555-020-8020"))
+    op_txns.append(mk(n, -amt, "ADOBE *CREATIVE CLOUD 555-0208020"))
 op_txns += [mk(10, -199.00, "MUSICBED SUBSCRIPTION")]
 for n in (70, 40, 9):
     op_txns.append(mk(n, -300.00, "GOOGLE *ADS 1234567"))
 op_txns.append(mk(2, -600.00, "RELAY TRANSFER TO TAX"))                   # paired with the tax account's +600
-op_txns += [mk(5, -43.21, "SQ *BLUE BOTTLE COFFEE 0421"), mk(6, -120.00, "ZELLE TO JOHN Glenrock"), mk(7, -0.50, "ROUNDING ADJ")]
+op_txns += [mk(5, -43.21, "SQ *BLUE BOTTLE COFFEE 0421"), mk(6, -120.00, "ZELLE TO JOHN GLENROCK"), mk(7, -0.50, "ROUNDING ADJ")]
 op_txns.append(mk(12, -450.00, "VENMO PAYMENT 2nd shooter sara"))
 tax_txns = [mk(1, 600.00, "RELAY TRANSFER FROM OPERATING", aid="tax"), mk(100, -900.00, "IRS USATAXPYMT", aid="tax")]
-per_txns = [mk(85, -1500.00, "RENT PAYMENT example LLC", aid="chk"), mk(55, -1500.00, "RENT PAYMENT example LLC", aid="chk"),
-            mk(25, -1500.00, "RENT PAYMENT example LLC", aid="chk"), mk(8, -88.40, "TRADER JOE'S #123", aid="chk"),
+per_txns = [mk(85, -1500.00, "RENT PAYMENT BRACKWATER LLC", aid="chk"), mk(55, -1500.00, "RENT PAYMENT BRACKWATER LLC", aid="chk"),
+            mk(25, -1500.00, "RENT PAYMENT BRACKWATER LLC", aid="chk"), mk(8, -88.40, "TRADER JOE'S #123", aid="chk"),
             mk(3, -14.99, "NETFLIX.COM", aid="chk")]
 
 PAYLOAD = {"errors": [], "accounts": [
@@ -124,9 +129,9 @@ check("merge: 3 accounts, every txn new", r["accounts"] == 3 and r["new"] == N_A
 check("merge: account kinds from names", led["accounts"]["op"]["kind"] == "operating" and led["accounts"]["tax"]["kind"] == "tax" and led["accounts"]["chk"]["kind"] == "personal")
 r2 = simplefin.merge(led, PAYLOAD, c)
 check("merge is idempotent", r2["new"] == 0 and r2["updated"] == 0, r2)
-led["transactions"]["op-3-2400.0"]["bucket"] = "income:honeybook"
+led["transactions"]["op-3-2400.0"]["bucket"] = "income:crm"
 simplefin.merge(led, PAYLOAD, c)
-check("merge keeps a bucket already placed", led["transactions"]["op-3-2400.0"]["bucket"] == "income:honeybook")
+check("merge keeps a bucket already placed", led["transactions"]["op-3-2400.0"]["bucket"] == "income:crm")
 led["transactions"]["op-3-2400.0"]["bucket"] = ""
 
 # pull: not configured -> NOT_CONFIGURED, no call; configured -> GET /accounts only, windows, status file
@@ -156,13 +161,13 @@ check("daily pull quota holds", simplefin.pull(opener=fake_opener, today=TODAY).
 led = C.ledger()
 ra = categorize.apply(led, c=c)
 bk = {t["description"]: t["bucket"] for t in led["transactions"].values()}
-check("rules: HoneyBook -> income:honeybook, Adobe -> biz:software, IRS -> tax:federal, rent unplaced",
-      bk["HONEYBOOK PAYMENT 8821"] == "income:honeybook" and bk["ADOBE *CREATIVE CLOUD 555-020-8020"] == "biz:software"
+check("rules: client portal -> income:crm, Adobe -> biz:software, IRS -> tax:federal, rent unplaced",
+      bk["CLIENT PORTAL PAYMENT 8821"] == "income:crm" and bk["ADOBE *CREATIVE CLOUD 555-0208020"] == "biz:software"
       and bk["IRS USATAXPYMT"] == "tax:federal" and bk["GOOGLE *ADS 1234567"] == "biz:ads" and bk["NETFLIX.COM"] == "personal:subscriptions", bk)
 check("transfers paired across own accounts", bk["RELAY TRANSFER TO TAX"] == "transfer" and bk["RELAY TRANSFER FROM OPERATING"] == "transfer")
 un = categorize.unplaced(led, c)
 names = [t["description"] for t in un]
-check("unplaced = coffee, zelle, venmo, rent (not the 50c rounding)", set(names) == {"SQ *BLUE BOTTLE COFFEE 0421", "ZELLE TO JOHN Glenrock", "VENMO PAYMENT 2nd shooter sara", "RENT PAYMENT example LLC"}, names)
+check("unplaced = coffee, zelle, venmo, rent (not the 50c rounding)", set(names) == {"SQ *BLUE BOTTLE COFFEE 0421", "ZELLE TO JOHN GLENROCK", "VENMO PAYMENT 2nd shooter sara", "RENT PAYMENT BRACKWATER LLC"}, names)
 C.save_ledger(led)
 
 q, rows = categorize.card(led, c)
@@ -183,10 +188,10 @@ check("once per week", out2["qid"] == "")
 st = C.state()
 pend = st["unknowns_cards"][qid]["rows"]
 idx = {r_["description"]: i + 1 for i, r_ in enumerate(pend)}
-answer = f"{idx['VENMO PAYMENT 2nd shooter sara']} contractor, {idx['RENT PAYMENT example LLC']} rent, {idx['SQ *BLUE BOTTLE COFFEE 0421']} meals and {idx['ZELLE TO JOHN Glenrock']} skip"
+answer = f"{idx['VENMO PAYMENT 2nd shooter sara']} contractor, {idx['RENT PAYMENT BRACKWATER LLC']} rent, {idx['SQ *BLUE BOTTLE COFFEE 0421']} meals and {idx['ZELLE TO JOHN GLENROCK']} skip"
 pl, bad = categorize.parse_answer(answer, len(pend))
-check("typed answer parses (aliases, 'and', prefixes)", pl == {idx['VENMO PAYMENT 2nd shooter sara']: "biz:contractors", idx['RENT PAYMENT example LLC']: "personal:rent",
-                                                             idx['SQ *BLUE BOTTLE COFFEE 0421']: "biz:meals", idx['ZELLE TO JOHN Glenrock']: "ignore"} and not bad, (pl, bad))
+check("typed answer parses (aliases, 'and', prefixes)", pl == {idx['VENMO PAYMENT 2nd shooter sara']: "biz:contractors", idx['RENT PAYMENT BRACKWATER LLC']: "personal:rent",
+                                                             idx['SQ *BLUE BOTTLE COFFEE 0421']: "biz:meals", idx['ZELLE TO JOHN GLENROCK']: "ignore"} and not bad, (pl, bad))
 check("an unknown word is reported, not guessed", categorize.parse_answer("1 flibber", 3)[1] == ["1 flibber"])
 check("ambiguous prefix resolves to nothing", categorize.resolve_bucket("p") == "")
 cards.answer(qid, "Placed in this thread (Recommended)", text=answer)
@@ -195,10 +200,10 @@ out3 = categorize.tick(now=NOW + timedelta(days=1))
 led = C.ledger()
 bk = {t["description"]: t["bucket"] for t in led["transactions"].values()}
 check("harvest learned 4 rules and placed the rows", out3["learned"] == 4 and bk["VENMO PAYMENT 2nd shooter sara"] == "biz:contractors"
-      and bk["RENT PAYMENT example LLC"] == "personal:rent" and bk["ZELLE TO JOHN Glenrock"] == "ignore", (out3, bk))
+      and bk["RENT PAYMENT BRACKWATER LLC"] == "personal:rent" and bk["ZELLE TO JOHN GLENROCK"] == "ignore", (out3, bk))
 rl = C.rules()
 check("learned rules saved with merchant-key regexes", len(rl["learned"]) == 4 and all(x.get("learned") and x["match"].startswith("\\b") for x in rl["learned"]), rl["learned"])
-led["transactions"]["new1"] = {"id": "new1", "account_id": "chk", "posted": TODAY.isoformat(), "amount": -1500.0, "description": "RENT PAYMENT example LLC 11/01",
+led["transactions"]["new1"] = {"id": "new1", "account_id": "chk", "posted": TODAY.isoformat(), "amount": -1500.0, "description": "RENT PAYMENT BRACKWATER LLC 11/01",
                                "payee": "", "memo": "", "pending": False, "bucket": "", "bucket_src": "none", "rule_id": ""}
 categorize.apply(led, c=c)
 check("learned rule applies to the next charge", led["transactions"]["new1"]["bucket"] == "personal:rent" and led["transactions"]["new1"]["bucket_src"] == "learned", led["transactions"]["new1"])
@@ -213,9 +218,9 @@ led = C.ledger()
 bills = forecast.recurring(led, c, TODAY)
 by = {b["merchant"]: b for b in bills}
 check("recurring: Adobe monthly (4x), Google Ads monthly (3x), rent monthly (4x); Musicbed (1x) not",
-      "Adobe Creative Cloud" in by and by["Adobe Creative Cloud"]["period"] == "monthly" and "Google Ads" in by and "Rent example Llc" in by and "Musicbed Subscription" not in by, list(by))
+      "Adobe Creative Cloud" in by and by["Adobe Creative Cloud"]["period"] == "monthly" and "Google Ads" in by and "Rent Brackwater Llc" in by and "Musicbed Subscription" not in by, list(by))
 check("price jump flagged on Adobe", by["Adobe Creative Cloud"]["jump"] and by["Adobe Creative Cloud"]["last_amount"] == 69.99)
-check("next due = last + period (rent in 5 days)", by["Rent example Llc"]["next_due"] == (TODAY + timedelta(days=5)).isoformat() and by["Rent example Llc"]["days_to_due"] == 5, by["Rent example Llc"])
+check("next due = last + period (rent in 5 days)", by["Rent Brackwater Llc"]["next_due"] == (TODAY + timedelta(days=5)).isoformat() and by["Rent Brackwater Llc"]["days_to_due"] == 5, by["Rent Brackwater Llc"])
 ws = forecast.warnings(bills, led, c, TODAY)
 kinds = {w["kind"] for w in ws}
 check("warnings: low balance on checking (rent 1500 > 400) + price jump", kinds == {"low_balance", "price_jump"}, ws)
@@ -255,7 +260,7 @@ qt = quarterly.tick(now=NOW)
 items = fu.load_state().get("items") or {}
 qe = [i for i in items.values() if i["step"] == "quarterly-estimate"]
 check("quarterly-estimate follow-up armed (T-10d) with the amount", qt["armed"] and qe and qe[0]["unit"] == "q:2026-4" and qe[0]["fire_at"].startswith("2027-01-05"), qe)
-check("set-aside card posted for the HoneyBook payment inside 14 days (the 40-day-old one is history)", qt["posted"] and qt["set_aside_rows"] == 1, qt)
+check("set-aside card posted for the client payment inside 14 days (the 40-day-old one is history)", qt["posted"] and qt["set_aside_rows"] == 1, qt)
 sa = [json.loads(l) for l in cards.NOTES.read_text(encoding="utf-8").splitlines() if "set-aside" in l]
 check("set-aside is said in chat (no 'Noted' card) and asks once for Relay's split when unknown",
       sa and "splits_pct" in sa[-1]["text"] and not [cc for cc in cards._live() if cc["questions"][0]["header"] == "Money: set-aside"], sa)
@@ -275,7 +280,7 @@ with contextlib.redirect_stdout(buf):
     mt = monthly.tick(now=datetime(2026, 11, 1, 9, 0), dry=True)
 text = buf.getvalue()
 check("dry-run readback prints plain sentences for October", text.startswith("Money, October:") and "Income $" in text and "Business profit" in text and "Balances:" in text, text)
-check("readback names HoneyBook and buckets", "HoneyBook" in text and "advertising" in text.lower() and "groceries" in text.lower(), text)
+check("readback names the client payments and buckets", "payments" in text and "advertising" in text.lower() and "groceries" in text.lower(), text)
 check("readback mentions the next quarterly", "Q4" in text, text)
 mt = monthly.tick(now=datetime(2026, 11, 1, 9, 0))
 check("posts on the 1st once (bridge.post swallowed offline)", mt.get("month") == "2026-10" and C.state().get("monthly_last") == "2026-10", mt)

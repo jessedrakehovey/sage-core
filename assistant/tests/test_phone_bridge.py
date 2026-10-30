@@ -61,7 +61,7 @@ def card(body, to=H, preview=True, account="owner6-iphone"):
 
 # ---- identity + token
 check("norm_handle formats a US number", pb.norm_handle(MOM) == H)
-check("valid_handle rejects property email", not pb.valid_handle("x@example.com"))
+check("valid_handle rejects property email", not pb.valid_handle("x@other-business.invalid"))
 tok = pb.token()
 check("token minted and checks", pb.check_token(tok) and not pb.check_token("nope") and not pb.check_token(""))
 
@@ -80,7 +80,7 @@ check("card without [TEXT PREVIEW] refused", not cards.post(card("Yes! We'll bri
 check("unknown phone account refused", "EXEC_KEYS" in cards.post(card("Yes!", account="nokia-3310"), "operator").get("reason", ""))
 check("owner1-iphone is an allowed account", cards.post(card("Hi Arden! Just saw your form. - owner1", account="owner1-iphone"), "operator").get("posted"))
 check("email recipient on property domain refused",
-      not cards.post(card("hi", to="a@example.com"), "operator")["posted"])
+      not cards.post(card("hi", to="a@other-business.invalid"), "operator")["posted"])
 bad = card("Yes! We'll bring dessert")
 bad[0]["question"] = bad[0]["question"].replace("We'll bring dessert", "")
 check("body not verbatim refused", "EXEC_VERBATIM" in cards.post(bad, "operator").get("reason", ""))
@@ -167,7 +167,7 @@ leads_dir.mkdir(parents=True, exist_ok=True)
 r = pb.inbound("555-057-8657", "Hi owner1, yes June 12 is right!", "Arden", account="owner1-iphone")
 r2 = pb.inbound("805-555-0177", "golf sunday?", "Dave", account="owner1-iphone")
 lanes = {t["payload"]["from"]: (t["lane"], t["payload"]["account"]) for t in tickets._load().values() if t["kind"] == "imessage_in"}
-check("lead's text -> lane wedding on owner1-iphone", lanes.get("+1555-057-8657") == ("wedding", "owner1-iphone"), lanes)
+check("lead's text -> lane wedding on owner1-iphone", lanes.get("+15550578657") == ("wedding", "owner1-iphone"), lanes)
 # the owner 2026-10-08: on his line only wedding texts are triaged (text_gate.py); a friend's text is
 # kept in the thread log (so Sage can draft it on request) but never ticketed / carded
 check("friend's text on owner1-iphone is not ticketed", "+18055550177" not in lanes and r2.get("queued") == 0, (lanes, r2))
@@ -178,20 +178,21 @@ check("a stale unconfirmed text to a friend on owner1's line is not a sentinel",
 pb.inbound("805-555-0166", "Florals arrive at 2", "Rosa", account="owner1-iphone")
 check("a wedding-matched number is ticketed in lane wedding",
       any(t["payload"].get("from") == "+18055550166" and t["lane"] == "wedding" for t in tickets._load().values() if t["kind"] == "imessage_in"))
-# 2026-10-10: owner is a HoneyBook contact (on her owner email), so her texts were carded as a
+# 2026-10-10: owner is a CRM contact (on her owner email), so her texts were carded as a
 # "client". Family is never wedding work: her text is kept in the thread log but never ticketed.
 import contacts  # noqa: E402
-hb_file = SCRATCH / "honeybook.json"
-hb_file.write_text(json.dumps({"contacts": [
+crm_file = SCRATCH / "crm.json"
+crm_file.write_text(json.dumps({"contacts": [
     {"name": "owner6 example", "email": "owner6@example.invalid", "phone": "8055550193", "company": "example-org"},
     {"name": "Client Carla", "email": "carla@example.com", "phone": "8055550155"}]}), encoding="utf-8")
-real_hb = os.environ.get("HB_SNAPSHOT_FILE"); os.environ["HB_SNAPSHOT_FILE"] = str(hb_file)   # crm_honeybook.crm_people
+real_crm = os.environ.get("CRM_SNAPSHOT_FILE"); os.environ["CRM_SNAPSHOT_FILE"] = str(crm_file)   # crm connector's crm_people
 rj = pb.inbound("805-555-0193", "Oh they did bring tents", "owner6 Pennywhistle", account="owner1-iphone")
 check("a text from owner6's number makes no ticket / card",
       rj.get("queued") == 0 and not any(t["payload"].get("from") == "+18055550193" for t in tickets._load().values()), rj)
 check("...but it is in the thread log", pb.thread("805-555-0193")["messages"][-1]["text"] == "Oh they did bring tents")
-check("...while a real HoneyBook client is still a wedding party",
-      text_gate.is_business("805-555-0155") and not text_gate.is_business("805-555-0193"))
+if any(hasattr(m, "crm_people") for m in __import__("alib").plugins()):   # the CRM's own clients: only with its plugin
+    check("...while a real CRM client is still a wedding party",
+          text_gate.is_business("805-555-0155") and not text_gate.is_business("805-555-0193"))
 check("a number in Family and Friends is household, never wedding",
       not (text_gate.household_numbers() and text_gate.business_numbers() & text_gate.household_numbers()))
 # 2026-10-11: owner's texts still reached the personal lane, arriving already laned `wedding`.
@@ -200,8 +201,9 @@ jt = {"source": "imessage", "kind": "imessage_in", "lane": "wedding", "payload":
 check("a household text arriving laned wedding is still dropped", text_gate.keep([jt]) == [])
 check("...and on owner6's phone too",
       text_gate.keep([{**jt, "lane": "owner6", "payload": {**jt["payload"], "account": "owner6-iphone"}}]) == [])
-check("...while a client text on owner6's phone still passes",
-      len(text_gate.keep([{**jt, "lane": "owner6", "payload": {"from": "+18055550155", "account": "owner6-iphone"}}])) == 1)
+if any(hasattr(m, "crm_people") for m in __import__("alib").plugins()):   # the CRM's own clients: only with its plugin
+    check("...while a client text on owner6's phone still passes",
+          len(text_gate.keep([{**jt, "lane": "owner6", "payload": {"from": "+18055550155", "account": "owner6-iphone"}}])) == 1)
 # 2026-10-11: "I only want you to draft for wedding clients": an unmatched number makes no card on
 # either phone, even when it arrives laned `wedding` / `owner` / `personal`
 ft = {"source": "imessage", "kind": "imessage_in", "lane": "wedding", "payload": {"from": "+18055550199", "account": "owner1-iphone"}}
@@ -209,7 +211,8 @@ check("an unknown number laned wedding on owner1's line is dropped", text_gate.k
 check("an unknown number on owner6's phone is dropped",
       text_gate.keep([{**ft, "lane": "owner6", "payload": {**ft["payload"], "account": "owner6-iphone"}}]) == [])
 kept = text_gate.keep([{**jt, "lane": "owner6", "payload": {"from": "+18055550155", "account": "owner6-iphone"}}])
-check("...a client on owner6's phone keeps her lane", [k["lane"] for k in kept] == ["owner6"], kept)
+if any(hasattr(m, "crm_people") for m in __import__("alib").plugins()):   # the CRM's own clients: only with its plugin
+    check("...a client on owner6's phone keeps her lane", [k["lane"] for k in kept] == ["owner6"], kept)
 rf = pb.inbound("805-555-0199", "lol same here", "Sam", account="owner6-iphone")
 check("a friend's text to owner6's phone makes no ticket but is in the thread log",
       rf.get("queued") == 0 and pb.thread("805-555-0199")["messages"][-1]["text"] == "lol same here", rf)
@@ -246,10 +249,10 @@ text_gate.business_only = lambda: False           # phone.triage_all_texts = tru
 r3 = pb.inbound("805-555-0177", "bring the tent?", "Dave", account="owner1-iphone")
 rj2 = pb.inbound("805-555-0193", "Won both games", "owner6 Pennywhistle", account="owner1-iphone")
 text_gate.business_only = real_wo
-if real_hb is None:
-    os.environ.pop("HB_SNAPSHOT_FILE", None)
+if real_crm is None:
+    os.environ.pop("CRM_SNAPSHOT_FILE", None)
 else:
-    os.environ["HB_SNAPSHOT_FILE"] = real_hb
+    os.environ["CRM_SNAPSHOT_FILE"] = real_crm
 check("switch on: owner6's text is ticketed again too", rj2.get("queued") == 1, rj2)
 check("switch on: every text on owner1's line is ticketed again (lane personal)",
       r3.get("queued") == 1 and any(t["payload"].get("text") == "bring the tent?" and t["lane"] == "personal" for t in tickets._load().values() if t["kind"] == "imessage_in"))
@@ -295,11 +298,11 @@ cards.sweep()
 check("...and is ticketed by the next sweep", any(t["source"] == "phone_outbox" and "see you at six" in t["summary"] for t in tickets._load().values()))
 
 # a reply proves an unconfirmed text went out: it is marked sent and its card closes (2026-10-10,
-# the example & Dean card that sat open two days after example had answered the text)
+# the Delia & Hollis card that sat open two days after Delia had answered the text)
 import text_confirm  # noqa: E402
 D, E, F = "+13035550180", "+13035550181", "+13035550182"
 pb.fetch_outbox()
-ok_d, _ = pb.queue_outbound({"to": D, "body": "Hi example and Dean, this is owner1"}, "tk-intro")
+ok_d, _ = pb.queue_outbound({"to": D, "body": "Hi Delia and Hollis, this is owner1"}, "tk-intro")
 ok_e, _ = pb.queue_outbound({"to": E, "body": "Hi Sam"}, "tk-sam")
 pb.fetch_outbox()
 ok_f, _ = pb.queue_outbound({"to": F, "body": "not fetched yet"}, "tk-wait")
@@ -316,10 +319,10 @@ def _plain(header, question, details=""):
                         "options": [{"label": "It sent, all fine (Recommended)"}, {"label": "It never sent, I'll resend"}]}], "operator", lane="wedding")
 
 
-c_d = _plain("example/Dean text unconfirmed", "The text to example and Dean (...0180) was handed to your iPhone but the phone never "
+c_d = _plain("Delia/Hollis text unconfirmed", "The text to Delia and Hollis (...0180) was handed to your iPhone but the phone never "
              "confirmed it sent. Do not re-send blindly.", f"outbox {oid_d}, status PHONE_QUEUED")
 c_e = _plain("Sam text", "The text to Sam (...0181) was handed to your iPhone but never confirmed sent. Check Messages.")
-c_x = cards.post([{"question": "example (...0180) asked to confirm Monday at 1 PM. Put it on the calendar?", "header": "example call",
+c_x = cards.post([{"question": "Delia (...0180) asked to confirm Monday at 1 PM. Put it on the calendar?", "header": "Delia call",
                    "lane": "wedding", "options": [{"label": "Yes (Recommended)"}, {"label": "No"}]}], "operator", lane="wedding")
 check("unconfirmed-text cards post", ok_d and ok_e and ok_f and c_d.get("posted") and c_e.get("posted") and c_x.get("posted"), (c_d, c_e, c_x))
 # settle what the sections above left behind: Mom (tk-night) and Sam (tk-h1) really did text back after
@@ -331,7 +334,7 @@ check("earlier fixtures settle without touching this section's items",
       all(i["status"] == ("handed" if i["ticket"] in ("tk-intro", "tk-sam") else "ready")
           for i in pb.load_json(pb.OUTBOX, {"items": []})["items"] if i["ticket"] in ("tk-intro", "tk-sam", "tk-wait")), _settled)
 _tc0 = text_confirm.run(); check("no reply yet: nothing confirmed, nothing closed", _tc0 == {"confirmed": 0, "cards_closed": 0}, _tc0)
-pb.inbound(D, "Hi! So excited to talk with you!!", "example")
+pb.inbound(D, "Hi! So excited to talk with you!!", "Delia")
 pb.inbound(F, "who is this?", "Fran")
 check("dry run reports without changing anything", text_confirm.run(dry=True) == {"confirmed": 1, "cards_closed": 1}
       and any(c["qid"] == c_d["qid"] for c in cards.pending()))
@@ -341,7 +344,7 @@ check("a reply after the hand-over marks the text sent", r == {"confirmed": 1, "
       and item["status"] == "sent" and item.get("confirmed_by") == "reply", (r, item))
 msgs = pb.thread(D)["messages"]
 check("...logged at its hand-over time, ahead of the reply (the reply still needs an answer)",
-      [m["dir"] for m in msgs] == ["out", "in"] and msgs[0]["text"].startswith("Hi example") and msgs[0]["ts"] == item["ts_handed"], msgs)
+      [m["dir"] for m in msgs] == ["out", "in"] and msgs[0]["text"].startswith("Hi Delia") and msgs[0]["ts"] == item["ts_handed"], msgs)
 check("...the sentinel stops chasing it", all(i["id"] != oid_d for i in pb.stale(minutes=-1)))
 done = cards._read(cards.DONE / f"{c_d['qid']}.json") or {}
 open_q = {c["qid"] for c in cards.pending()}
@@ -351,11 +354,11 @@ check("a card that only says 'confirm' about that number stays open", c_x["qid"]
 check("a text the phone never fetched is not confirmed by a reply",
       next(i for i in pb.load_json(pb.OUTBOX, {"items": []})["items"] if i["ticket"] == "tk-wait")["status"] == "ready")
 check("idempotent: a second run does nothing", text_confirm.run() == {"confirmed": 0, "cards_closed": 0})
-c_late = _plain("example text", "Your text to ...0180 was handed to your iPhone but never confirmed sent. Check Messages.")
+c_late = _plain("Delia text", "Your text to ...0180 was handed to your iPhone but never confirmed sent. Check Messages.")
 check("a card posted after the reply (from an older digest) closes on the next run",
       c_late.get("posted") and text_confirm.run()["cards_closed"] == 1 and c_late["qid"] not in {c["qid"] for c in cards.pending()}, c_late)
 
-# 2026-10-15: Casey Juniper, a friend and past HoneyBook client, got two text cards in one morning.
+# 2026-10-15: Casey Juniper, a friend and past CRM client, got two text cards in one morning.
 # A Wiki/People note tagged friends/family makes the number household; a lead's note does not.
 real_vault, fake = text_gate.VAULT, SCRATCH / "vault"
 (fake / "Wiki" / "People").mkdir(parents=True, exist_ok=True)
@@ -369,8 +372,10 @@ check("...a People note without family/friends tags does not", "8055550137" not 
 check("...so the friend's text is dropped",
       text_gate.keep([{"kind": "imessage_in", "lane": "personal", "payload": {"from": "+18055550136", "account": "owner1-iphone"}}]) == [])
 text_gate.VAULT, text_gate.business_only = real_vault, real_wo
-check("Avery Juniper's banter texts are personal: his People note makes his number household (2026-10-17)",
-      "555-008-9108" in text_gate.household_numbers())
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if not __import__("engine").is_template():                     # the organization's own People notes: absent in the bare engine
+    check("Avery Juniper's banter texts are personal: his People note makes his number household (2026-10-17)",
+          "5550089108" in text_gate.household_numbers())
 # and a newer text card for the same number on the same phone retires the older open one
 J = "+18055550136"
 o1 = cards.post(card("Sounds good", to=J, account="owner1-iphone"), "operator")
@@ -382,7 +387,7 @@ check("a newer text card supersedes the older one to the same person",
       and (cards._read(cards.DONE / f"{o1['qid']}.json") or {}).get("superseded_by") == o2["qid"], (o1, o2))
 check("...a card on the other phone is left open", o3.get("posted") and o3["qid"] in live and o2["qid"] in live)
 
-# 2026-10-17: AJ's card carried example's hint ("...answer the gift exchange or holidays now"), copied
+# 2026-10-17: AJ's card carried Marisa's hint ("...answer the gift exchange or holidays now"), copied
 # from the card posted a second before. A text card's hint must come from its own conversation.
 HINT = "Safe draft that commits to nothing; Edit & send if you want to answer the gift exchange or holidays now."
 def _hinted(who, to, said, body, advice=HINT):
@@ -390,7 +395,7 @@ def _hinted(who, to, said, body, advice=HINT):
     q[0].update(header=f"Text reply: {who}", lane="personal", details=f"{who}: {said}", advice=advice)
     q[0]["question"] = f"{who} texted: {said}\n[TEXT PREVIEW] To {who} ({to}):\n{body}"
     return q
-kr = cards.post(_hinted("example", "+18055550141", "Want to be part of the family gift exchange? Plans for the holidays?",
+kr = cards.post(_hinted("Marisa", "+18055550141", "Want to be part of the family gift exchange? Plans for the holidays?",
                         "We'll think on the gift exchange and the holidays and let you know."), "operator")
 aj = cards.post(_hinted("AJ", "+18055550142", "I think you and me use it more like a tool. It's a dark world out there",
                         "Ha, glad we're on the tool side of it"), "operator")

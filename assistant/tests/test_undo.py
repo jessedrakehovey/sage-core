@@ -43,7 +43,7 @@ def age_answer(qid, seconds):
     cards.ANSWERS.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
 
 
-# 1. the example case: a standing-text preview, 'Let it go' tapped, swept (consumed), Undo an hour later
+# 1. the Odette case: a standing-text preview, 'Let it go' tapped, swept (consumed), Undo an hour later
 PREVIEW = {"header": "Lead intro: Test Couple", "lane": "wedding", "subject": "lead_intro|5550001111",
            "hold_text": "lead_intro|5550001111", "no_recommendation": "the text goes by itself; this card only pulls it back",
            "question": "The intro text goes out at 9:00 AM by itself. Tap Hold this one and it waits for your tap.",

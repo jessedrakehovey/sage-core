@@ -23,7 +23,7 @@ import tickets  # noqa: E402
 import text_gate  # noqa: E402
 
 # the lead, the vendor and Sam are wedding parties here (text_gate.py only tickets those, 2026-10-11)
-text_gate.business_numbers = lambda: {"555-057-8657", "8055550002", "8055550177"}
+text_gate.business_numbers = lambda: {"5550578657", "8055550002", "8055550177"}
 from alib import DATA, save_json  # noqa: E402
 
 FAILS = []
@@ -48,7 +48,7 @@ def zstamp(dt_s):
 
 # phone threads: a lead 20 min quiet (breach), a friend (personal, no SLA), an answered couple-free vendor
 save_json(DATA / "phone_threads.json", {
-    "+1555-057-8657": {"name": "", "messages": [{"ts": stamp(1200), "dir": "in", "text": "Hi owner1, is June 12 open?", "ref": ""}]},
+    "+15550578657": {"name": "", "messages": [{"ts": stamp(1200), "dir": "in", "text": "Hi owner1, is June 12 open?", "ref": ""}]},
     "+18055550001": {"name": "Dave", "messages": [{"ts": stamp(300), "dir": "in", "text": "golf sunday?", "ref": ""}]},
     "+18055550002": {"name": "", "messages": [{"ts": stamp(7200), "dir": "in", "text": "Quote attached", "ref": ""},
                                               {"ts": stamp(3600), "dir": "out", "text": "Thanks, looks good", "ref": "tk-1"}]},
@@ -56,7 +56,7 @@ save_json(DATA / "phone_threads.json", {
 })
 tickets.add_many([
     {"source": "imessage", "source_id": "a", "lane": "wedding", "kind": "imessage_in", "title": "Text from Arden",
-     "payload": {"from": "+1555-057-8657", "text": "Hi owner1, is June 12 open?", "received": stamp(1200), "account": "owner1-iphone"}},
+     "payload": {"from": "+15550578657", "text": "Hi owner1, is June 12 open?", "received": stamp(1200), "account": "owner1-iphone"}},
     {"source": "imessage", "source_id": "b", "lane": "personal", "kind": "imessage_in", "title": "Text from Dave",
      "payload": {"from": "+18055550001", "name": "Dave", "text": "golf sunday?", "received": stamp(300), "account": "owner1-iphone"}},
     {"source": "imessage", "source_id": "c", "lane": "wedding", "kind": "imessage_in", "title": "Text from vendor",
@@ -69,8 +69,8 @@ tickets.add_many([
 
 st = comms_state.build()
 th = st["threads"]
-check("lead text classified as lead by quiz phone", th["text:+1555-057-8657"]["class"] == "lead" and th["text:+1555-057-8657"]["name"] == "Arden & Reese")
-check("lead 20 min quiet is needs_reply + breached (SLA 15 min)", th["text:+1555-057-8657"]["state"] == "needs_reply" and th["text:+1555-057-8657"]["sla"]["breached"])
+check("lead text classified as lead by quiz phone", th["text:+15550578657"]["class"] == "lead" and th["text:+15550578657"]["name"] == "Arden & Reese")
+check("lead 20 min quiet is needs_reply + breached (SLA 15 min)", th["text:+15550578657"]["state"] == "needs_reply" and th["text:+15550578657"]["sla"]["breached"])
 check("friend's text is personal, closed, no SLA (wedding-only texts, 2026-10-08)",
       th["text:+18055550001"]["class"] == "personal" and th["text:+18055550001"]["state"] == "closed" and th["text:+18055550001"]["sla"] is None)
 check("friend's text on owner1's line got no ticket", not any(t["payload"].get("from") == "+18055550001" for t in tickets._load().values()))
@@ -78,16 +78,16 @@ check("vendor thread with verified reply is awaiting_party", th["text:+180555500
 check("verification code text is closed", th["text:+18055550003"]["state"] == "closed")
 check("lead email thread is a lead (by address)", th["email:ar@example.com"]["class"] == "lead" and th["email:ar@example.com"]["state"] == "needs_reply")
 check("bulk mail is not a thread", "email:deals@shop.example" not in th)
-check("lanes + counts agree", st["counts"]["breached"] == 1 and set(st["lanes"]["breached"]) == {"text:+1555-057-8657"})
+check("lanes + counts agree", st["counts"]["breached"] == 1 and set(st["lanes"]["breached"]) == {"text:+15550578657"})
 
 # a card open for the lead's number -> awaiting_the owner, no breach ticket
-r = cards.post([{"question": "[TEXT PREVIEW] To Arden (+1555-057-8657):\nHi Arden! Yes, June 12 is open. - owner1", "header": "Reply to Arden",
+r = cards.post([{"question": "[TEXT PREVIEW] To Arden (+15550578657):\nHi Arden! Yes, June 12 is open. - owner1", "header": "Reply to Arden",
                  "lane": "wedding", "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}],
                  "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)",
-                          "payload": {"account": "owner1-iphone", "to": "+1555-057-8657", "body": "Hi Arden! Yes, June 12 is open. - owner1"}}}], "test")
+                          "payload": {"account": "owner1-iphone", "to": "+15550578657", "body": "Hi Arden! Yes, June 12 is open. - owner1"}}}], "test")
 check("reply card posted", r["posted"], r)
 st2 = comms_state.build()
-check("open card -> awaiting_owner1 with the qid", st2["threads"]["text:+1555-057-8657"]["state"] == "awaiting_owner1" and st2["threads"]["text:+1555-057-8657"]["card"] == r["qid"])
+check("open card -> awaiting_owner1 with the qid", st2["threads"]["text:+15550578657"]["state"] == "awaiting_owner1" and st2["threads"]["text:+15550578657"]["card"] == r["qid"])
 n = comms_state.breach_tickets(st2)
 check("no breach ticket while a card is open", n == 0)
 
@@ -125,14 +125,14 @@ check("pretriage: the ack-only text is dismissed, the real question is kept",
       [t["source_id"] for t in _kept] == ["pt-real"] and tickets._load()[[t for t in _pt if t["source_id"] == "pt-ack"][0]["id"]]["status"] == "dismissed")
 
 # a group-chat burst waits until the thread goes quiet (the owner 2026-10-07); a lone text never waits
-# an owner who said in chat they replied themselves (phone, HoneyBook) closes the thread: no reply card,
-# no breach chase (example 2026-10-22: the owner said 10/21 he had replied, her 10/9 text still raised a card)
-(DATA / "leads" / "k.json").write_text(json.dumps({"lead": {"name": "example Underhill", "phone": "+1 805 555 0144"}}), encoding="utf-8")
+# an owner who said in chat they replied themselves (phone, the CRM) closes the thread: no reply card,
+# no breach chase (Sloane 2026-10-22: the owner said 10/21 he had replied, her 10/9 text still raised a card)
+(DATA / "leads" / "k.json").write_text(json.dumps({"lead": {"name": "Sloane Underhill", "phone": "+1 805 555 0144"}}), encoding="utf-8")
 _pt = json.loads((DATA / "phone_threads.json").read_text(encoding="utf-8"))
-_pt["+18055550144"] = {"name": "example Underhill", "messages": [{"ts": stamp(13 * 86400), "dir": "in", "text": "Any update on the film?", "ref": ""}]}
+_pt["+18055550144"] = {"name": "Sloane Underhill", "messages": [{"ts": stamp(13 * 86400), "dir": "in", "text": "Any update on the film?", "ref": ""}]}
 save_json(DATA / "phone_threads.json", _pt)
 KEN = "text:+18055550144"
-check("example's 13-day-old text needs a reply before anyone says otherwise", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
+check("Sloane's 13-day-old text needs a reply before anyone says otherwise", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
 
 
 def _mem(*facts):
@@ -142,7 +142,7 @@ def _mem(*facts):
          "added": time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - ago))} for i, (subj, fact, by, ago) in enumerate(facts, 1)]})
 
 
-_mem(("example Underhill (Underhill-Whitlock, 2026-06-20)", "On Oct 21, 2026 owner1 said he replied to example that her film is being finished. "
+_mem(("Sloane Underhill (Underhill-Whitlock, 2026-06-20)", "On Oct 21, 2026 owner1 said he replied to Sloane that her film is being finished. "
       "The reply to her is done, so don't draft or chase another one about it", "owner1", 86400))
 st4 = comms_state.build()
 check("owner said he replied after her text -> answered (awaiting_party), names the memory fact",
@@ -150,15 +150,15 @@ check("owner said he replied after her text -> answered (awaiting_party), names 
 comms_state.breach_tickets(st4)
 check("...and no unanswered-text chase for it", KEN not in st4["lanes"]["breached"]
       and not any(t["kind"] == "sla_breach" and t["payload"].get("thread") == KEN for t in tickets._load().values()))
-_mem(("example Underhill", "owner1 replied to example himself", "sage-dream", 86400))
+_mem(("Sloane Underhill", "owner1 replied to Sloane himself", "sage-dream", 86400))
 check("a dream-written 'replied' is not an owner's word", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
-_mem(("example Underhill", "owner1 hasn't replied to example yet", "owner1", 86400))
+_mem(("Sloane Underhill", "owner1 hasn't replied to Sloane yet", "owner1", 86400))
 check("'hasn't replied' does not close it", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
 _mem(("Arden", "owner1 said he replied to Arden", "owner1", 86400))
-check("a reply about someone else does not close example's thread", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
-_mem(("example example IV", "example's request is already answered: the example handoff package was emailed to him", "owner1", 86400))
-check("a fact about example that only mentions example does not close her thread", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
-_mem(("example Underhill", "owner1 said he replied to example", "owner1", 86400))
+check("a reply about someone else does not close Sloane's thread", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
+_mem(("Corwin Castellan IV", "Corwin's request is already answered: the Sloane & Bram handoff package was emailed to him", "owner1", 86400))
+check("a fact about Corwin that only mentions Sloane does not close her thread", comms_state.build()["threads"][KEN]["state"] == "needs_reply")
+_mem(("Sloane Underhill", "owner1 said he replied to Sloane", "owner1", 86400))
 _pt["+18055550144"]["messages"].append({"ts": stamp(3600), "dir": "in", "text": "curious if you have any updates?", "ref": ""})
 save_json(DATA / "phone_threads.json", _pt)
 check("a NEW text after his 'I replied' needs a reply again", comms_state.build()["threads"][KEN]["state"] == "needs_reply")

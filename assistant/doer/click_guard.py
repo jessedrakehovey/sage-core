@@ -1,6 +1,6 @@
 """click_guard.py - the doer's cap on a control that will not take a click (2026-10-19).
 
-HoneyBook's project pages never settle: four runs on 2026-10-18 clicked the participants row
+the CRM's project pages never settle: four runs on 2026-10-18 clicked the participants row
 ("+2", "Add") until the 80-step limit, each click timing out on "waiting for element to be
 visible, enabled and stable". prompt.md tells the turn to force such a control once through
 browser_evaluate after two timeouts; this hook makes the stop law. doer.run_turn passes it with

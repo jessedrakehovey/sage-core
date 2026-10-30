@@ -1,5 +1,4 @@
 {
- "_doc": "Day Spine job list (assistant/scripts/spine.py). Every job is zero-LLM except hb-snapshot (model as transport only) and doer-tick (a real model turn, only when an agent_run ticket waits). `cmd` is argv ('python' = this interpreter), `every_min` the minimum cadence, `window` an optional [start_hour, end_hour) local window, `timeout_s` the kill time. The spine task fires every 10 min 06:00-23:30; jobs run when due. Disable a job with enabled:false rather than deleting it.",
  "jobs": [
   {
    "name": "sense-typeform",
@@ -8,8 +7,7 @@
     "assistant/scripts/sense_typeform.py"
    ],
    "every_min": 10,
-   "timeout_s": 180,
-   "_what": "new Package Finder quiz leads straight from Typeform -> priced HoneyBook draft ticket + inquiry ticket + card (runs before drain)"
+   "timeout_s": 180
   },
   {
    "name": "text-confirm",
@@ -33,8 +31,7 @@
    "window": [
     7,
     21
-   ],
-   "_what": "the owner's standing client texts (2026-10-17): releases texts held overnight at 09:00 (runs before drain); the day-before reminder for every booked client meeting / call / shoot (HoneyBook scheduler + our holds); the other kinds fire from their sensors and the follow-ups engine"
+   ]
   },
   {
    "name": "comms-state",
@@ -47,22 +44,6 @@
    "_what": "the comms substrate (thread states + SLAs + breach tickets); the 1-min probe task rebuilds it too, this is the safety net"
   },
   {
-   "name": "hb-snapshot",
-   "cmd": [
-    "python",
-    "assistant/scripts/hb_snapshot.py",
-    "--min-age-min",
-    "100"
-   ],
-   "every_min": 120,
-   "window": [
-    7,
-    22
-   ],
-   "timeout_s": 280,
-   "_what": "refresh dashboard/data/honeybook.json through the READ-ONLY HoneyBook connector (the one job that uses a model, as a transport only: haiku, one tool, fixed program; the script parses and validates the result). Feeds sense_honeybook, the Desk, ads/hb_match, couples sync"
-  },
-  {
    "name": "team-on-projects",
    "cmd": [
     "python",
@@ -73,23 +54,7 @@
     7,
     22
    ],
-   "timeout_s": 120,
-   "_what": "the owner's standing rule 2026-10-24: every open HoneyBook project gets the team members in config honeybook.team_on_projects (a team member) - mints hb_add_team_member tickets for the ones still missing, a few per run, drain writes them"
-  },
-  {
-   "name": "hb-keepalive",
-   "cmd": [
-    "C:/Users/owner1/.venvs/wedding-web/Scripts/python.exe",
-    "scripts/honeybook/hb_login.py",
-    "--keepalive"
-   ],
-   "every_min": 60,
-   "window": [
-    6,
-    23
-   ],
-   "timeout_s": 330,
-   "_what": "keep the HoneyBook browser lane (~/.claude/wv_hb_profile) signed in: off-screen real Chrome, re-login via Google one-click (never a password), reap orphan Chromes -> data/hb_browser_status.json (connection hb-browser). Signed out -> an on-screen sign-in window that waits with no time limit (hb_signin_window.py, the owner 2026-10-08); then the same check on the doer/playwright-cli profile -> data/hb_doer_status.json (connection hb-doer)"
+   "timeout_s": 120
   },
   {
    "name": "cards-sweep",
@@ -158,7 +123,6 @@
    ],
    "every_min": 10,
    "timeout_s": 60,
-   "_what": "a timed send approved with a condition ('text him at 4 if they haven't replied') is held, never sent, when the person already wrote (texts, mail, HoneyBook); one line in the card's thread says what came in. Runs right before drain",
    "group": "long",
    "expect": "SEND_HOLD"
   },
@@ -451,8 +415,7 @@
     7,
     22
    ],
-   "timeout_s": 240,
-   "_what": "record-drift detectors (assistant/tracking.json -> drift): the delivery ledger vs the editor, HoneyBook stage vs a wedding that passed, reminders still armed after 'paid', past calendar events with nothing logged -> data/tracking/drift.json for the weekly card. Zero LLM, read-only"
+   "timeout_s": 240
   },
   {
    "name": "tracking-chase",
@@ -493,8 +456,7 @@
     7,
     21
    ],
-   "timeout_s": 180,
-   "_what": "thread mining (ruling 3, 2026-10-15): dates beside commitment words in new texts / mail / HoneyBook messages / the owners' chat -> ONE calendar_hold card per date; money senders' due / renewal / action-required dates -> ONE tracking_fix card that arms the reminders. Vocabulary in assistant/mining.json; never silent, never sends"
+   "timeout_s": 180
   },
   {
    "name": "tracking-scheduling",
@@ -592,8 +554,7 @@
     7,
     22
    ],
-   "timeout_s": 120,
-   "_what": "running Schedule C profit -> federal + CA estimate (money.json -> tax_tables), the next due date armed as followups money/quarterly-estimate (T-10d), data/money/quarterly.json for whoever works the ticket; ONE set-aside card after HoneyBook payments land (nets out Relay's split when relay.splits_pct is filled). Report only"
+   "timeout_s": 120
   },
   {
    "name": "money-monthly",
@@ -620,8 +581,7 @@
     8,
     20
    ],
-   "timeout_s": 180,
-   "_what": "next-step chains (assistant/chains.json, ruling 4 2026-10-15): shoot / edit / lead / money gates walked against the ledger, HoneyBook, the editor, calendar, follow-ups, tickets, sends and the owners' own words; a gate up next with no evidence by its ask time -> ONE card (Booked / Book it for me / Not yet / Drop), max 2 per lane per day; 'Book it for me' mints a chain_book ticket, never a send. Zero LLM"
+   "timeout_s": 180
   },
   {
    "name": "tracking-entities",
@@ -652,22 +612,6 @@
    "_what": "tomorrow lined up the evening before (ruling 6): at tracking.json -> dayplan.plan_at, once a day, ONE plain message to the shared space when tomorrow has 3+ timed items (events, calls, deadlines, reminders, chases due back), owner's line only on days she has items; otherwise silence. Zero LLM"
   },
   {
-   "name": "hb-send-selftest",
-   "cmd": [
-    "python",
-    "assistant/scripts/hb_exec.py",
-    "selftest",
-    "--quiet"
-   ],
-   "every_min": 1440,
-   "window": [
-    7,
-    22
-   ],
-   "timeout_s": 300,
-   "_what": "daily read-only preflight of every HoneyBook write kind (hb_exec.py KIND_FUNCS): typeof each connector function the templates call, through the read-only action only (haiku as transport). Writes data/hb_exec_status.json; cards.post refuses an hb_* card whose kind is dead (HB_PATH_DEAD). Added 2026-10-18 after Emery's approved follow-up died twice on comms.createCommunication (SDK pin 0.20.6). --quiet: the chat line on a change is said by the non-quiet run; the spine's daily run only records"
-  },
-  {
    "name": "meeting-guests",
    "cmd": [
     "python",
@@ -678,8 +622,7 @@
     7,
     22
    ],
-   "timeout_s": 120,
-   "_what": "standing guests (config.json -> meetings.guests, e.g. a team member) on every upcoming client video call that is also on the owner's Google calendar: Calendar API PATCH attendees with sendUpdates=none (nobody emailed; guest joins the Meet without knocking). A HoneyBook-only Meet is said once in chat (co-host needs a HoneyBook team seat: the owner's call). Added 2026-10-18."
+   "timeout_s": 120
   },
   {
    "name": "builds-requeue",
@@ -714,8 +657,7 @@
     "harvest"
    ],
    "every_min": 60,
-   "timeout_s": 90,
-   "_what": "names every text thread the people index is sure about (contacts, memory, the wiki, HoneyBook, the leads, the texts themselves; whois.py, 2026-10-23) so cards, the comms board and Sage show who it is"
+   "timeout_s": 90
   },
   {
    "name": "graduation",

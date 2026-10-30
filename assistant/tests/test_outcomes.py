@@ -45,20 +45,31 @@ def ago(minutes):
 
 # ------------------------------------------------------------------ 1. what an executor line proves, by kind
 v = oc.verdict_from_exec
+# a fake CRM connector (the engine ships none): its kinds verify by the record id its transport prints
+import re as _re  # noqa: E402
+import types as _types  # noqa: E402
+import alib as _alib  # noqa: E402
+import crm as _crm  # noqa: E402
+_FAKE = _types.SimpleNamespace(CRM=True, SERVICE="AcmeCRM", PARTICIPANT_KINDS={"acme_add_participant"}, STAGE_KINDS={"acme_set_stage"},
+                               MESSAGE_KINDS={"acme_message"}, DONE_PATTERN=_re.compile(r"ACME_DONE=(\w+)"),
+                               owns_kind=lambda k: str(k).startswith("acme_"), RETRY_KINDS={"acme_add_participant", "acme_message"})
+_alib.plugins = lambda: [_FAKE]
+_crm._plugins = lambda: [_FAKE]
+_crm._ALIASES = None
 check("email: SENT=1 + thread ok -> verified with the Message-ID",
       v("email_send", True, "SENT=1 <abc@example.invalid> THREAD=ok")[0] == "verified" and v("email_send", True, "SENT=1 <abc@x> THREAD=ok")[1]["message_id"] == "<abc@x>")
 check("email: ok without a Message-ID is unverified", v("email_send", True, "ok")[0] == "unverified")
-check("participant: MEMBER=no is a FAILURE, not a done with a warning", v("hb_add_participant", True, "HB_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")[0] == "failed")
-check("participant: MEMBER=yes verified", v("hb_add_participant", True, "HB_DONE=fa8da98a5bdb77b4902cbb43 CONTACT=x MEMBER=yes")[0] == "verified")
+check("participant: MEMBER=no is a FAILURE, not a done with a warning", v("acme_add_participant", True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")[0] == "failed")
+check("participant: MEMBER=yes verified", v("acme_add_participant", True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 CONTACT=x MEMBER=yes")[0] == "verified")
 check("stage: VERIFIED=no failed / ARCHIVED=yes verified",
-      v("hb_set_stage", True, "HB_DONE=fa8da98a5bdb77b4902cbb43 STAGE=Booked VERIFIED=no")[0] == "failed"
-      and v("hb_set_stage", True, "HB_DONE=fa8da98a5bdb77b4902cbb43 ARCHIVED=yes REASON=x")[0] == "verified")
+      v("acme_set_stage", True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 STAGE=Booked VERIFIED=no")[0] == "failed"
+      and v("acme_set_stage", True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 ARCHIVED=yes REASON=x")[0] == "verified")
 check("sheet: VERIFIED=no failed, VERIFIED=yes verified with the count",
       v("sheet_set", True, "SHEET_DONE=5 VERIFIED=no")[0] == "failed" and v("sheet_set", True, "SHEET_DONE=5 VERIFIED=yes") == ("verified", {"cells": 5}, "5 cells read back as written"))
 check("text: handed to the phone is only CLAIMED, with the outbox id", v("imessage_send", True, "PHONE_QUEUED m-abc123 -> ...0123")[:2] == ("claimed", {"outbox": "m-abc123"}))
-check("hb message: the id verifies it", v("hb_message", True, "HB_DONE=fa8da98a5bdb77b4902cbb43 AT=t STATUS=sent")[0] == "verified")
+check("crm message: the id verifies it", v("acme_message", True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 AT=t STATUS=sent")[0] == "verified")
 check("a not-ok UNVERIFIED result is unverified, any other not-ok is failed",
-      v("hb_note", False, "PERMANENT: DELIVERY UNVERIFIED: timed out")[0] == "unverified" and v("hb_note", False, "PERMANENT: refused")[0] == "failed")
+      v("acme_note", False, "PERMANENT: DELIVERY UNVERIFIED: timed out")[0] == "unverified" and v("acme_note", False, "PERMANENT: refused")[0] == "failed")
 check("doer run stays claimed for its own evidence", v("agent_run", True, "DOER_DONE: x")[0] == "claimed")
 
 # ------------------------------------------------------------------ 2. rows: idempotent claim, terminal never rewritten
@@ -94,9 +105,9 @@ cards.UNDO_S = 30
 drain.UNDO_FLOOR_S = 0
 drain._quiet_hours = lambda now=None: False          # outbound kinds are held 21:00-07:00; the test runs at any hour
 oc._quiet = lambda now=None: False                     # the owner is not asked at night; the test runs at any hour
-drain.EXECUTORS["email_send"] = lambda p, dry: (True, "HB_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")
-es._append(es.TICKETS, {"id": a["ticket"], "ts": time.strftime(oc.FMT), "kind": "hb_add_participant", "lane": "honeybook"})   # pretend the kind
-drain.EXECUTORS["hb_add_participant"] = lambda p, dry: (True, "HB_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")
+drain.EXECUTORS["email_send"] = lambda p, dry: (True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")
+es._append(es.TICKETS, {"id": a["ticket"], "ts": time.strftime(oc.FMT), "kind": "acme_add_participant", "lane": "acme"})   # pretend the kind
+drain.EXECUTORS["acme_add_participant"] = lambda p, dry: (True, "ACME_DONE=fa8da98a5bdb77b4902cbb43 MEMBER=no")
 out = drain._drain_locked("", False, 0)
 t = es.fold()[a["ticket"]]
 check("an ok result whose read-back says MEMBER=no is an EXCEPTION, never done", t["status"] == "exception" and "READBACK" in t["result"], (out, t.get("result")))
@@ -107,7 +118,7 @@ check("the card mark is a red X from the ledger", chat_push.answered_icon({"tick
 
 # ------------------------------------------------------------------ 4. a text: claimed at hand-off, verified by a reply, or asked about once
 oc.DUE_MIN["imessage_send"] = 0          # the verifier runs on the first settle in the test (5 min live)
-pay = {"account": "owner1-iphone", "to": "+18055550123", "body": "Hey example, confirming Saturday."}
+pay = {"account": "owner1-iphone", "to": "+18055550123", "body": "Hey Delia, confirming Saturday."}
 tk = es.enqueue("imessage_send", pay, "owner1", "card:qtest00000001")
 drain.EXECUTORS["imessage_send"] = lambda p, dry: (True, "PHONE_QUEUED m-aaa111 -> ...0123")
 drain._drain_locked("", False, 0)
@@ -138,8 +149,8 @@ check("a reply-confirmed text is verified with 'they replied' as the evidence",
       oc.by_ticket(tk2["id"])["state"] == "verified" and oc.by_ticket(tk2["id"])["evidence"].get("confirmed_by") == "reply")
 
 # ------------------------------------------------------------------ 5. Send it again -> failed + the original card back marked RESEND
-pay3 = {"account": "owner1-iphone", "to": "+18055550999", "body": "Hi example, 4pm works."}
-r = cards.post([{"question": "[TEXT PREVIEW]\nto +18055550999\n\n" + pay3["body"], "header": "Text to example", "lane": "wedding", "audience": "client",
+pay3 = {"account": "owner1-iphone", "to": "+18055550999", "body": "Hi Teo, 4pm works."}
+r = cards.post([{"question": "[TEXT PREVIEW]\nto +18055550999\n\n" + pay3["body"], "header": "Text to Teo", "lane": "wedding", "audience": "client",
                  "options": [{"label": "Send"}, {"label": "Skip"}],
                  "exec": {"kind": "imessage_send", "approve_label": "Send", "payload": pay3}}], "test")
 check("text card posts", r["posted"], r)
@@ -157,7 +168,7 @@ save_json(pb.OUTBOX, box)
 oc.settle(dry=False)
 oc.settle(dry=False)
 row3 = oc.by_ticket(a3["ticket"])
-check("example's handed text is verified too, nobody is asked", row3["state"] == "verified" and not row3.get("ask_card"), row3)
+check("Teo's handed text is verified too, nobody is asked", row3["state"] == "verified" and not row3.get("ask_card"), row3)
 # the owner can still say a text must go again: the original card comes back marked RESEND
 rr = oc.answer(row3["id"], "Send it again", by="owner1")
 check("Send it again fails the row and reopens the ORIGINAL card", rr["state"] == "failed" and rr.get("reopened"), rr)

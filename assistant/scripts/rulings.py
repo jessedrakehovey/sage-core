@@ -13,7 +13,7 @@ own words.
   python assistant/scripts/rulings.py retire <id> --why "..."
 
 A match means: do not ask the open question. If no tap is needed, act within the ruling
-and `cards.py note` it. If a tap is still required (any send, any HoneyBook write), post
+and `cards.py note` it. If a tap is still required (any send, any the CRM write), post
 the card PRE-DECIDED: his ruling as the recommended first option, quoted. A ruling NEVER
 authorizes a send or a write on its own. `add` is for a ruling he typed himself; never
 invent one, and never add anything touching the send-gate, pricing/dates commitments or

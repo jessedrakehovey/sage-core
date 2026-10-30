@@ -66,7 +66,7 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly",
           "openid", "https://www.googleapis.com/auth/userinfo.email"]
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 EXTRA_SCOPES_ALLOWED = {SHEETS_SCOPE}                # the only scopes google.json may add per account
-FORBIDDEN_DOMAIN = "example.com"       # the property identity never crosses over
+FORBIDDEN_DOMAIN = "other-business.invalid"       # the property identity never crosses over
 CAL = "https://www.googleapis.com/calendar/v3"
 GM = "https://gmail.googleapis.com/gmail/v1/users/me"
 SH = "https://sheets.googleapis.com/v4/spreadsheets"
@@ -214,7 +214,7 @@ _VIDEO = re.compile(r"https://(?:meet\.google\.com|[\w.-]*zoom\.us|teams\.micros
 
 def meet_link(ev: dict) -> str:
     """The event's video link: Google Meet, else a video entry point, else a Meet/Zoom/Teams URL
-    written in the location or description (HoneyBook puts its link there). '' when none."""
+    written in the location or description (the CRM puts its link there). '' when none."""
     if ev.get("hangoutLink"):
         return str(ev["hangoutLink"])
     for p in (ev.get("conferenceData") or {}).get("entryPoints") or []:
@@ -363,7 +363,7 @@ _DRIVE_LINK = re.compile(r"https?://(?:drive|docs)\.google\.com/(?:file/d/|open\
 
 def drive_links(text: str) -> list:
     """Google Drive file ids linked in a message body (Gmail turns a big attachment into a Drive
-    link: example's 37 MB WAVs, 2026-10-12). Order kept, duplicates dropped."""
+    link: Corwin's 37 MB WAVs, 2026-10-12). Order kept, duplicates dropped."""
     seen, out = set(), []
     for m in _DRIVE_LINK.finditer(str(text or "")):
         if m.group(1) not in seen:

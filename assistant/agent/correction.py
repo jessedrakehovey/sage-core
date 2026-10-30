@@ -123,7 +123,7 @@ HERE_LOOKBACK_S = 3 * 3600
 
 def card_in_thread(thread: str, ask: dict | None = None, now: float | None = None) -> dict:
     """The card that already landed in this thread since the ask (open, or tapped), or {}. "Where is the card"
-    in a thread that has one is not a missing card: 2026-10-18 16:07 the example card posted two minutes after the reply,
+    in a thread that has one is not a missing card: 2026-10-18 16:07 the Hollis card posted two minutes after the reply,
     the owner asked where it was in that thread (he had tapped Send the same minute), and the reply said it "closed unsent"
     and made a second one, which could have sent the same text twice."""
     m = re.search(r"/threads/([^/]+)$", str(thread or ""))

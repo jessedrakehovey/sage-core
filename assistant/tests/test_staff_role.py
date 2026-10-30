@@ -46,7 +46,7 @@ ok(core.person_paths(staff1) and all(p.startswith("Wiki/") for p in core.person_
 
 # ---- the context a staff turn sees
 core.mem_upsert("household", "Cats", "The household has two cats, Rue and Davie", by="owner1")
-core.mem_upsert("person", "Dad", "owner1's dad David lives in example", by="owner1")
+core.mem_upsert("person", "Dad", "owner1's dad David lives in Marrow Bay", by="owner1")
 core.mem_upsert("business", "Signature package", "Signature includes two cinematographers", by="owner1")
 core.rule_add("Always sign client emails as owner1 alone", "owner1: sign as me", by="owner1")
 owner_ctx = brain.context_block(owner1)
@@ -61,8 +61,8 @@ ok("Wiki/People" not in staff_ctx and "Memory/" not in staff_ctx, "the staff wik
 
 # ---- the tool lists
 ok("Read" not in brain.STAFF_ALLOWED.split(",") and "mcp__example-google__mail_search" not in brain.STAFF_ALLOWED and "texts_search" not in brain.STAFF_ALLOWED
-   and "calendar_events" not in brain.STAFF_ALLOWED and "mcp__honeybook__take_action_read_only" in brain.STAFF_ALLOWED and "vault_search" in brain.STAFF_ALLOWED,
-   "staff tools: connector read-only + scoped search + task + note; no Read, mail, texts, calendar")
+   and "calendar_events" not in brain.STAFF_ALLOWED and "vault_search" in brain.STAFF_ALLOWED,
+   "staff tools: scoped search + task + note; no Read, mail, texts, calendar")
 ok(all(x in brain.STAFF_DENIED for x in ("Read", "Glob", "Grep", "mail_search", "texts_search", "who_is", "calendar_events")), "staff denied list closes the vault and the personal channels")
 
 # ---- deeds from a staff turn
@@ -70,8 +70,8 @@ turn = intents.begin(staff1, "dm:staff1", "")
 os.environ["AGENT_TURN"] = str(turn)
 for name, args in [("remember", {"kind": "business", "subject": "x", "fact": "a fact of some length here"}),
                    ("learn", {"rule": "always do the thing this way"}), ("schedule", {"title": "t", "when": {"daily": "07:00"}}),
-                   ("do", {"text": "open HoneyBook and change the stage"}), ("decide", {"question": "which one?", "options": [{"label": "A"}, {"label": "B"}], "recommended": "A", "why": "x"}),
-                   ("approve", {"words": "send it"}), ("call", {"with": "example"}), ("job", {"job": "handoff build"}),
+                   ("do", {"text": "open the CRM and change the stage"}), ("decide", {"question": "which one?", "options": [{"label": "A"}, {"label": "B"}], "recommended": "A", "why": "x"}),
+                   ("approve", {"words": "send it"}), ("call", {"with": "Teo"}), ("job", {"job": "handoff build"}),
                    ("note", {"title": "Build request staff1's thing", "body": "## Build request\nmake me a tool"})]:
     r = gmcp.call(name, args)
     ok(r.startswith("refused"), f"staff: {name} is refused", r)
@@ -79,10 +79,10 @@ r = gmcp.call("texts_search", {"query": "Dad"})
 ok(r.startswith("refused"), "staff: texts_search is refused by the server too", r)
 r = gmcp.call("calendar_events", {"days": 3})
 ok(r.startswith("refused"), "staff: calendar_events is refused by the server too", r)
-r = gmcp.call("task", {"lane": "personal", "text": "Text example that the second shooter is confirmed for Nov 7",
-                       "draft": {"channel": "text", "to": "+12405550199", "text": "Hi example, staff1 here with example-org, the second shooter is confirmed for Nov 7."}})
+r = gmcp.call("task", {"lane": "personal", "text": "Text Teo that the second shooter is confirmed for Nov 7",
+                       "draft": {"channel": "text", "to": "+12405550199", "text": "Hi Teo, staff1 here with example-org, the second shooter is confirmed for Nov 7."}})
 ok(r.startswith("accepted"), "staff: a task with a draft is accepted", r)
-r = gmcp.call("note", {"title": "example second shooter", "body": "staff1 confirmed as second shooter for the example wedding.", "lane": "money"})
+r = gmcp.call("note", {"title": "Ashcombe second shooter", "body": "staff1 confirmed as second shooter for the Ashcombe wedding.", "lane": "money"})
 ok(r.startswith("accepted"), "staff: a wedding note is accepted", r)
 got = intents.collect(turn)
 tasks = got["task"] if isinstance(got.get("task"), list) else [got.get("task")]
@@ -106,12 +106,12 @@ ok(captured and captured["lane"] == "wedding", "the card is a wedding card")
 ok(not [ln for ln in lines if "Only an owner" in ln], "a staff task is not refused as 'only an owner'", lines)
 
 # the scoped search drops anything outside the staff paths
-sample = ("0.731  Wiki/Couples/2026-11-07 example.md  -- example example & example (wedding 2026-11-07)\n"
+sample = ("0.731  Wiki/Couples/2026-11-07 Ashcombe.md  -- Teo Ashcombe & Wren (wedding 2026-11-07)\n"
           "0.691  Memory/Daily_Logs/2026-10-07.md  -- Sage chat: owner1 wants ...\n"
-          "0.652  Wiki/People/Contacts.md  -- Dad, example ...\n"
+          "0.652  Wiki/People/Contacts.md  -- Dad, Marisa ...\n"
           "0.640  Wiki/Vendors/Florist.md  -- the florist")
 scoped = gmcp._scope_search(sample, core.person_paths(staff1))
-ok("example" in scoped and "Florist" in scoped and "Daily_Logs" not in scoped and "Contacts" not in scoped, "vault_search for staff keeps business notes only", scoped)
+ok("Ashcombe" in scoped and "Florist" in scoped and "Daily_Logs" not in scoped and "Contacts" not in scoped, "vault_search for staff keeps business notes only", scoped)
 
 # an owner's turn is untouched
 turn2 = intents.begin(owner1, "dm:owner1", "")
@@ -126,12 +126,12 @@ ok("an owner, inside example-org" in team_ctx and "team members who are not owne
 ok("Rue" not in team_ctx and "David lives" not in team_ctx and "YOUR RULES" not in team_ctx and "PEOPLE WHO TEXT" not in team_ctx, "...with no household facts, rules or texters")
 ok("Signature includes two cinematographers" in team_ctx, "...but with the business facts")
 ba = brain.BUSINESS_ALLOWED.split(",")
-ok("mcp__example-google__task" in ba and "mcp__example-google__decide" in ba and "mcp__example-google__approve" in ba and "mcp__example-google__vault_search" in ba
-   and "mcp__honeybook__take_action_read_only" in ba, "the owner keeps the deeds and the business reads in a team space")
+ok("mcp__example-google__task" in ba and "mcp__example-google__decide" in ba and "mcp__example-google__approve" in ba and "mcp__example-google__vault_search" in ba,
+   "the owner keeps the deeds and the business reads in a team space")
 ok(not any(x in ba for x in ("Read", "Glob", "Grep", "mcp__example-google__mail_search", "mcp__example-google__calendar_events", "mcp__example-google__texts_search", "mcp__example-google__who_is")),
    "...and none of the personal channels or the vault")
 import place  # noqa: E402
-wb = place.block({"channel": "gchat", "convo": "spaces/AAQAteam", "thread": "", "space": "spaces/AAQAteam", "space_title": "example-org", "text": "Is staff1 on example's project?"}, owner1)
+wb = place.block({"channel": "gchat", "convo": "spaces/AAQAteam", "thread": "", "space": "spaces/AAQAteam", "space_title": "example-org", "text": "Is staff1 on Teo's project?"}, owner1)
 ok("A TEAM space" in wb and "example-org" in wb and "business only" in wb, "the WHERE block names the team space and the wall", wb[:200])
 
 print("\nALL PASS" if not FAILS else f"\nFAILED: {FAILS}")

@@ -63,7 +63,6 @@
        "kinds": [
         "email",
         "mail",
-        "hb_message",
         "imessage_in"
        ],
        "words": [
@@ -72,7 +71,7 @@
        ]
       },
       {
-       "source": "hb",
+       "source": "crm",
        "stage_min_order": 11
       }
      ],
@@ -395,8 +394,7 @@
       {
        "source": "exec",
        "kinds": [
-        "email_send",
-        "hb_message"
+        "email_send"
        ],
        "words": [
         "review",
@@ -431,8 +429,7 @@
        "source": "ticket",
        "kinds": [
         "email",
-        "mail",
-        "hb_message"
+        "mail"
        ],
        "words": [
         "revision",
@@ -472,8 +469,7 @@
       {
        "source": "exec",
        "kinds": [
-        "email_send",
-        "hb_message"
+        "email_send"
        ],
        "words": [
         "your film is ready",
@@ -495,7 +491,7 @@
    "entity": "lead",
    "anchor": "stage_moved_at",
    "applies": {
-    "hb_status": [
+    "crm_status": [
      "lead",
      "lead_sent"
     ],
@@ -509,7 +505,7 @@
     {
      "id": "reply",
      "label": "the first reply",
-     "hb_min_order": 1,
+     "crm_min_order": 1,
      "window_days": 1,
      "bookable": true,
      "evidence": [
@@ -526,7 +522,6 @@
        "source": "exec",
        "kinds": [
         "email_send",
-        "hb_message",
         "imessage_send"
        ]
       }
@@ -537,7 +532,7 @@
     {
      "id": "call",
      "label": "a call on the calendar",
-     "hb_min_order": 3,
+     "crm_min_order": 3,
      "window_days": 7,
      "bookable": true,
      "evidence": [
@@ -570,7 +565,7 @@
     {
      "id": "proposal",
      "label": "the proposal",
-     "hb_min_order": 4,
+     "crm_min_order": 4,
      "window_days": 7,
      "bookable": true,
      "evidence": [
@@ -582,8 +577,6 @@
       {
        "source": "exec",
        "kinds": [
-        "hb_proposal_draft",
-        "hb_message",
         "email_send"
        ],
        "words": [
@@ -593,13 +586,12 @@
        ]
       }
      ],
-     "book_instruction": "Price the collection from the quiz answers and publish the proposal from HoneyBook (doer checkpoint before it goes out).",
      "question": "Has it gone out?"
     },
     {
      "id": "contract",
      "label": "the signed contract",
-     "hb_min_order": 6,
+     "crm_min_order": 6,
      "window_days": 14,
      "bookable": false,
      "evidence": [],
@@ -609,7 +601,7 @@
     {
      "id": "retainer",
      "label": "the retainer",
-     "hb_min_order": 7,
+     "crm_min_order": 7,
      "window_days": 7,
      "bookable": false,
      "evidence": [],

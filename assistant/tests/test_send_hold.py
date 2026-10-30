@@ -1,4 +1,4 @@
-"""Offline tests for the conditional timed send (send_hold.py, 2026-10-28): "text example at 4 PM only if he and example
+"""Offline tests for the conditional timed send (send_hold.py, 2026-10-28): "text Teo at 4 PM only if he and Wren
 haven't replied" posts the card with `hold_if_reply`, the condition is stored with the card, the tap still mints the
 ticket for 4 PM, and right before the drain the send is held (ticket cancelled, one line for the card's thread) when
 anything came in from them since the card was made: a text, a mail from their address, or what a plugin reports.
@@ -64,18 +64,18 @@ assert OWNER and core.is_owner(OWNER), "test needs an owner from people.json"
 actions.WAKE_DOER = False
 bridge.ASYNC = False
 THREAD = "spaces/AAQAtest/threads/danny4pm"
-example, example_MAIL = "+18055550142", "example@example.com"
-ASK = "Text example at 4 PM only if he and example haven't replied"
+TEO, TEO_MAIL = "+18055550142", "teo@example.com"
+ASK = "Text Teo at 4 PM only if he and Wren haven't replied"
 DAY = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 SEND_AT = f"{DAY} 16:00"
 BEFORE = datetime.strptime(f"{DAY} 15:55", "%Y-%m-%d %H:%M").timestamp()      # the spine pass before the send minute
-BODY = "Hey example, just checking you saw the form for Saturday. Happy to help with anything."
+BODY = "Hey Teo, just checking you saw the form for Saturday. Happy to help with anything."
 
 
 # ---------------------------------------------------------------- 1. the deed: hold_if_reply needs a time, and is accepted with one
 turn = intents.begin(OWNER, "spaces/AAQAtest", THREAD)
 os.environ["AGENT_TURN"] = str(turn)
-r = gmcp.call("task", {"lane": "personal", "text": ASK, "draft": {"channel": "text", "to": example, "name": "example", "text": BODY, "hold_if_reply": True}})
+r = gmcp.call("task", {"lane": "personal", "text": ASK, "draft": {"channel": "text", "to": TEO, "name": "Teo", "text": BODY, "hold_if_reply": True}})
 ok(r.startswith("refused") and "send_at" in r, "hold_if_reply without a send time is refused")
 os.environ.pop("AGENT_TURN", None)
 
@@ -84,9 +84,9 @@ os.environ.pop("AGENT_TURN", None)
 def fake_run(prompt, resume="", model="", timeout=600):
     os.environ["AGENT_TURN"] = brain._TURN["path"]
     ans = gmcp.call("task", {"lane": "personal", "text": ASK,
-                             "draft": {"channel": "text", "to": example, "name": "example", "text": BODY, "send_at": SEND_AT, "hold_if_reply": True}})
+                             "draft": {"channel": "text", "to": TEO, "name": "Teo", "text": BODY, "send_at": SEND_AT, "hold_if_reply": True}})
     assert ans.startswith("accepted") and "only if nothing came in" in ans, ans
-    return {"ok": True, "session": "S1", "text": "The text to example is below; after your tap it goes at 4:00 PM, only if they haven't written by then."}
+    return {"ok": True, "session": "S1", "text": "The text to Teo is below; after your tap it goes at 4:00 PM, only if they haven't written by then."}
 
 
 brain._run_claude = fake_run
@@ -96,7 +96,7 @@ cs = [cards._read(p) for p in sorted(cards.LIVE.glob("q*.json"))]
 ok(len(cs) == 1 and cs[0]["questions"][0]["exec"].get("send_at") == SEND_AT, "the text card is posted with its 4 PM send time")
 qid = cs[0]["id"]
 conds = json.loads((DATA / "send_conditions.json").read_text(encoding="utf-8"))
-ok(qid in conds and conds[qid]["to"] == example and conds[qid]["name"] == "example" and conds[qid]["since"] <= time.time(),
+ok(qid in conds and conds[qid]["to"] == TEO and conds[qid]["name"] == "Teo" and conds[qid]["since"] <= time.time(),
    "the condition is stored with the card, the clock started when the card was made")
 
 # the owner still taps; the tap mints the ticket for 4 PM
@@ -115,22 +115,22 @@ def fresh_ts(fmt="%Y-%m-%dT%H:%M:%S"):
     return time.strftime(fmt, time.localtime(time.time() + 2))
 
 
-rec = dict(conds[qid], to=example)
-save_json(DATA / "phone_threads.json", {example: {"messages": [{"ts": "2020-01-01T09:00:00", "dir": "in", "text": "old one"}]}})
+rec = dict(conds[qid], to=TEO)
+save_json(DATA / "phone_threads.json", {TEO: {"messages": [{"ts": "2020-01-01T09:00:00", "dir": "in", "text": "old one"}]}})
 ok(send_hold.evidence(rec) == "", "a text from before the card was made does not count")
 save_json(DATA / "tickets.json", {"m1": {"kind": "email", "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 2)),
-                                         "payload": {"from": f"example <{example_MAIL}>", "subject": "Re: Saturday"}}})
-ok("emailed" in send_hold.evidence(dict(rec, to=example_MAIL)), "a mail from their address counts (any inbox the mail sensor reads)")
+                                         "payload": {"from": f"Teo <{TEO_MAIL}>", "subject": "Re: Saturday"}}})
+ok("emailed" in send_hold.evidence(dict(rec, to=TEO_MAIL)), "a mail from their address counts (any inbox the mail sensor reads)")
 save_json(DATA / "tickets.json", {"i1": {"kind": "imessage_in", "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 2)),
-                                         "payload": {"from": example, "text": "On it"}}})
+                                         "payload": {"from": TEO, "text": "On it"}}})
 ok("texted" in send_hold.evidence(rec), "an inbound text ticket from their number counts")
 save_json(DATA / "tickets.json", {})
 alib.plugins = lambda: [type("P", (), {"reply_evidence": staticmethod(lambda r, w, t: f"{r['who']} answered in the client service")})]
-ok(send_hold.evidence(rec) == "example answered in the client service", "a plugin's reply_evidence is asked last, and counts")
+ok(send_hold.evidence(rec) == "Teo answered in the client service", "a plugin's reply_evidence is asked last, and counts")
 alib.plugins = lambda: []
 
-save_json(DATA / "phone_threads.json", {example: {"messages": [{"ts": fresh_ts(), "dir": "in", "text": "Yes! Filling it out tonight"}]}})
-ok(send_hold.tick(now=BEFORE) == {"checked": 1, "held": 1}, "example texted back: the send is held")
+save_json(DATA / "phone_threads.json", {TEO: {"messages": [{"ts": fresh_ts(), "dir": "in", "text": "Yes! Filling it out tonight"}]}})
+ok(send_hold.tick(now=BEFORE) == {"checked": 1, "held": 1}, "Teo texted back: the send is held")
 tk = es.fold()[a["ticket"]]
 ok(tk["status"] == "cancelled" and "texted" in tk["result"] and "Filling it out" in tk["result"], "the ticket is cancelled, never sent, the reason on it")
 ok(json.loads((DATA / "send_conditions.json").read_text(encoding="utf-8"))[qid]["resolved"] == "held", "the condition is closed as held")
@@ -138,10 +138,10 @@ ok(send_hold.tick(now=BEFORE) == {"checked": 0, "held": 0}, "a held send is not 
 
 # ---------------------------------------------------------------- 5. "send it at 4 if they haven't replied" in a card's thread
 save_json(DATA / "phone_threads.json", {})
-c2 = cards.post([{"header": "Text to example", "lane": "personal", "question": f"Text example? [TEXT PREVIEW] To example {example}: {BODY} Again.",
+c2 = cards.post([{"header": "Text to Teo", "lane": "personal", "question": f"Text Teo? [TEXT PREVIEW] To Teo {TEO}: {BODY} Again.",
                   "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}],
                   "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)",
-                           "payload": {"to": example, "body": BODY + " Again.", "account": actions._phone_account(OWNER)}}}],
+                           "payload": {"to": TEO, "body": BODY + " Again.", "account": actions._phone_account(OWNER)}}}],
                 owner=OWNER_KEY, asked=True)
 q2 = c2.get("qid") or c2.get("id")
 _c = cards._read(cards.LIVE / f"{q2}.json")
@@ -162,7 +162,7 @@ bridge.handle({"channel": "local", "person": OWNER, "text": APPROVE, "convo": "s
                "thread": "spaces/AAQAtest/threads/approve4", "space": "spaces/AAQAtest", "direct": True})
 conds = json.loads((DATA / "send_conditions.json").read_text(encoding="utf-8"))
 tk2 = [t for t in es.fold().values() if t.get("approval_ref") == f"card:{q2}"]
-ok(q2 in conds and conds[q2]["to"] == example and conds[q2]["name"] == "example", "the approve deed stores the condition for that card")
+ok(q2 in conds and conds[q2]["to"] == TEO and conds[q2]["name"] == "Teo", "the approve deed stores the condition for that card")
 ok(len(tk2) == 1 and tk2[0]["status"] == "queued" and tk2[0]["not_before"].endswith("16:00"), "and the card is approved for 4 PM on his words")
 
 # ---------------------------------------------------------------- 6. the prompts, the spine order, the README

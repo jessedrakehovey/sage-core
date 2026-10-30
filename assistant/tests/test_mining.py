@@ -57,7 +57,7 @@ check("clock times: 8am, 2:30 pm, noon, a bare 5:30 means the afternoon",
       mining.time_in("at 8am", trx) == "08:00" and mining.time_in("around 2:30 pm", trx) == "14:30"
       and mining.time_in("meet at noon", trx) == "12:00" and mining.time_in("until 5:30 today", trx) == "17:30")
 check("quoted reply headers and > lines are dropped",
-      mining.sentences("Hope all is well!\nOn Friday, Aug 28, 2026 at 9:13 pm example@x.com wrote:\n> see you Friday") == ["Hope all is well!"])
+      mining.sentences("Hope all is well!\nOn Friday, Aug 28, 2026 at 9:13 pm ambrose@x.com wrote:\n> see you Friday") == ["Hope all is well!"])
 
 # ------------------------------------------------------------------ who is talking + what is mined
 (TMP / "leads").mkdir(parents=True, exist_ok=True)
@@ -65,7 +65,7 @@ check("quoted reply headers and > lines are dropped",
 ctx = mining.Context(now=NOW)
 ctx.household = {"8055550142"}
 ctx.vendors = {"8055550177": ("planner", "Sam Planner"), "sharon@example.com": ("vendor", "Sharon Ko")}
-check("a quiz lead is a lead", ctx.classify("+1555-057-8657")[0] == "lead")
+check("a quiz lead is a lead", ctx.classify("+15550578657")[0] == "lead")
 check("a planner from Wiki/Vendors is a planner", ctx.classify("805-555-0177")[0] == "planner")
 check("a family number is family", ctx.classify("+18055550142", "Mom")[0] == "family")
 check("a bank is a money sender", ctx.classify("pb69982@example.invalid", "Chase", "money")[0] == "money")
@@ -85,19 +85,19 @@ check("a planner's walkthrough date -> wedding lane event with the time", fs and
 fs = mining.mine(M("Boat leaves at 8am on Saturday", said=datetime(2026, 10, 6, 18)), ctx)
 check("a date that already passed is flagged past (never carded)", fs and fs[0]["past"] and fs[0]["date"] == "2026-10-10", fs)
 check("owner1's own texts are never mined; owner6's text to him is",
-      mining.mine(M("dinner Sunday at 6", "+1555-038-0038", "owner1"), ctx) == []
-      and mining.mine(M("dinner at my mom's Sunday at 6", "+1555-010-6110", "owner6"), ctx))
+      mining.mine(M("dinner Sunday at 6", "+15550380038", "owner1"), ctx) == []
+      and mining.mine(M("dinner at my mom's Sunday at 6", "+15550106110", "owner6"), ctx))
 fj = mining.mine(M("dinner Sunday at 6?", "+18055550999", "Kate", "owner6"), ctx) + mining.mine(M("Dinner Sunday at 6, see you there", "+18055550999", "Kate", "owner6"), ctx)
 check("a friend texting owner6's phone lands in owner6's lane (ruling 16)", fj and fj[0]["lane"] == "owner6" and fj[0]["class"] == "friend", fj)
 # the owners' chat lines
-cm = mining._msg("chat", "c1", "owner1", "owner1", "personal", NOW, "example wants to book the signature couples shoot for Saturday the 17th.", channel="chat")
+cm = mining._msg("chat", "c1", "owner1", "owner1", "personal", NOW, "Teo wants to book the signature couples shoot for Saturday the 17th.", channel="chat")
 fs = mining.mine(cm, ctx)
 check("an owner's chat line with a date is mined into his own lane", fs and fs[0]["class"] == "owner1" and fs[0]["date"] == "2026-10-17", fs)
-cm2 = mining._msg("chat", "c2", "owner1", "owner1", "personal", NOW, "remind me Saturday to call example", channel="chat")
+cm2 = mining._msg("chat", "c2", "owner1", "owner1", "personal", NOW, "remind me Saturday to call Teo", channel="chat")
 check("a chat line the agent itself handles (remind me / put on calendar) is left alone", mining.mine(cm2, ctx) == [])
 
-# a lead's wedding date and the quiz alert's own lines are never a hold (2026-10-20, example's ': Flags: ...' card)
-qt = M("example & Sam, wedding 9/11/2027, budget $6-8k. Recommended Signature. Flags: venue matched without its street line, call 9/11/2027.",
+# a lead's wedding date and the quiz alert's own lines are never a hold (2026-10-20, Odette's ': Flags: ...' card)
+qt = M("Odette & Sam, wedding 9/11/2027, budget $6-8k. Recommended Signature. Flags: venue matched without its street line, call 9/11/2027.",
        "", "", "wedding", source="ticket", channel="email")
 check("a message with nobody to name makes no card",
       mining.mine(M("See you 10/21 at the venue tour.", "", "", "wedding", source="ticket", channel="email"), ctx) == []
@@ -106,10 +106,10 @@ qt["ticket_kind"], qt["handle"], qt["name"] = "inquiry_new", "ar@example.com", "
 check("an inquiry_new ticket (the lead's form) is never mined", mining.mine(qt, ctx) == [])
 check("a 'Flags:' line is dropped before mining", mining.mine(M("Flags: venue matched, see you 10/21 at the venue tour", "+18055550177", "Sam", "wedding"), ctx) == [])
 check("a lead naming their wedding day is not a hold",
-      mining.mine(M("Our wedding is 9/11/2027 at the Mission, ceremony starts at 4pm", "+1555-057-8657", "Arden", "wedding"), ctx) == [])
+      mining.mine(M("Our wedding is 9/11/2027 at the Mission, ceremony starts at 4pm", "+15550578657", "Arden", "wedding"), ctx) == [])
 check("nor is the lead's known wedding date in any sentence",
-      mining.mine(M("Sept 11 2027 works for us, we're booked at the venue", "+1555-057-8657", "Arden", "wedding"), ctx) == [])
-fl = mining.mine(M("Can we do a call Tuesday at 3pm about the wedding? Tuesday at 3pm works for us.", "+1555-057-8657", "Arden", "wedding"), ctx)
+      mining.mine(M("Sept 11 2027 works for us, we're booked at the venue", "+15550578657", "Arden", "wedding"), ctx) == [])
+fl = mining.mine(M("Can we do a call Tuesday at 3pm about the wedding? Tuesday at 3pm works for us.", "+15550578657", "Arden", "wedding"), ctx)
 check("a lead's call about their wedding still is, named by the lead",
       fl and fl[0]["date"] == "2026-10-20" and mining.event_card(fl[0], mining.cfg()["event"])["exec"]["payload"]["title"].startswith("Arden"), fl)
 
@@ -150,14 +150,14 @@ check("event card: calendar_hold exec passes the card guards (note verbatim in t
 check("event card names who, when, and that nobody is notified", "Mom" in q["question"] and "10/18" in q["question"] and "Nobody is notified" in q["question"] and q["advice"].startswith("💡"))
 # an unknown number's hold is titled by what memory / the wiki say it is about, '(unverified)' when suspect (2026-10-19)
 _ks = ctx.known_subject
-ctx.known_subject = lambda h: ("General Liability insurance", True) if mining.Context._k(h) == "555-051-2351" else ("", False)
-fu = mining.mine(M("Coverage will end on 10/26/2026 if payment isn't received, call 555-010-8010 by then.", "+1555-051-2351", "", "personal"), ctx)
+ctx.known_subject = lambda h: ("General Liability insurance", True) if mining.Context._k(h) == "5550512351" else ("", False)
+fu = mining.mine(M("Coverage will end on 10/26/2026 if payment isn't received, call 555-010-8010 by then.", "+15550512351", "", "personal"), ctx)
 tu = fu and mining.event_card(fu[0], mining.cfg()["event"])["exec"]["payload"]["title"]
 check("an unknown number's hold is titled by its subject, not the number, and marked (unverified)",
       tu and tu.startswith("General Liability insurance: Coverage") and tu.endswith("(unverified)") and "831" not in tu, tu)
-fn = mining.mine(M("Coverage will end on 10/26/2026 if payment isn't received, call by then.", "+1555-071-5071", "", "personal"), ctx)
+fn = mining.mine(M("Coverage will end on 10/26/2026 if payment isn't received, call by then.", "+15550715071", "", "personal"), ctx)
 check("an unknown number memory doesn't know keeps its number, no tag",
-      fn and mining.event_card(fn[0], mining.cfg()["event"])["exec"]["payload"]["title"].startswith("+1555-071-5071:")
+      fn and mining.event_card(fn[0], mining.cfg()["event"])["exec"]["payload"]["title"].startswith("+15550715071:")
       and "(unverified)" not in mining.event_card(fn[0], mining.cfg()["event"])["exec"]["payload"]["title"], fn)
 ctx.known_subject = _ks
 lt = mining.event_card(dict(fu[0], text="Coverage will end on 10/26/2026 " + "x" * 80), dict(mining.cfg()["event"], gist_words=40))["exec"]["payload"]["title"]
@@ -172,7 +172,7 @@ save_json(C.ROOT / "agent" / "state" / "memory.json", {"facts": [{"subject": "Ge
 sub = mining._subjects_by_number({})
 C.ROOT, C.VAULT = _root, _vault
 check("memory names the insurance number and flags it a possible scam; a wiki note names its own",
-      sub.get("555-051-2351") == ("General Liability insurance", True) and sub.get("8055550123") == ("Pool service", False), sub)
+      sub.get("5550512351") == ("General Liability insurance", True) and sub.get("8055550123") == ("Pool service", False), sub)
 mq = mining.money_card(fs + fs4, mining.cfg()["money"])
 ex, err = cards._sanitize_exec(mq)
 check("money card: ONE tracking_fix with a followup_arm row per date, desc verbatim", ex and not err and len(ex["payload"]["fixes"]) == 2
@@ -249,15 +249,15 @@ check("everything else personal stays logged only", text_gate.personal_exception
 check("sub-switches: time off -> a plan text is not an exception", text_gate.personal_exception("Dinner Sunday at 5", {"time": False, "money": True}) == "")
 
 text_gate.business_only = lambda: True
-text_gate.business_numbers = lambda: {"555-057-8657"}
-text_gate.household_numbers = lambda: {"8055550142", "555-038-0038"}
-text_gate.owner_numbers = lambda: {"555-038-0038"}
+text_gate.business_numbers = lambda: {"5550578657"}
+text_gate.household_numbers = lambda: {"8055550142", "5550380038"}
+text_gate.owner_numbers = lambda: {"5550380038"}
 T = lambda frm, text, sid: {"source": "imessage", "source_id": sid, "lane": "personal", "kind": "imessage_in", "title": "t",
                             "payload": {"from": frm, "text": text, "account": "owner1-iphone"}}
 text_gate.exception_cfg = lambda: dict(PE)
 kept = text_gate.keep([T("+18055550142", "Are you two coming Sunday? Dinner at 5", "a"), T("+18055550142", "love you", "b"),
                        T("+18055550001", "you owe me $40 for the campsite", "c"), T("+18055550001", "golf sunday?", "d"),
-                       T("+1555-038-0038", "dinner Sunday at 5", "e"), T("+1555-057-8657", "is June 12 open?", "f")])
+                       T("+15550380038", "dinner Sunday at 5", "e"), T("+15550578657", "is June 12 open?", "f")])
 ids = [k["source_id"] for k in kept]
 check("keep: the time text from family and the money text from a friend come through, chatter does not",
       ids == ["a", "c", "f"], ids)
@@ -265,7 +265,7 @@ check("keep: the exception is marked on the payload and the lane stays personal"
       kept[0]["payload"].get("exception") == "time" and kept[0]["lane"] == "personal" and kept[1]["payload"].get("exception") == "money")
 check("keep: the owner's own number never comes through; the lead is relaned wedding", "e" not in ids and kept[2]["lane"] == "wedding")
 text_gate.exception_cfg = lambda: dict(PE, enabled=False)
-ids = [k["source_id"] for k in text_gate.keep([T("+18055550142", "Dinner Sunday at 5", "a"), T("+1555-057-8657", "is June 12 open?", "f")])]
+ids = [k["source_id"] for k in text_gate.keep([T("+18055550142", "Dinner Sunday at 5", "a"), T("+15550578657", "is June 12 open?", "f")])]
 check("switch off: back to wedding only", ids == ["f"], ids)
 text_gate.exception_cfg = lambda: dict(PE, include_family=False)
 ids = [k["source_id"] for k in text_gate.keep([T("+18055550142", "Dinner Sunday at 5", "a"), T("+18055550001", "dinner Sunday at 5", "c")])]

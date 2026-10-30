@@ -6,7 +6,7 @@ automated with texts to reach out to the client." The words live in
 assistant/data/client_texts.json (his voice, his sign-off); this module only decides WHEN
 each one goes and to WHOM, and mints the sha-bound `imessage_send` executor ticket from his
 own iPhone (`config.json -> leads.text_account`, the owner-iphone) so drain -> phone outbox ->
-the "the organization" Shortcut sends it. Quiet hours (21:00-07:00) are held by the
+the "example-org Send Texts" Shortcut sends it. Quiet hours (21:00-07:00) are held by the
 executor as for every outbound; the exec_store resend guards still apply.
 
 Heads-up first (the owner, 2026-10-18: "I would just like to be sure I see the full draft ahead of time
@@ -28,22 +28,22 @@ chat heads-up and go at once.
 
 Kinds and their triggers
   lead_intro              sense_typeform.py the minute a quiz lead with a phone lands (and
-                          sense_honeybook.py for a HoneyBook inquiry whose contact came in
+                          the CRM sensor for an inquiry whose contact came in
                           with the project): "I just saw your wedding form come through..."
   collection_sent         doer.py right after the standing Collection Details send landed
-                          (DOER_DONE), and sense_honeybook.py when a lead moves to
+                          (DOER_DONE), and the CRM sensor when a lead moves to
                           "Proposal Sent" (the owner sent it himself): "I just sent our collection..."
   questionnaire_reminder  followups wedding-lifecycle T-30 / T-21: the operator checks the
-                          Wedding Questionnaire in HoneyBook first, then runs
+                          Wedding Questionnaire in the CRM first, then runs
                           `client_texts.py send questionnaire_reminder --unit <project>`; it is held
                           (CLIENT_TEXT_HELD, an offer-to-send card instead) unless the snapshot shows a
-                          sent questionnaire smart file in their project (example, 2026-10-18)
+                          sent questionnaire smart file in their project (Teo, 2026-10-18)
   checkin                 followups wedding-lifecycle T-14 (auto, zero-LLM): sets up the check-in call
   meeting_reminder        `client_texts.py tick` (Day Spine, every 10 min): the day before a
-                          HoneyBook meeting / call with a client, or a hold on our calendar
-  touches_followup        the text that follows the Finishing Touches file (T-60), after HoneyBook
+                          CRM meeting / call with a client, or a hold on our calendar
+  touches_followup        the text that follows the Finishing Touches file (T-60), after the CRM
                           confirms the send: `client_texts.py touches --unit <project> --package <id>
-                          [--has a,b] [--skip c]` mints the hb_touches_send ticket (pricing/hb_touches.py);
+                          [--has a,b] [--skip c]` mints the connector's file-send ticket;
                           nothing client-facing says "add-ons" (the owner: it has to sound upscale)
 
 Every send is keyed (kind + who) in assistant/data/client_texts_state.json so a sensor
@@ -79,6 +79,8 @@ except (AttributeError, ValueError):
     pass
 
 WORDS = Path(__file__).resolve().parent.parent / "data" / "client_texts.json"   # tracked, next to sop_map.json
+if not WORDS.is_file():                                    # the bare engine: the scrubbed template
+    WORDS = WORDS.parents[1] / "templates" / "data" / WORDS.name
 STATE = DATA / "client_texts_state.json"
 LEADS = DATA / "leads"
 STANDING_REF = "standing:client-texts (the owners' standing rule of 2026-10-17: the whole client process is texted from their phone; standard reminders go out without a card)"
@@ -192,7 +194,7 @@ def first_name(name: str) -> str:
 
 
 def party_names(name: str, partner: str = "") -> str:
-    """'example & Dean' from the two names, or whichever one is there."""
+    """'Delia & Hollis' from the two names, or whichever one is there."""
     a, b = first_name(name), first_name(partner)
     return f"{a} & {b}" if a and b else a or b
 
@@ -801,7 +803,7 @@ def main() -> int:
     p.add_argument("--has", default="", help="item ids they already bought on top of the package, comma-separated")
     p.add_argument("--skip", default="", help="item ids not to offer, comma-separated")
     p.add_argument("--dry-run", action="store_true"); p.add_argument("--print", action="store_true")
-    p = sub.add_parser("preview"); p.add_argument("kind", choices=KINDS); p.add_argument("--first", default="example")
+    p = sub.add_parser("preview"); p.add_argument("kind", choices=KINDS); p.add_argument("--first", default="Delia")
     p = sub.add_parser("hold", help="pull a waiting text back into a send card for the owner's tap (the preview card's Hold button)")
     p.add_argument("--key", required=True, help="'<kind>|<who>' as `status` lists it")
     sub.add_parser("status")
@@ -827,7 +829,7 @@ def main() -> int:
             print("\n" + r.get("subject", "") + "\n\n" + r.get("body", "") + ("\n\n[TEXT] " + r["text_body"] if r.get("text_body") else ""))
         return 0 if r.get("ok") else 1
     if a.cmd == "preview":
-        vars = {"first": a.first, "names": f"{a.first} & Dean", "email": "them@example.com", "date": "July 30",
+        vars = {"first": a.first, "names": f"{a.first} & Hollis", "email": "them@example.com", "date": "July 30",
                 "what": "check-in call", "when": "tomorrow at 3:00 PM",
                 "scheduler_link": scheduler_link() or "(the booking link is not set yet)"}
         f = _ext("sample_vars")

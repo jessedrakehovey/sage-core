@@ -7,9 +7,9 @@ assistant/tracking.json -> drift:
                   an editor project exists but the ledger still says booked / pre-shoot; the
                   wedding day has passed (booked couple) but the ledger still says pre-shoot.
                   FIX: set the ledger stage (internal write).
-  crm_stage       the CRM snapshot (HoneyBook) still shows a pre-event stage after the wedding
-                  day, or a booked client still sitting in a lead stage. MANUAL: stage moves in
-                  HoneyBook stay the owner's (README "Moving a pipeline stage stays manual").
+  crm_stage       the CRM snapshot (crm.py) still shows a pre-event stage after the event day,
+                  or a booked client still sitting in a lead stage. FIX: the CRM connector moves
+                  the stage (crm.apply_stage) when an owner taps; with no connector it is listed only.
   armed_reminder  a money/home follow-up is still waiting although a later mail ticket says it
                   was paid / delivered. FIX: close the follow-up (internal write).
   past_event      a timed calendar event is 1-4 days past and nothing about it appears in chat,
@@ -28,13 +28,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import crm  # noqa: E402
 
 LEDGER_ORDER = ["inquiry", "booked", "pre-shoot", "ingest", "edit", "review", "revisions", "delivered"]
 TERMINAL = {"delivered", "cancelled", "lost", "archived"}
@@ -86,7 +87,7 @@ def ledger_stage(d: dict, now=None, ledger: dict | None = None, folders: list | 
         if stage in TERMINAL or not stage:
             continue
         couple = str(p.get("couple") or key)
-        booked = str(p.get("honeybook_status") or "") == "client" or stage in ("booked", "pre-shoot", "ingest", "edit", "review", "revisions")
+        booked = crm.status(p) == "client" or stage in ("booked", "pre-shoot", "ingest", "edit", "review", "revisions")
         folder = _matches_editor(couple, folders)
         if folder and _order(stage) < _order("edit"):
             out.append(_finding(f"ledger:{key}:edit", "drift", lane, f"{couple}: editing has started",
@@ -108,11 +109,11 @@ def ledger_stage(d: dict, now=None, ledger: dict | None = None, folders: list | 
     return out
 
 
-# ------------------------------------------------------------------ 2. the CRM pipeline (HoneyBook snapshot)
+# ------------------------------------------------------------------ 2. the CRM pipeline (the CRM snapshot)
 def crm_stage(d: dict, now=None, snap: dict | None = None) -> list:
     now = now or C.now_local()
     out = []
-    snap = snap if snap is not None else (C.load_json(C.vault_path(d.get("snapshot") or "dashboard/data/honeybook.json"), {}) or {})
+    snap = snap if snap is not None else crm.snapshot()
     stages = {s.get("stage_id"): s for s in snap.get("stages") or []}
     grace = int(d.get("event_grace_days") or 2)
     max_past = int(d.get("max_days_past") or 120)
@@ -126,23 +127,23 @@ def crm_stage(d: dict, now=None, snap: dict | None = None) -> list:
         who = str(p.get("name") or "").replace("'s Project", "").strip()
         wd = C.parse_any(p.get("date"))
         booked = str(p.get("status") or "") == "client"
-        # 2026-10-18 (BUILD_PLAN 1.2): a lagging HoneyBook stage is a FIX the card can apply (hb_set_stage through the
-        # connector, read back), not "[HoneyBook, your hand]". Target stages come from tracking.json -> drift.crm_stage.
+        # 2026-10-18: a lagging CRM stage is a FIX the card can apply (the connector's stage move, read back),
+        # not a manual step. Target stages come from tracking.json -> drift.crm_stage.
         booked_stage = str(d.get("booked_stage") or "Proposal Signed")
         post_stage = str(d.get("post_event_stage") or "File Management")
         if booked and cat == "lead":
             out.append(_finding(f"crm:{p.get('id')}:lead", "drift", lane, f"{who}: booked but still a lead stage",
-                                f"{who} is a client in HoneyBook but the pipeline still shows '{name}' (a lead stage).",
-                                why="move the project to a booked stage in HoneyBook",
-                                fix={"op": "hb_stage", "key": f"crm:{p.get('id')}:lead", "workspace_id": str(p.get("id") or ""), "stage": booked_stage,
-                                     "desc": f"move {who} to '{booked_stage}' in HoneyBook"},
+                                f"{who} is a client in {crm.name()} but the pipeline still shows '{name}' (a lead stage).",
+                                why=f"move the project to a booked stage in {crm.name()}",
+                                fix={"op": "crm_stage", "key": f"crm:{p.get('id')}:lead", "thread_id": str(p.get("id") or ""), "stage": booked_stage,
+                                     "desc": f"move {who} to '{booked_stage}' in {crm.name()}"},
                                 age_days=C.age_days(p.get("stage_moved_at"), now)))
         elif booked and wd and grace <= (now - wd).days <= max_past and cat == "booked" and order < min_order:
-            out.append(_finding(f"crm:{p.get('id')}:post", "drift", lane, f"{who}: wedding was {C.shortdate(wd)}, HoneyBook says {name}",
-                                f"{who}'s wedding was {C.shortdate(wd)}; HoneyBook still shows '{name}'.",
-                                why="move it along the pipeline so HoneyBook's tasks fire",
-                                fix={"op": "hb_stage", "key": f"crm:{p.get('id')}:post", "workspace_id": str(p.get("id") or ""), "stage": post_stage,
-                                     "desc": f"move {who} to '{post_stage}' in HoneyBook"},
+            out.append(_finding(f"crm:{p.get('id')}:post", "drift", lane, f"{who}: wedding was {C.shortdate(wd)}, {crm.name()} says {name}",
+                                f"{who}'s wedding was {C.shortdate(wd)}; {crm.name()} still shows '{name}'.",
+                                why=f"move it along the pipeline so {crm.name()}'s tasks fire",
+                                fix={"op": "crm_stage", "key": f"crm:{p.get('id')}:post", "thread_id": str(p.get("id") or ""), "stage": post_stage,
+                                     "desc": f"move {who} to '{post_stage}' in {crm.name()}"},
                                 age_days=(now - wd).days))
     return out
 
@@ -266,40 +267,29 @@ def latch(keys: list, why: str = "dropped") -> None:
 
 
 # ------------------------------------------------------------------ the writes (approved ticket only)
+def stage_ops() -> set:
+    """The fix ops that move a CRM stage: crm_stage, plus older names the connector still answers to."""
+    return {"crm_stage"} | crm.kinds("STAGE_OP_ALIASES")
+
+
 def apply(fixes: list, dry: bool = False) -> list:
     """Each fix: {op: ledger_stage, ledger, key, stage} | {op: followup_done, id} |
     {op: followup_arm, sop, step, vars} (a mined money date -> an armed reminder, mining.py) |
-    {op: hb_stage, workspace_id, stage, desc} (2026-10-18: a HoneyBook pipeline move through hb_exec.py's
-    connector template, read back; the one op here that touches HoneyBook. It notifies nobody by itself,
-    though the target stage's own HoneyBook automation may run, which the card says).
+    {op: crm_stage, thread_id, stage, desc} (a CRM pipeline move through the connector; the target
+    stage's own automation may run, which the card says; notifies nobody by itself).
     Returns one result row per fix. Nothing here sends a message to anyone."""
     results = []
     for fx in fixes:
         op = str(fx.get("op") or "")
         try:
-            if op == "hb_stage":
-                import json as _json
-                import subprocess
-                import sys as _sys
-                import tempfile
-                wid, stage = str(fx.get("workspace_id") or ""), str(fx.get("stage") or "")
-                if not re.fullmatch(r"[0-9a-f]{24}", wid) or not stage:
-                    results.append({"op": op, "ok": False, "why": "hb_stage needs a 24-hex workspace_id and a stage"}); continue
-                with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
-                    _json.dump({"workspace_id": wid, "stage": stage}, f)
-                    pf = f.name
-                cmd = [_sys.executable, str(C.SCRIPTS / "hb_exec.py"), "--kind", "hb_set_stage", "--payload-file", pf] + (["--dry-run"] if dry else [])
-                try:
-                    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, cwd=str(C.VAULT))
-                finally:
-                    try:
-                        Path(pf).unlink()
-                    except OSError:
-                        pass
-                out = ((r.stdout or "") + (r.stderr or "")).strip()
-                ok = r.returncode == 0 and ("HB_DONE=" in out or (dry and "DRY_RUN_OK" in out))
-                results.append({"op": op, "ok": ok, "key": fx.get("key"), "workspace_id": wid, "stage": stage,
-                                "why": "" if ok else out[-200:], "verified": "VERIFIED=yes" in out, "dry": dry})
+            if op in stage_ops():
+                tid = str(fx.get("thread_id") or fx.get("workspace_id") or "")
+                stage = str(fx.get("stage") or "")
+                if not stage:
+                    results.append({"op": op, "ok": False, "why": f"{op} needs a thread_id and a stage"}); continue
+                ok, detail = crm.apply_stage(tid, stage, dry)
+                results.append({"op": op, "ok": ok, "key": fx.get("key"), "thread_id": tid, "stage": stage,
+                                "why": "" if ok else detail[-200:], "dry": dry})
             elif op == "ledger_stage":
                 path = Path(fx["ledger"])
                 led = C.load_json(path, {}) or {}
@@ -343,7 +333,7 @@ def apply(fixes: list, dry: bool = False) -> list:
     if not dry:
         latch([f"{'ledger:' + r['key'] if r.get('key') else 'fu:' + r.get('id', '')}" for r in results
                if r.get("ok") and r.get("op") in ("ledger_stage", "followup_done")]
-              + [str(r.get("key") or "") for r in results if r.get("ok") and r.get("op") == "hb_stage" and r.get("key")], "fixed")
+              + [str(r.get("key") or "") for r in results if r.get("ok") and r.get("op") in stage_ops() and r.get("key")], "fixed")
         C.log("drift_apply", results=results)
     return results
 

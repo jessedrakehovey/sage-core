@@ -2,15 +2,15 @@
 
 2026-10-12: the 3 PM vision call with Arden and Reese started with nobody hosting.
 Reese waited about 10 minutes alone, a team member could not get in, and the couple had to text
-for the link. Now, about LEAD_MIN minutes before any lead vision call or HoneyBook meeting,
+for the link. Now, about LEAD_MIN minutes before any lead vision call or CRM meeting,
 one short line goes to the owner hosting it: when it starts, the Meet link, and who else
 is expected (so someone waiting in the lobby gets let in).
 
 Sources, read only:
   - the owners' Google calendars (google_api.events): an event counts when its title,
-    place or notes say vision / HoneyBook / consultation;
-  - the HoneyBook snapshot's upcoming meetings (dashboard/data/honeybook.json, the same list
-    lead_meetings.py matches to leads; HoneyBook's scheduler bookings).
+    place or notes say vision / CRM / consultation;
+  - the CRM snapshot's upcoming meetings (the same list lead_meetings.py matches to leads;
+    the CRM's scheduler bookings).
 The same meeting often sits in both: everything starting in the same minute is one meeting
 and gets one message. Posted once per meeting (data/agent/meeting_reminders.json).
 
@@ -32,7 +32,20 @@ import core  # noqa: E402
 SENT = core.DATA / "meeting_reminders.json"
 LEAD_MIN = 10                 # remind when the meeting starts within this many minutes
 FETCH_S = 240                 # Google calendars are read at most every 4 min (the tick is every minute)
-LEADISH = re.compile(r"\bvision\b|honeybook|consultation", re.I)
+def _leadish_re():
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import crm as _crm_m
+        crm_word = re.escape(_crm_m.name().lower())
+    except Exception:  # noqa: BLE001
+        crm_word = ""
+    pat = r"\bvision\b|consultation"
+    if crm_word and crm_word not in ("the crm", ""):
+        pat += "|" + crm_word
+    return re.compile(pat, re.I)
+
+
+LEADISH = _leadish_re()
 _cache = {"at": 0.0, "rows": []}
 
 
@@ -65,7 +78,12 @@ def _google_rows() -> list:
 
 
 def _snapshot() -> dict:
-    return core.load(core.VAULT / "dashboard" / "data" / "honeybook.json", {}) or {}
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import crm as _crm_m
+        return _crm_m.snapshot() or {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _owner_of(name_or_email: str) -> str:

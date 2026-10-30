@@ -42,7 +42,7 @@ SKIP_DIRS = {"data", "out", "__pycache__", "learnings", ".git", "state", "gchat_
 SKIP_FILES = {"gchat.local.json", "google.json", "org.json"}
 # the data files a new organization cannot run without (followups exits FATAL without a sop_map; the comms law sets
 # the reply clocks; client_texts holds the standing-text words to rewrite): copied as templates (WP5, 2026-10-24)
-DATA_TEMPLATES = ("sop_map.json", "comms_law.json", "client_texts.json")
+DATA_TEMPLATES = ("sop_map.json", "comms_law.json", "client_texts.json", "draft_rules.json")
 SRC = engine.org_values(VAULT)          # the source organization's own words (org.json + people.json), never literals
 SRC_OWNER_KEYS = [p["key"] for p in SRC["persons"] if p["role"] == "owner"] or ["owner1"]
 
@@ -352,7 +352,7 @@ def main() -> int:
     cfg.pop("leads", None)
     (cfg.get("doer") or {}).pop("signin_window", None)   # the sign-in window probe names this organization's CRM
     cfg["plugins"] = {"_doc": cfg.get("plugins", {}).get("_doc", "The organization's own extensions, loaded by name (alib.plugins)."), "modules": []}   # this organization's CRM and texts extensions never ship
-    for k in ("honeybook_team", "meetings", "projects", "editor"):
+    for k in ("meetings", "projects", "editor"):
         cfg.pop(k, None)                       # this organization's own integrations and production settings
     cfg["lanes"] = lanes
     keys = [o["key"] for o in owners]
@@ -367,7 +367,7 @@ def main() -> int:
     cfg["habits"] = {"_doc": "habits.py: an ask class that succeeded verified N times becomes a build request to codify it.", "codify": False, "min_verified": 3}
     (out / "assistant" / "config.json").write_text(json.dumps(cfg, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     # tracking.json (assistant/TRACKING_DESIGN.md): the cadences carry over; the two detectors that read example's own
-    # record sources (the delivery ledger + editor, the HoneyBook snapshot) start OFF until the new org names theirs.
+    # record sources (the delivery ledger + editor, the CRM snapshot) start OFF until the new org names theirs.
     trk = json.loads((HERE / "tracking.json").read_text(encoding="utf-8"))
     for k in ("ledger_stage", "crm_stage"):
         trk["drift"][k]["enabled"] = False

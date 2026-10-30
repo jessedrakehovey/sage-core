@@ -29,6 +29,8 @@ WIKI = VAULT / "Wiki"
 RAW = VAULT / "Raw"
 META = WIKI / "_meta"
 SCHEMA_FILE = VAULT / "Schema" / "schema.md"
+if not SCHEMA_FILE.is_file():                              # the bare engine: only the generic contract
+    SCHEMA_FILE = VAULT / "assistant" / "templates" / "Schema" / "schema.md"
 
 REQUIRED_FIELDS = ["type", "area", "tags", "created", "updated", "sources", "status"]
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

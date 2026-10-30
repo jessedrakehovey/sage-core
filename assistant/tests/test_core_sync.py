@@ -1,6 +1,6 @@
 """core_sync (2026-10-28): every commit of a fixture organization flows on to a sage-core checkout, organization-free.
 
-A throwaway vault "Acme Bakery" (owner Pat Quinn, p648e3f@example.invalid, host acme-pc.tailabc123.ts.net, niche terms
+A throwaway vault "Acme Bakery" (owner Pat Quinn, pat@acmebakery.test, host acme-pc.tailabc123.ts.net, niche terms
 sourdough / croissant) is a git repository with the real engine.py + core_sync.py + orgcfg.py in it. Then, commit by
 commit: bootstrap (export + baseline debt), a generic change (applied, comment scrubbed), an owner literal in code
 (held, core frozen), another generic change while held (still held), the fix (released), a new niche-only file
@@ -81,17 +81,17 @@ def core_text(rel):
 (V / "assistant" / "agent").mkdir(parents=True)
 for f in ("engine.py", "core_sync.py", "orgcfg.py"):
     shutil.copy2(ROOT / f, V / "assistant" / f)
-w("assistant/org.json", json.dumps({"name": "Acme Bakery", "vault_name": "acme-os", "send_identities": ["p648e3f@example.invalid"],
+w("assistant/org.json", json.dumps({"name": "Acme Bakery", "vault_name": "acme-os", "send_identities": ["pat@acmebakery.test"],
                                     "phone_accounts": {"pat-phone": {"lane": "personal", "owner": "Pat"}},
-                                    "mission_control_url": "https://acme-pc.tailabc123.ts.net:9443", "internal_emails": ["p648e3f@example.invalid"],
-                                    "alert_from": "p648e3f@example.invalid", "alert_to": ["p648e3f@example.invalid"]}, indent=1))
-w("assistant/agent/people.json", json.dumps({"roles": {}, "users": {"pat": {"name": "Pat Quinn", "role": "owner", "emails": ["p648e3f@example.invalid"]},
-                                                                      "sam": {"name": "Sam Lee", "role": "staff", "emails": ["p04a926@example.invalid"]}}}, indent=1))
+                                    "mission_control_url": "https://acme-pc.tailabc123.ts.net:9443", "internal_emails": ["pat@acmebakery.test"],
+                                    "alert_from": "pat@acmebakery.test", "alert_to": ["pat@acmebakery.test"]}, indent=1))
+w("assistant/agent/people.json", json.dumps({"roles": {}, "users": {"pat": {"name": "Pat Quinn", "role": "owner", "emails": ["pat@acmebakery.test"]},
+                                                                      "sam": {"name": "Sam Lee", "role": "staff", "emails": ["sam@acmebakery.test"]}}}, indent=1))
 w("assistant/core_sync.json", json.dumps({"enabled": True, "core_root": str(CORE), "niche_terms": ["sourdough", "croissant"], "niche_paths": [],
                                           "allow_terms": [], "file_builds": False, "notify": True}, indent=1))
 w("assistant/scripts/alpha.py", '"""alpha - a generic helper.\n\nPat Quinn asked for this on Monday.\n"""\n\n\ndef add(a, b):\n    return a + b\n')
 w("assistant/scripts/beta.py", 'def hello():\n    return "hello"\n')
-w("assistant/README.md", "# The agent of Acme Bakery\n\nPat Quinn runs it from acme-pc.tailabc123.ts.net; mail p648e3f@example.invalid.\n")
+w("assistant/README.md", "# The agent of Acme Bakery\n\nPat Quinn runs it from acme-pc.tailabc123.ts.net; mail pat@acmebakery.test.\n")
 w("assistant/serve.json", json.dumps({"_doc": "the schedule, Pat Quinn's choice", "jobs": [{"name": "spine", "every_min": 10}]}, indent=1))
 git("init", "-q")
 git("config", "core.autocrlf", "false")
@@ -120,7 +120,7 @@ check("sage-core got one commit with the vault's message, organization scrubbed,
 check("the manifest was refreshed", json.loads((CORE / "engine_manifest.json").read_text(encoding="utf-8"))["files"].get("assistant/scripts/alpha.py"))
 
 # ---------------------------------------------------------------- 3. an owner literal in a working line: held
-w("assistant/scripts/alpha.py", (V / "assistant/scripts/alpha.py").read_text(encoding="utf-8") + '\nOWNER = "Pat Quinn"\nMAIL = "p648e3f@example.invalid"\n')
+w("assistant/scripts/alpha.py", (V / "assistant/scripts/alpha.py").read_text(encoding="utf-8") + '\nOWNER = "Pat Quinn"\nMAIL = "pat@acmebakery.test"\n')
 c2 = commit("alpha: owner constants")
 rc, out = sync()
 a = core_text("assistant/scripts/alpha.py") or ""
@@ -137,7 +137,7 @@ a = core_text("assistant/scripts/alpha.py") or ""
 check("still held while the literal is there (the generic function waits with it)", "held=1" in out and "def mul" not in a and "assistant/scripts/alpha.py" in state()["holds"], out[-200:])
 
 # ---------------------------------------------------------------- 5. the fix: literals behind orgcfg -> released
-w("assistant/scripts/alpha.py", (V / "assistant/scripts/alpha.py").read_text(encoding="utf-8").replace('OWNER = "Pat Quinn"', 'OWNER = orgcfg.get("owner_name", "")').replace('MAIL = "p648e3f@example.invalid"', 'MAIL = orgcfg.get("alert_from", "")').replace('"""\n\n\ndef add', '"""\nimport orgcfg\n\n\ndef add'))
+w("assistant/scripts/alpha.py", (V / "assistant/scripts/alpha.py").read_text(encoding="utf-8").replace('OWNER = "Pat Quinn"', 'OWNER = orgcfg.get("owner_name", "")').replace('MAIL = "pat@acmebakery.test"', 'MAIL = orgcfg.get("alert_from", "")').replace('"""\n\n\ndef add', '"""\nimport orgcfg\n\n\ndef add'))
 c4 = commit("alpha: owner from org.json")
 rc, out = sync()
 a = core_text("assistant/scripts/alpha.py") or ""
@@ -162,7 +162,7 @@ check("a later change to a promoted file is skipped as niche (the commit also ca
       "skipped 2" in out and "applied=0" in out and not (CORE / "assistant/scripts/croissant_orders.py").exists(), out[-200:])
 
 # ---------------------------------------------------------------- 7. prose with the host and address; JSON _doc vs value
-w("assistant/NOTES.md", "Pat runs Mission Control at https://acme-pc.tailabc123.ts.net:9443 and reads p648e3f@example.invalid; Sam Lee helps.\n")
+w("assistant/NOTES.md", "Pat runs Mission Control at https://acme-pc.tailabc123.ts.net:9443 and reads pat@acmebakery.test; Sam Lee helps.\n")
 w("assistant/serve.json", json.dumps({"_doc": "the schedule, Pat Quinn's choice, host acme-pc.tailabc123.ts.net", "jobs": [{"name": "spine", "every_min": 10}, {"name": "probe", "every_min": 1}]}, indent=1))
 c6 = commit("notes + schedule")
 rc, out = sync()
@@ -170,7 +170,7 @@ n = core_text("assistant/NOTES.md") or ""
 sj = core_text("assistant/serve.json") or ""
 check("prose is applied and scrubbed: no host, address, owner or staff name; roles instead", "applied=2" in out and "acme-pc" not in n and "acmebakery" not in n and "Pat" not in n and "Sam" not in n and "the owner" in n and "a team member" in n, n + out[-200:])
 check("a JSON _doc field is prose: applied, host scrubbed, keys untouched", '"probe"' in sj and "acme-pc.tailabc123" not in sj and '"_doc"' in sj, sj)
-w("assistant/serve.json", json.dumps({"_doc": "the schedule", "alert": "p648e3f@example.invalid", "jobs": [{"name": "spine", "every_min": 10}]}, indent=1))
+w("assistant/serve.json", json.dumps({"_doc": "the schedule", "alert": "pat@acmebakery.test", "jobs": [{"name": "spine", "every_min": 10}]}, indent=1))
 c7 = commit("schedule: alert address")
 rc, out = sync()
 check("a JSON VALUE with the address is a working line: held", "held=1" in out and '"probe"' in (core_text("assistant/serve.json") or "") and "assistant/serve.json" in state()["holds"], out[-200:])

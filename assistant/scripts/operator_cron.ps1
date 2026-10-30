@@ -53,9 +53,9 @@ function Test-Budget {
 }
 
 function Build-Dashboard {
-    # mission-control page (assistant/web/index.html); the morning run also re-checks HoneyBook
+    # mission-control page (assistant/web/index.html); the morning run also re-checks the CRM connector
     try {
-        $a = @((Join-Path $asst 'scripts\dashboard.py')); if ($Morning) { $a += '--hb-check' }
+        $a = @((Join-Path $asst 'scripts\dashboard.py')); if ($Morning) { $a += '--crm-check' }
         Log ((& $py @a 2>&1 | Out-String).Trim())
     } catch { Log "dashboard error: $($_.Exception.Message)" }
 }
@@ -82,7 +82,14 @@ try {
 
     # order matters: mail first (followups matches its new tickets), sensors arm SOP steps,
     # then the follow-through engine fires what is due and the sentinels look for stuck work.
-    foreach ($s in @(@('mail.py','sense'), @('mail_arm.py'), @('sense_local.py'), @('sense_honeybook.py'), @('sense_editor.py'), @('followups.py','tick'), @('sentinels.py'))) {
+    # the organization's own sensors (its CRM connector's, its other tools') run after the engine's:
+    # config.json -> operator.sensors; a script that is not there is skipped
+    $own = @()
+    try { $own = @((Get-Content (Join-Path $asst 'config.json') -Raw | ConvertFrom-Json).operator.sensors | Where-Object { $_ }) } catch {}
+    $sensors = @('mail.py sense', 'mail_arm.py', 'sense_local.py') + $own + @('followups.py tick', 'sentinels.py')
+    foreach ($line in $sensors) {
+        $s = @(([string]$line).Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+        if (-not $s -or -not (Test-Path (Join-Path $asst "scripts\$($s[0])"))) { continue }
         try {
             $a = @((Join-Path $asst "scripts\$($s[0])")) + @($s | Select-Object -Skip 1)
             $ErrorActionPreference = 'Continue'    # a stderr line must not abort the sensor mid-run (see the pending check below)
@@ -126,6 +133,11 @@ try {
 
     $promptFile = if ($Morning) { 'brief.md' } else { 'operator.md' }
     $prompt  = Get-Content (Join-Path $asst "prompts\$promptFile") -Raw
+    # the organization's CRM connector block (its exact kinds, payloads, preview tag); nothing when there is no CRM
+    try {
+        $crmNotes = & $py (Join-Path $asst 'scripts\crm.py') operator-notes 2>$null | Out-String
+        if ($crmNotes -and $crmNotes.Trim()) { $prompt = $prompt + "`n`n" + $crmNotes.Trim() + "`n" }
+    } catch { Log "crm notes skipped: $_" }
     # The owners' last day of chat with Sage, appended as DATA (ported from the property OS's
     # lane_chat injection, 2026-10-08): the drafter judges a text knowing what the owner said today.
     try {
@@ -166,8 +178,13 @@ try {
                  'Edit(.claude/**)','Edit(assistant/scripts/**)','Edit(assistant/prompts/**)',
                  'Edit(assistant/config.json)','Edit(assistant/data/**)',
                  'mcp__gmail__send_email','mcp__gmail__delete_email',
-                 'mcp__honeybook__take_action','mcp__playwright__browser_click',
+                 'mcp__playwright__browser_click',
                  'mcp__playwright-cli__browser_click') -join ' '
+    # the organization's CRM connector write tools (its MCP_WRITE_TOOLS) are denied too; the engine names no CRM
+    try {
+        $cw = (& $py -c "import sys; sys.path.insert(0, sys.argv[1]); import alib; print(' '.join(sorted(alib.plugin_set('MCP_WRITE_TOOLS'))))" (Join-Path $asst 'scripts') 2>$null | Out-String).Trim()
+        if ($cw) { $denied = $denied + ' ' + $cw }
+    } catch {}
 
     $r = Invoke-ClaudeHeadless -Claude $claude -Prompt $prompt `
             -ClaudeArgs @('--model', [string]$cfg.operator.model, '--allowedTools', $allowed, '--disallowedTools', $denied) `

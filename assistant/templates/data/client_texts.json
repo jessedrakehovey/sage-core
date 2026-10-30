@@ -3,50 +3,90 @@
  "sign": "owner1 🌹",
  "texts": {
   "lead_intro": {
-   "_when": "the minute a quiz lead (or a HoneyBook inquiry with a phone) comes in, before anything else",
    "body": "Hello {first}! I just saw your wedding form come through on my phone! Could you just confirm your wedding date for me?\n\nowner1 example 🌹"
   },
   "collection_sent": {
-   "_when": "right after the Videography Collection Details went to them (the doer's auto-send, or HoneyBook shows Proposal Sent)",
    "body": "Hi {first}! I just sent our collection over to {email}. Let me know if you have any questions! {sign}"
   },
-  "questionnaire_reminder": {
-   "_when": "T-30 and T-21 days before a booked wedding while the Wedding Questionnaire is still blank in HoneyBook",
-   "body": "Hi {first}! owner1 here with example-org. Whenever you get a chance, could you fill out the Wedding Questionnaire in your HoneyBook client portal? It's how we plan your day-of coverage, and it only takes a few minutes. If you've already done it, thank you, and ignore this! 🌹"
-  },
+  "questionnaire_reminder": {},
   "checkin": {
    "_when": "T-14 days before a booked wedding: sets up the check-in call",
    "body": "Hi {first}! {wedding_date} is two weeks away, so exciting! Let's set up a quick check-in call this week to go over your timeline and details. What day and time work best for you? {sign}"
   },
   "meeting_reminder": {
-   "_when": "the day before any booked call, meeting or shoot with a client (HoneyBook scheduler, or a hold we put on the calendar)",
    "body": "Hi {first}! Just a reminder that we have our {what} {when}. Looking forward to it! {sign}"
   },
   "touches_followup": {
-   "_when": "right after the Finishing Touches file went out in HoneyBook (T-60 days)",
    "body": "Hi {first}! I just sent over a few finishing touches for {wedding_date}, in case any of them would be lovely for your day. No pressure at all, just let me know if anything catches your eye! {sign}"
   }
  },
  "touches": {
-  "_when": "T-60 days before a booked wedding (two months out: one month is too soon and would overwhelm them). Helpful, not salesy: 'our goal is to help them, not to sell to them'. Goes as a HoneyBook file from the Finishing Touches template (pricing/hb_touches.py): prices hidden until checkout, choose any, due on the wedding date.",
   "template_id": "58a564a164ef00679d925dc7",
   "file_title": "Finishing Touches",
   "subject": "A few finishing touches for {wedding_date}",
   "body": "Hi {couple},\n\n{wedding_date} is getting close, and I'm so excited for you two! As I start planning your coverage, I put together a few finishing touches that couples often ask us about in the final stretch. Your collection already covers everything we talked about, so none of these are needed; they're simply here so you know what's possible.\n\nYou can browse them at your own pace in the file below and add anything you'd love straight to your collection.\n\nEither way, I can't wait for {wedding_date}!\n\nowner1\nexample-org",
   "catalog": {
-   "toasts_speeches_film": {"name": "Full Toasts & Speeches Film", "why": "Every toast and speech, start to finish, with clean audio, as its own film. Couples tell us this is the one they rewatch with family.", "sheet_id": null, "price": 500},
-   "drone": {"name": "Aerial Cinematography", "why": "The sweeping shots of your venue and the two of you from above; it gives the film a true sense of place.", "sheet_id": "drone", "price": null},
-   "second_videographer": {"name": "Second Cinematographer", "why": "A second set of eyes so we catch both of your reactions at the same time, and far less chance of missing a moment.", "sheet_id": "second_videographer", "price": null},
-   "iphone_content_creator": {"name": "iPhone Content Creator", "why": "Someone dedicated to filming phone clips all day, so you have shareable moments the next morning instead of weeks later.", "sheet_id": "iphone_content_creator", "price": null},
-   "feature_film": {"name": "Feature Film", "why": "A longer 8 to 10 minute edit with room for the full arc of the day: more of the ceremony, the toasts and the people around you.", "sheet_id": "feature_film", "price": null},
-   "raw_footage": {"name": "Raw Footage", "why": "Every clip from every camera, so nothing from the day is ever lost.", "sheet_id": "raw_footage", "price": null},
-   "vows_reaction_angles": {"name": "Vows Reaction Angles", "why": "A close-up on each of your faces during the vows. We want to see the teardrops.", "sheet_id": "vows_reaction_angles", "price": null},
-   "signature_couples_shoot": {"name": "Signature Couple's Session", "why": "A relaxed filmed date on another day, where we capture the two of you as you really are, not in front of a crowd.", "sheet_id": "signature_couples_shoot", "price": null}
+   "toasts_speeches_film": {
+    "name": "Full Toasts & Speeches Film",
+    "why": "Every toast and speech, start to finish, with clean audio, as its own film. Couples tell us this is the one they rewatch with family.",
+    "sheet_id": null,
+    "price": 500
+   },
+   "drone": {
+    "name": "Aerial Cinematography",
+    "why": "The sweeping shots of your venue and the two of you from above; it gives the film a true sense of place.",
+    "sheet_id": "drone",
+    "price": null
+   },
+   "second_videographer": {
+    "name": "Second Cinematographer",
+    "why": "A second set of eyes so we catch both of your reactions at the same time, and far less chance of missing a moment.",
+    "sheet_id": "second_videographer",
+    "price": null
+   },
+   "iphone_content_creator": {
+    "name": "iPhone Content Creator",
+    "why": "Someone dedicated to filming phone clips all day, so you have shareable moments the next morning instead of weeks later.",
+    "sheet_id": "iphone_content_creator",
+    "price": null
+   },
+   "feature_film": {
+    "name": "Feature Film",
+    "why": "A longer 8 to 10 minute edit with room for the full arc of the day: more of the ceremony, the toasts and the people around you.",
+    "sheet_id": "feature_film",
+    "price": null
+   },
+   "raw_footage": {
+    "name": "Raw Footage",
+    "why": "Every clip from every camera, so nothing from the day is ever lost.",
+    "sheet_id": "raw_footage",
+    "price": null
+   },
+   "vows_reaction_angles": {
+    "name": "Vows Reaction Angles",
+    "why": "A close-up on each of your faces during the vows. We want to see the teardrops.",
+    "sheet_id": "vows_reaction_angles",
+    "price": null
+   },
+   "signature_couples_shoot": {
+    "name": "Signature Couple's Session",
+    "why": "A relaxed filmed date on another day, where we capture the two of you as you really are, not in front of a crowd.",
+    "sheet_id": "signature_couples_shoot",
+    "price": null
+   }
   },
   "_catalog_doc": "price: a number here overrides the pricing sheet; null means use the sheet price for sheet_id. An item with no price from either place is left off the file. Toasts & speeches film $500 (set 2026-10-17 on the owner's 'you price them': between the capture-only touches at $300-$500 and the feature film at $1,000). The other touches follow the pricing sheet.",
-  "order": ["toasts_speeches_film", "drone", "second_videographer", "iphone_content_creator", "feature_film", "raw_footage", "vows_reaction_angles", "signature_couples_shoot"],
+  "order": [
+   "toasts_speeches_film",
+   "drone",
+   "second_videographer",
+   "iphone_content_creator",
+   "feature_film",
+   "raw_footage",
+   "vows_reaction_angles",
+   "signature_couples_shoot"
+  ],
   "template_copy": {
-   "_doc": "APPLIED 2026-10-18: template 58a564a164ef00679d925dc7 is finished (connector + HoneyBook editor): pages Welcome / What to Expect / Choose Your Touches / Next Steps / Payment Details / Payment (Contract and Page 9 deleted), Finishing Touches copy throughout (no Vision Meeting, no 5% offer), 7 priced touches with button Add to my day, no discount or payment plan, optional Touch Point Call. The old clone 37adaefbf20b6587c13be7fb is renamed ZZ OLD (deleting a template is permanent, so it is left for the owner). The lines below are the original brief.",
    "Nice to meet you": "Finishing Touches. {couple}, your day is almost here. Your collection already holds everything we planned together; these are the touches couples most often ask us about in the final stretch, here so you know what is possible. Choose anything you would love, or nothing at all.",
    "What to Expect": "Each touch is added to your existing collection and due with your balance on the wedding day. Choose as many as you like on the next page, then review your updated investment at checkout. Questions? Reply to the email or text owner1 any time.",
    "Services": "Choose anything you would love for your day.",

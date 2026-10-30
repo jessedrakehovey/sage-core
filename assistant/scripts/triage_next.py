@@ -1,29 +1,29 @@
 """triage_next.py - every client input leads to its next action (the property OS's triage lanes, ported).
 
 the owner, 2026-10-18: "Take a lesson from the triage lanes in property management and learn how every input
-leads to the next logical action as opposed to our system that received example's contact info and did
-nothing with it when it could have added her to the HoneyBook project file."
+leads to the next logical action as opposed to our system that received Wren's contact info and did
+nothing with it when it could have added her to the CRM project file."
 
 The property side's rule (triage-and-propose.md): a reply is ONE possible action, never the default; every
 inbound message is classified into FACTS, each fact maps to ACTIONS, the actions are ranked and the reply is
 one of them. This is that engine for the personal OS, zero-LLM:
 
-  input   a new ticket of an inbound kind (a text, an email, a HoneyBook inquiry) the moment tickets.add_many
+  input   a new ticket of an inbound kind (a text, an email, a CRM inquiry) the moment tickets.add_many
           stores it (the hook), or a replay from the CLI
-  party   who it is from and which couple / lead it belongs to (ledger phones, lead files, HoneyBook contacts)
+  party   who it is from and which couple / lead it belongs to (ledger phones, lead files, the CRM contacts)
   facts   what the message carries, from the vocabulary in data/sop_map.json -> inputs.facts:
             contact            an email / phone (not the sender's) and the name it belongs to
             copy_on_everything "copy X on everything", "cc her on all the emails"
             questionnaire_done "we filled out the questionnaire"
             lost               "we went another direction", "decided on another videographer"
-            date_change        "we moved the wedding to ..."     (operator: hb_project_update card)
-            venue_change       "new venue is ..."                (operator: hb_project_update card)
+            date_change        "we moved the wedding to ..."     (operator: CRM project update card)
+            venue_change       "new venue is ..."                (operator: CRM project update card)
             reply              always, unless the text is a pure ack
   actions what each fact leads to, from data/sop_map.json -> inputs.actions, three gates:
             auto      code does it now and records it: also_notify on the couple's ledger entry, the contact
                       on the couple's wedding page (Story and notes), closing a questionnaire reminder, stopping
-                      a lost lead's follow-ups, an internal HoneyBook note (the owner's standing rule: notes need no card)
-            card      code posts the exec card now (hb_add_participant, hb_set_stage lost): the owner's tap runs it
+                      a lost lead's follow-ups, an internal CRM note (the owner's standing rule: notes need no card)
+            card      code posts the exec card now (add participant, set stage lost): the owner's tap runs it
             operator  left for the drafter, named: the reply, a date / venue update
   record  the ticket's payload gets `triage` {party, facts, actions[{do, gate, status, detail}]}: the operator
           reads what code already did and does only what is left; Sage's chat line lists all of it.
@@ -31,7 +31,7 @@ one of them. This is that engine for the personal OS, zero-LLM:
 Vocabulary and the fact->action map live in sop_map.json (data), so another business changes words and
 targets there, never here. Nothing in this file sends anything: cards carry the outward steps.
 
-  python assistant/scripts/triage_next.py --dry --from "+1555-031-6831" --text "Here is example's number: (555) 018-0318"
+  python assistant/scripts/triage_next.py --dry --from "+15550316831" --text "Here is Wren's number: (555) 018-0318"
   python assistant/scripts/triage_next.py replay <ticket id> [--dry]
   python assistant/scripts/triage_next.py drain              # the spine: file queued couple-page notes (wiki writes are slow)
 """
@@ -47,13 +47,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from alib import DATA, VAULT, load_json, save_json  # noqa: E402
+import crm  # noqa: E402
 
 SOP_MAP = DATA / "sop_map.json"
 PROJECTS = Path(os.environ.get("WV_PROJECT_STATE") or (VAULT / "scripts" / "projects" / "project_state.json"))
 LEADS = DATA / "leads"
-SNAP = Path(os.environ.get("WV_HB_SNAPSHOT") or (VAULT / "dashboard" / "data" / "honeybook.json"))
 QUEUE = DATA / "triage_queue.json"              # couple-page notes waiting for the spine (wiki writes lint + commit: slow)
-INPUT_KINDS = {"imessage_in", "email", "inquiry_new", "hb_message_in"}
+# Engine-owned inbound kinds; CRM-specific ones (inquiry, CRM message) come from crm.kinds().
+_INPUT_KINDS_ENGINE = {"imessage_in", "email", "inquiry_new"}
+
+
+def _input_kinds() -> frozenset:
+    """Inbound ticket kinds that trigger triage: engine base merged with CRM connector's INBOUND_KINDS."""
+    return frozenset(_INPUT_KINDS_ENGINE | crm.kinds("INBOUND_KINDS"))
 _PHONE = re.compile(r"\+?1?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{4}")
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
@@ -74,11 +80,11 @@ def vocab() -> dict:
 # ------------------------------------------------------------------ who is it from
 def party_for(handle: str = "", email: str = "", name: str = "") -> dict:
     """{"kind": booked|lead|contact|unknown, "unit", "couple", "project_id", "workspace_id", "lead", "name"}.
-    Sources in order: the project ledger (phones / email), the quiz lead files, the HoneyBook contacts."""
+    Sources in order: the project ledger (phones / email), the quiz lead files, the CRM contacts."""
     key, em = _digits(handle), str(email or "").strip().lower()
     out = {"kind": "unknown", "unit": "", "couple": "", "project_id": "", "workspace_id": "", "lead": "", "name": str(name or "")}
     ps = (load_json(PROJECTS, {}) or {}).get("projects") or {}
-    snap = load_json(SNAP, {}) or {}
+    snap = crm.snapshot()
     ws_for = {str(p.get("project_id") or ""): str(p.get("id") or "") for p in (snap.get("projects") or []) if isinstance(p, dict)}
     for unit, p in ps.items():
         if not isinstance(p, dict) or p.get("stage") in ("cancelled", "archived", "lapsed"):
@@ -86,7 +92,7 @@ def party_for(handle: str = "", email: str = "", name: str = "") -> dict:
         phones = {_digits(x) for x in ([p.get("phone")] + list(p.get("phones") or []) + list(p.get("also_phones") or []))} - {""}
         emails = {str(x).lower() for x in ([p.get("email")] + list(p.get("emails") or [])) if x}
         if (key and key in phones) or (em and em in emails):
-            pid = str(p.get("honeybook_id") or "")
+            pid = str(crm.project_id(p) or "")
             out.update(kind="booked" if p.get("stage") not in ("inquiry", "lead") else "lead", unit=unit, couple=str(p.get("couple") or unit),
                        project_id=pid, workspace_id=ws_for.get(pid, ""))
             return out
@@ -98,7 +104,7 @@ def party_for(handle: str = "", email: str = "", name: str = "") -> dict:
                 continue
             if (key and _digits(L.get("phone")) == key) or (em and str(L.get("email") or "").lower() == em):
                 out.update(kind="lead", lead=f.stem, couple=" & ".join(x for x in (L.get("name"), L.get("partner")) if x) or str(L.get("name") or ""))
-                # the lead's HoneyBook project, when the snapshot has one by name
+                # the lead's CRM project, when the snapshot has one by name
                 toks = _toks(L.get("name"))
                 for p in snap.get("projects") or []:
                     if toks and toks[0] in _toks(p.get("name")):
@@ -120,9 +126,9 @@ def party_for(handle: str = "", email: str = "", name: str = "") -> dict:
                 hits = [p for p in (snap.get("projects") or []) if toks and toks[0] in _toks(p.get("name"))]
                 if len(hits) == 1:
                     out.update(project_id=str(hits[0].get("project_id") or ""), workspace_id=str(hits[0].get("id") or ""))
-            # a booked ledger entry whose HoneyBook project matches makes it a booked couple
+            # a booked ledger entry whose CRM project matches makes it a booked couple
             for unit, p in ps.items():
-                if isinstance(p, dict) and out["project_id"] and str(p.get("honeybook_id") or "") == out["project_id"]:
+                if isinstance(p, dict) and out["project_id"] and crm.project_id(p) == out["project_id"]:
                     out.update(kind="booked", unit=unit, couple=str(p.get("couple") or unit))
                     break
             return out
@@ -184,7 +190,7 @@ def facts_in(text: str, sender_handle: str = "", sender_name: str = "", prior: l
 
 # ------------------------------------------------------------------ what each fact leads to
 def plan(facts: list, party: dict, v: dict | None = None) -> list:
-    """[{do, gate, detail, ...}] in execution order: the record-keeping and HoneyBook steps first, the reply
+    """[{do, gate, detail, ...}] in execution order: the record-keeping and CRM steps first, the reply
     last (the property rule: a promise is sent only after its backing action exists)."""
     v = v if v is not None else vocab()
     amap = v.get("actions") or {}
@@ -194,11 +200,11 @@ def plan(facts: list, party: dict, v: dict | None = None) -> list:
             a = dict(a)
             need = a.pop("needs", "")
             if need == "workspace" and not party.get("workspace_id"):
-                a.update(gate="operator", detail=f"{a.get('detail') or a['do']}: no HoneyBook workspace found for this sender; find the project first")
+                a.update(gate="operator", detail=f"{a.get('detail') or a['do']}: no CRM workspace found for this sender; find the project first")
             elif need == "unit" and not party.get("unit"):
                 if a["do"] in ("also_notify", "couple_page", "followups_close"):
                     continue                       # nothing to write to for a stranger
-            if a["do"] in ("hb_add_participant", "also_notify", "couple_page"):
+            if a["do"] in crm.kinds("PARTICIPANT_KINDS") | {"also_notify", "couple_page"}:
                 if f["type"] == "contact" and not (f.get("email") or f.get("phone")):
                     continue
                 if f["type"] == "copy_on_everything" and not f.get("email"):
@@ -338,22 +344,23 @@ def _post_card(a: dict, party: dict, ticket: dict | None, dry: bool) -> str:
     """An exec card for a gated step. Returns the card id or the refusal."""
     who = a.get("who") or {}
     couple = party.get("couple") or party.get("unit") or "the couple"
-    if a["do"] == "hb_add_participant":
+    _crm = crm.name()
+    if a["do"] in crm.kinds("PARTICIPANT_KINDS"):
         name = who.get("name") or who.get("email") or "them"
         q = {"header": f"{name} on {couple}'s project",
              "question": (f"{couple} sent {name}'s details: {who.get('email', '')}" + (f", {who['phone']}" if who.get("phone") else "")
-                          + f". Add {name} ({who.get('email', '')}) to their HoneyBook project, so every message, file and reminder in it reaches {name} too? HoneyBook mails {name} its own project invite."),
+                          + f". Add {name} ({who.get('email', '')}) to their {_crm} project, so every message, file and reminder in it reaches {name} too? {_crm} mails {name} its own project invite."),
              "options": [{"label": "Add them (Recommended)"}, {"label": "Skip"}], "lane": "wedding", "audience": "client",
-             "advice": "💡 Add: one connector call with a read-back; nothing else is sent. This is what 'copy them on everything' means in HoneyBook.",
-             "exec": {"kind": "hb_add_participant", "approve_label": "Add them (Recommended)",
+             "advice": f"💡 Add: one connector call with a read-back; nothing else is sent. This is what 'copy them on everything' means in {_crm}.",
+             "exec": {"kind": a["do"], "approve_label": "Add them (Recommended)",
                       "payload": {k: v for k, v in {"workspace_id": party.get("workspace_id"), "email": who.get("email"), "name": who.get("name"), "phone": who.get("phone")}.items() if v}}}
-    elif a["do"] == "hb_set_stage":
+    elif a["do"] in crm.kinds("STAGE_KINDS"):
         reason = f"{a.get('reason') or 'went another direction'}, said {time.strftime('%Y-%m-%d')}"
         q = {"header": f"{couple}: mark lost",
-             "question": f"{couple} say they went another direction. Mark their HoneyBook project lost (archive it with the reason '{reason}') and stop their follow-ups?",
+             "question": f"{couple} say they went another direction. Mark their {_crm} project lost (archive it with the reason '{reason}') and stop their follow-ups?",
              "options": [{"label": "Mark lost (Recommended)"}, {"label": "Skip"}], "lane": "wedding", "audience": "internal",
-             "advice": "💡 Reversible (HoneyBook can unarchive). Nothing goes to the couple.",
-             "exec": {"kind": "hb_set_stage", "approve_label": "Mark lost (Recommended)",
+             "advice": f"💡 Reversible ({_crm} can unarchive). Nothing goes to the couple.",
+             "exec": {"kind": a["do"], "approve_label": "Mark lost (Recommended)",
                       "payload": {"workspace_id": party.get("workspace_id"), "stage": "lost", "reason": reason}}}
     else:
         return f"no card template for {a['do']}"
@@ -406,7 +413,7 @@ def act(actions: list, party: dict, facts: list, ticket: dict | None = None, dry
                     a["detail"] = _followups_close(party, str(a.get("steps") or "questionnaire-reminder"), a.get("why") or "they said the questionnaire is done", dry)
                 elif a["do"] == "followups_stop":
                     a["detail"] = _followups_stop(party, a.get("why") or "went another direction", dry)
-                elif a.get("graduated") and a["do"] in ("hb_add_participant", "hb_set_stage"):
+                elif a.get("graduated") and a["do"] in crm.kinds("PARTICIPANT_KINDS") | crm.kinds("STAGE_KINDS"):
                     a["detail"] = _graduated_exec(a, party, who, dry)
                 else:
                     a["detail"] = _plugin_auto(a, party, facts, dry) or f"no auto handler for {a['do']}"
@@ -427,7 +434,7 @@ def act(actions: list, party: dict, facts: list, ticket: dict | None = None, dry
 def _graduated_exec(a: dict, party: dict, who: dict, dry: bool) -> str:
     """The same payload the card would have carried, minted under the owner's graduation (standing ref); the outcome
     ledger verifies it like any other and one failure demotes the kind (graduation.tick)."""
-    if a["do"] == "hb_add_participant":
+    if a["do"] in crm.kinds("PARTICIPANT_KINDS"):
         payload = {k: v for k, v in {"workspace_id": party.get("workspace_id"), "email": who.get("email"), "name": who.get("name"), "phone": who.get("phone")}.items() if v}
     else:
         payload = {"workspace_id": party.get("workspace_id"), "stage": "lost", "reason": f"{a.get('reason') or 'went another direction'}, said {time.strftime('%Y-%m-%d')}"}
@@ -482,7 +489,7 @@ def on_new_tickets(items: list, dry: bool = False) -> int:
     n = 0
     for t in items:
         try:
-            if t.get("kind") not in INPUT_KINDS:
+            if t.get("kind") not in _input_kinds():
                 continue
             p = t.get("payload") or {}
             if t.get("kind") == "imessage_in":

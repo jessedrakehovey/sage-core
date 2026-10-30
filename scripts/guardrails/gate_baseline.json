@@ -1,185 +1,142 @@
 {
-  "_comment": "Frozen send-gate baseline for wedding videography. Do not hand-edit to weaken a gate. After a LEGITIMATE, reviewed change to an allow/deny list, re-run with --freeze and commit the new baseline alongside it.",
-  "critical_never_allow": [
-    "mcp__gmail__send_email",
+ "_comment": "Frozen send-gate baseline for wedding videography. Do not hand-edit to weaken a gate. After a LEGITIMATE, reviewed change to an allow/deny list, re-run with --freeze and commit the new baseline alongside it.",
+ "critical_never_allow": [
+  "mcp__gmail__send_email",
+  "mcp__gmail__delete_email",
+  "mcp__gmail__batch_delete_emails",
+  "mcp__example-mail-personal__send_email",
+  "mcp__example-mail-personal__delete_email",
+  "mcp__example-mail-personal__batch_delete_emails",
+  "mcp__example-mail-films__send_email",
+  "mcp__example-mail-films__delete_email",
+  "mcp__example-mail-films__batch_delete_emails",
+  "mcp__playwright__browser_click",
+  "mcp__playwright__browser_type",
+  "mcp__playwright__browser_press_key",
+  "mcp__playwright__browser_file_upload",
+  "mcp__playwright__browser_fill_form",
+  "mcp__playwright-cli__browser_click",
+  "mcp__playwright-cli__browser_type",
+  "mcp__playwright-cli__browser_press_key",
+  "mcp__playwright-cli__browser_file_upload",
+  "mcp__playwright-cli__browser_fill_form"
+ ],
+ "settings_gate": ".claude/settings.json",
+ "targets": {
+  "optimizer": {
+   "path": "scripts/optimizer/optimizer_cron.ps1",
+   "type": "ps1",
+   "denied": [],
+   "allowed_count": 10
+  },
+  "assistant-operator": {
+   "path": "assistant/scripts/operator_cron.ps1",
+   "type": "ps1",
+   "denied": [
+    "Agent",
+    "NotebookEdit",
+    "Task",
+    "WebFetch",
+    "WebSearch",
     "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 4
+  },
+  "travel-scout": {
+   "path": "travel/scripts/travel_cron.ps1",
+   "type": "ps1",
+   "denied": [],
+   "allowed_count": 0
+  },
+  "lot-scout": {
+   "path": "lots/scripts/lots_cron.ps1",
+   "type": "ps1",
+   "denied": [],
+   "allowed_count": 0
+  },
+  "ad-scout": {
+   "path": "ads/ads_cron.ps1",
+   "type": "ps1",
+   "denied": [
+    "Bash",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 5
+  },
+  "agent-brain": {
+   "path": "assistant/agent/brain.py",
+   "type": "py",
+   "denied": [
+    "Agent",
+    "Bash",
+    "Edit",
+    "NotebookEdit",
+    "PowerShell",
+    "Task",
+    "WebFetch",
+    "WebSearch",
+    "Write",
+    "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 7
+  },
+  "doer": {
+   "path": "assistant/doer/doer.py",
+   "type": "py",
+   "denied": [
+    "Agent",
+    "NotebookEdit",
+    "Skill",
+    "Task",
+    "WebFetch",
+    "WebSearch",
+    "Write",
     "mcp__gmail__batch_delete_emails",
-    "mcp__example-mail-personal__send_email",
-    "mcp__example-mail-personal__delete_email",
-    "mcp__example-mail-personal__batch_delete_emails",
-    "mcp__example-mail-films__send_email",
-    "mcp__example-mail-films__delete_email",
-    "mcp__example-mail-films__batch_delete_emails",
-    "mcp__playwright__browser_click",
-    "mcp__playwright__browser_type",
-    "mcp__playwright__browser_press_key",
-    "mcp__playwright__browser_file_upload",
-    "mcp__playwright__browser_fill_form",
-    "mcp__playwright-cli__browser_click",
-    "mcp__playwright-cli__browser_type",
-    "mcp__playwright-cli__browser_press_key",
-    "mcp__playwright-cli__browser_file_upload",
-    "mcp__playwright-cli__browser_fill_form"
-  ],
-  "settings_gate": ".claude/settings.json",
-  "targets": {
-    "optimizer": {
-      "path": "scripts/optimizer/optimizer_cron.ps1",
-      "type": "ps1",
-      "denied": [],
-      "allowed_count": 10
-    },
-    "assistant-operator": {
-      "path": "assistant/scripts/operator_cron.ps1",
-      "type": "ps1",
-      "denied": [
-        "Agent",
-        "NotebookEdit",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 4
-    },
-    "hb-exec": {
-      "path": "assistant/scripts/hb_exec.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "Bash",
-        "Edit",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "Write",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 1
-    },
-    "hb-snapshot": {
-      "path": "assistant/scripts/hb_snapshot.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "Bash",
-        "Edit",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "Write",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 1
-    },
-    "travel-scout": {
-      "path": "travel/scripts/travel_cron.ps1",
-      "type": "ps1",
-      "denied": [],
-      "allowed_count": 0
-    },
-    "lot-scout": {
-      "path": "lots/scripts/lots_cron.ps1",
-      "type": "ps1",
-      "denied": [],
-      "allowed_count": 0
-    },
-    "ad-scout": {
-      "path": "ads/ads_cron.ps1",
-      "type": "ps1",
-      "denied": [
-        "Bash",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 5
-    },
-    "agent-brain": {
-      "path": "assistant/agent/brain.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "Bash",
-        "Edit",
-        "NotebookEdit",
-        "PowerShell",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "Write",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__send_feedback",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 7
-    },
-    "doer": {
-      "path": "assistant/doer/doer.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "NotebookEdit",
-        "Skill",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "Write",
-        "mcp__gmail__batch_delete_emails",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 3
-    },
-    "doer-computer": {
-      "path": "assistant/doer/computer.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "KillShell",
-        "NotebookEdit",
-        "PowerShell",
-        "Skill",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "mcp__gmail__batch_delete_emails",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 4
-    },
-    "agent-builder": {
-      "path": "assistant/agent/builder.py",
-      "type": "py",
-      "denied": [
-        "Agent",
-        "NotebookEdit",
-        "PowerShell",
-        "Task",
-        "WebFetch",
-        "WebSearch",
-        "mcp__gmail__delete_email",
-        "mcp__gmail__send_email",
-        "mcp__honeybook__send_feedback",
-        "mcp__honeybook__take_action",
-        "mcp__playwright__browser_click"
-      ],
-      "allowed_count": 5
-    }
+    "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 3
+  },
+  "doer-computer": {
+   "path": "assistant/doer/computer.py",
+   "type": "py",
+   "denied": [
+    "Agent",
+    "KillShell",
+    "NotebookEdit",
+    "PowerShell",
+    "Skill",
+    "Task",
+    "WebFetch",
+    "WebSearch",
+    "mcp__gmail__batch_delete_emails",
+    "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 4
+  },
+  "agent-builder": {
+   "path": "assistant/agent/builder.py",
+   "type": "py",
+   "denied": [
+    "Agent",
+    "NotebookEdit",
+    "PowerShell",
+    "Task",
+    "WebFetch",
+    "WebSearch",
+    "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click"
+   ],
+   "allowed_count": 5
   }
+ }
 }

@@ -3,12 +3,12 @@
 the owner 2026-10-19: "I still get repeat approval questions sometimes." cards.py's DUPLICATE_SUBJECT /
 ALREADY_ANSWERED guards key on the HEADER, and the operator rewords headers between runs
 ('Nudge - wedding' -> 'Emery nudge', 'Stuck items' -> 'Cold leads'), and exec cards skipped the
-duplicate checks entirely (example's upside-down text was carded again 3 minutes after it went).
+duplicate checks entirely (Hollis's upside-down text was carded again 3 minutes after it went).
 This module gives every card an ENTITY set that does not depend on wording:
 
-  hb:<workspace id>   a HoneyBook lead / couple: `entity`, a chain key 'lead:<id>:<gate>', an exec
+  crm:<workspace id>  a CRM project entity: `entity`, a chain key 'lead:<id>:<gate>', an exec
                       payload's workspace_id/project_id, or the client's FULL name ("Finley Larkspur")
-                      found in the header, question or details (matched against the HoneyBook snapshot)
+                      found in the header, question or details (matched against the CRM snapshot)
   phone:<10 digits>   an imessage_send recipient (or `entity: "phone:+1..."`)
   email:<address>     an email_send recipient
 
@@ -18,7 +18,7 @@ and check(q, ...) refuses, in front of cards.post:
                      lane (any header); an exec reply card to a recipient that already has an OPEN
                      exec card of the same kind with the same draft (revise it with --replaces)
   ALREADY_ANSWERED   a decision card about an entity whose latest decision-card answer was a Drop
-                     (latched DROP_LATCH_DAYS, released when HoneyBook shows a new stage/activity
+                     (latched DROP_LATCH_DAYS, released when the CRM shows a new stage/activity
                      after the tap or a later non-drop answer); a card offering to nudge / follow up
                      an entity that was just messaged (an approved send in the last SENT_COOLDOWN_H);
                      an exec card whose draft already went (or is queued) to that recipient today
@@ -32,23 +32,32 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VAULT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+import crm
+
 DROP_LATCH_DAYS = 14
 SENT_COOLDOWN_H = 72
 EXEC_REPEAT_H = 24
 SAME_DRAFT = 0.75             # difflib ratio at which two drafts are the same message
-REPLY_KINDS = {"imessage_send", "email_send", "hb_message"}
 _DROP = re.compile(r"^\s*(drop|let (it|them|her|him) go|stop (asking|following))\b", re.I)
 _CONTACT = re.compile(r"\b(nudge|follow[- ]?up|check[- ]?in|reach out|chase|ping)\b", re.I)
 _SENTISH = re.compile(r"^\s*(send|approve|yes|edit & send|edit and send)\b", re.I)
+# CRM-entity key prefix; old persisted cards may say "hb:<id>" (backward compat in _norm)
+_CRM_PREFIX = "crm:"
+_LEGACY_CRM_PREFIXES = crm.kinds("ENTITY_PREFIX_ALIASES")  # the connector's older key prefixes
+
+
+REPLY_KINDS = {"imessage_send", "email_send"} | crm.kinds("MESSAGE_KINDS")
 
 
 def _snap_file() -> Path:
-    return Path(os.environ.get("HB_SNAPSHOT_FILE") or (VAULT / "dashboard" / "data" / "honeybook.json"))
+    return crm.snapshot_path()
 
 
 _SNAP_CACHE: dict = {}
@@ -61,10 +70,7 @@ def _projects() -> list:
     except OSError:
         return []
     if _SNAP_CACHE.get("m") != (str(f), m):
-        try:
-            snap = json.loads(f.read_text(encoding="utf-8-sig"))
-        except Exception:  # noqa: BLE001
-            snap = {}
+        snap = crm.snapshot(f)
         _SNAP_CACHE.update(m=(str(f), m), projects=[p for p in (snap.get("projects") or []) if isinstance(p, dict)])
     return _SNAP_CACHE.get("projects") or []
 
@@ -74,12 +80,12 @@ def _client_name(p) -> str:
     return n if len(n.split()) >= 2 else ""          # full names only: a first name is too loose
 
 
-def _hb_key(pid) -> str:
+def _crm_key(pid) -> str:
     pid = str(pid or "").strip().lower()
     for p in _projects():
         if pid and pid in (str(p.get("id") or "").lower(), str(p.get("project_id") or "").lower()):
-            return "hb:" + str(p.get("id") or pid).lower()
-    return "hb:" + pid if pid else ""
+            return _CRM_PREFIX + str(p.get("id") or pid).lower()
+    return _CRM_PREFIX + pid if pid else ""
 
 
 def _digits(v) -> str:
@@ -92,8 +98,9 @@ def _norm(e) -> str:
     if not e:
         return ""
     kind, _, val = e.partition(":")
-    if kind in ("lead", "couple", "hb", "project", "workspace") and re.fullmatch(r"[0-9a-f]{24}", val.split(":")[0]):
-        return _hb_key(val.split(":")[0])
+    _crm_kinds = {"lead", "couple", "crm", "project", "workspace"} | _LEGACY_CRM_PREFIXES
+    if kind in _crm_kinds and re.fullmatch(r"[0-9a-f]{24}", val.split(":")[0]):
+        return _crm_key(val.split(":")[0])
     if kind == "phone":
         return "phone:" + _digits(val) if _digits(val) else ""
     if kind == "email" and "@" in val:
@@ -130,7 +137,7 @@ def entities(q, details: bool = True) -> set:
     pl = ex.get("payload") if isinstance(ex.get("payload"), dict) else {}
     for k in ("workspace_id", "project_id"):
         if re.fullmatch(r"[0-9a-f]{24}", str(pl.get(k) or "")):
-            out.add(_hb_key(pl[k]))
+            out.add(_crm_key(pl[k]))
     if ex.get("kind") == "imessage_send" and _digits(pl.get("to")):
         out.add("phone:" + _digits(pl.get("to")))
     if ex.get("kind") == "email_send":
@@ -142,17 +149,19 @@ def entities(q, details: bool = True) -> set:
     for p in _projects():
         n = _client_name(p).lower()
         if n and re.search(r"(?<![a-z])" + re.escape(n) + r"(?![a-z])", txt):
-            out.add("hb:" + str(p.get("id") or p.get("project_id")).lower())
+            out.add(_CRM_PREFIX + str(p.get("id") or p.get("project_id")).lower())
     out.discard("")
     return out
 
 
-def _hb_moved_since(ent: str, ts: float) -> bool:
-    if not ent.startswith("hb:"):
+def _crm_moved_since(ent: str, ts: float) -> bool:
+    _pfxs = (_CRM_PREFIX,) + tuple(px + ":" for px in _LEGACY_CRM_PREFIXES)
+    if not any(ent.startswith(px) for px in _pfxs):
         return False
+    pfx_len = next(len(px) for px in _pfxs if ent.startswith(px))
     from datetime import datetime
     for p in _projects():
-        if ent[3:] not in (str(p.get("id") or "").lower(), str(p.get("project_id") or "").lower()):
+        if ent[pfx_len:] not in (str(p.get("id") or "").lower(), str(p.get("project_id") or "").lower()):
             continue
         for k in ("stage_moved_at", "last_activity_at"):
             try:
@@ -195,7 +204,11 @@ def _when(ts: float) -> str:
 def _who(ents) -> str:
     names = {}
     for p in _projects():
-        names["hb:" + str(p.get("id") or "").lower()] = _client_name(p) or str(p.get("name") or "")
+        pid = str(p.get("id") or "").lower()
+        if pid:
+            names[_CRM_PREFIX + pid] = _client_name(p) or str(p.get("name") or "")
+            for px in _LEGACY_CRM_PREFIXES:
+                names[px + ":" + pid] = names[_CRM_PREFIX + pid]
     return ", ".join(sorted(names.get(e) or e for e in ents))
 
 
@@ -231,10 +244,10 @@ def check(q, lane: str, cards_mod, replaces: str = "") -> dict | None:
     for e in sorted(ents):
         latest = next(((ts, c, cq, opt) for ts, c, cq, opt in rows
                        if not cq.get("exec") and e in focus(cq)), None)
-        if latest and _DROP.match(latest[3]) and not _hb_moved_since(e, latest[0]):
+        if latest and _DROP.match(latest[3]) and not _crm_moved_since(e, latest[0]):
             return {"qid": latest[1]["id"], "reason": f"ALREADY_ANSWERED: owner1 chose {latest[3]!r} about {_who({e})} on "
                                                       f"{latest[1]['id']} ({latest[2].get('header')!r}) at {_when(latest[0])}, and "
-                                                      "HoneyBook shows nothing new since. Leave them out (re-post without them), never "
+                                                      f"{crm.name()} shows nothing new since. Leave them out (re-post without them), never "
                                                       "ask again (owner1 2026-10-17: 'I'm getting the same questions over and over')."}
     if _CONTACT.search(_text(q) + " " + " ".join(str(o.get("label") or "") for o in q.get("options") or [] if isinstance(o, dict))):
         cutoff = time.time() - SENT_COOLDOWN_H * 3600
@@ -257,7 +270,7 @@ def _check_exec(q, ex, ents, live, cards_mod) -> dict | None:
         cq = (c.get("questions") or [{}])[0]
         cx = cq.get("exec") or {}
         old = re.sub(r"\s+", " ", _draft(cx)).strip().lower()
-        # the same message drafted twice (example, AJ, 'Text example: almost there' x2); a different
+        # the same message drafted twice (Marisa, AJ, 'Text Teo: almost there' x2); a different
         # message to the same person (a standing-text preview, a call offer) is its own card
         if cx.get("kind") == kind and ents & entities(cq) and draft and old \
                 and difflib.SequenceMatcher(None, draft, old).ratio() >= SAME_DRAFT:
@@ -289,9 +302,11 @@ def _check_exec(q, ex, ents, live, cards_mod) -> dict | None:
 
 
 def dropped_leads(cards_mod=None) -> set:
-    """HoneyBook keys ('hb:<id>') whose latest decision-card answer was a Drop that still stands
-    (inside DROP_LATCH_DAYS, nothing new in HoneyBook since the tap). Sensors leave these out of
-    their tickets, so a dropped lead is not dug up again in next week's cold-leads digest."""
+    """CRM entity keys ('crm:<id>') whose latest decision-card answer was a Drop that still stands
+    (inside DROP_LATCH_DAYS, nothing new in the CRM since the tap). Sensors leave these out of
+    their tickets, so a dropped lead is not dug up again in next week's cold-leads digest.
+    Also matches legacy 'hb:<id>' keys from persisted cards for backward compat."""
+    _crm_pfxs = (_CRM_PREFIX,) + tuple(px + ":" for px in _LEGACY_CRM_PREFIXES)
     try:
         if cards_mod is None:
             import cards as cards_mod
@@ -300,9 +315,9 @@ def dropped_leads(cards_mod=None) -> set:
             if cq.get("exec"):
                 continue
             for e in focus(cq):
-                if e.startswith("hb:") and e not in seen:
+                if any(e.startswith(px) for px in _crm_pfxs) and e not in seen:
                     seen.add(e)
-                    if _DROP.match(opt) and not _hb_moved_since(e, ts):
+                    if _DROP.match(opt) and not _crm_moved_since(e, ts):
                         out.add(e)
         return out
     except Exception:  # noqa: BLE001

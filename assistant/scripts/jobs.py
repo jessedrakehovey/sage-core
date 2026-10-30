@@ -10,7 +10,7 @@ the ticket; drain calls launch() when it is due. The registry is the allow-list 
 no free-form commands, every placeholder named in the file.
 
   python assistant/scripts/jobs.py                 # what Sage sees (JOBS YOU CAN RUN)
-  python assistant/scripts/jobs.py run handoff_build couple="example"   # launch one by hand
+  python assistant/scripts/jobs.py run handoff_build couple="Sloane & Bram"   # launch one by hand
 """
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def build_cmd(j: dict, args: dict) -> list:
 
 
 def describe(j: dict, args: dict) -> str:
-    """'Editor handoff build - couple: example' (the words the owner reads on the card)."""
+    """'Editor handoff build - couple: Sloane & Bram' (the words the owner reads on the card)."""
     vals = ", ".join(f"{k}: {v}" for k, v in (args or {}).items() if str(v or "").strip())
     return f"{j.get('name', j['key'])}" + (f" - {vals}" if vals else "")
 

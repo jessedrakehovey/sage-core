@@ -1,12 +1,12 @@
 """scheduling.py - Sage sets up a call (ruling 12, 2026-10-15), zero-LLM.
 
 A lead or a contact asks for a call ("can we hop on a call this week?"), or an owner says "set up
-a call with example": this module reads BOTH owners' calendars (Google when connected, else the
-calendar file the spine keeps), the HoneyBook meetings in the desk snapshot, our own holds and
+a call with Delia": this module reads BOTH owners' calendars (Google when connected, else the
+calendar file the spine keeps), the CRM meetings in the desk snapshot, our own holds and
 the times already offered to someone else, picks 2-3 open slots on different days inside the
 hours in tracking.json -> scheduling.windows, and posts ONE card carrying the drafted message with
 those slots. The exec is whatever the thread dictates: `imessage_send` for a text, `email_send`
-for mail, `hb_message` for a HoneyBook conversation. Nothing goes out without the tap.
+for mail, the CRM connector message kind for a CRM conversation. Nothing goes out without the tap.
 
 When their reply picks one of the offered times ("Tuesday works", "the 2 pm one", "option 2"),
 the tick posts the confirmation message as a card AND a `calendar_hold` card for the slot. A
@@ -17,7 +17,7 @@ Who may trigger it: the operator (prompts/operator.md, "Scheduling a call") thro
 Sage through the SUGGEST `call` field (agent/actions.py). State: data/tracking/scheduling.json.
 
   python assistant/scripts/tracking/scheduling.py propose --ticket <id> [--dry-run]
-  python assistant/scripts/tracking/scheduling.py propose --with "example example" [--channel text|email|honeybook]
+  python assistant/scripts/tracking/scheduling.py propose --with "Delia Vantongeren" [--channel text|email|service]
          [--to <phone|email>] [--lane wedding] [--dry-run]
   python assistant/scripts/tracking/scheduling.py slots [--days 7]      # the open slots now
   python assistant/scripts/tracking/scheduling.py tick                  # picks, confirmations, expiries (the spine)
@@ -35,12 +35,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import advice  # noqa: E402
 import common as C  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import crm  # noqa: E402
 
 AGENT = C.ROOT / "agent"
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _ABBR = {"mon": 0, "tue": 1, "tues": 1, "wed": 2, "thu": 3, "thur": 3, "thurs": 3, "fri": 4, "sat": 5, "sun": 6}
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _HEX24 = re.compile(r"[0-9a-f]{24}")
+
+
+def _is_crm_channel(ch: str) -> bool:
+    return ch == crm.CHANNEL or ch in crm.kinds("CHANNEL_ALIASES")
 
 
 def scfg() -> dict:
@@ -73,7 +79,7 @@ def _first(name: str) -> str:
 
 # ------------------------------------------------------------------ busy time
 def _iso_local(s) -> datetime | None:
-    """A Google / HoneyBook ISO stamp (with offset) or a plain local stamp -> naive local datetime."""
+    """A calendar or CRM ISO stamp (with offset) or a plain local stamp -> naive local datetime."""
     if not s:
         return None
     s = str(s)
@@ -132,14 +138,14 @@ def busy_blocks(start: datetime, days: int, sc: dict | None = None, google=None,
         s = d.replace(hour=h, minute=m)
         hours = float(ev.get("hours") or 1.0)
         out.append((s, s + timedelta(hours=min(hours, 12.0)), str(ev.get("title") or "")[:60]))
-    # 3. HoneyBook meetings in the desk snapshot
-    snap = snap if snap is not None else (C.load_json(C.vault_path(sc.get("hb_snapshot") or "dashboard/data/honeybook.json"), {}) or {})
+    # 3. CRM meetings in the desk snapshot
+    snap = snap if snap is not None else crm.snapshot()
     for m in (snap.get("meetings") or []) if isinstance(snap, dict) else []:
         if not isinstance(m, dict) or m.get("_error"):
             continue
         s, e = _iso_local(m.get("start")), _iso_local(m.get("end"))
         if s:
-            out.append((s, e or s + timedelta(minutes=30), "HoneyBook: " + str(m.get("title") or "meeting")[:50]))
+            out.append((s, e or s + timedelta(minutes=30), crm.name() + ": " + str(m.get("title") or "meeting")[:50]))
     # 4. our own holds
     holds = holds if holds is not None else (C.load_json(C.DATA / "holds.json", {}) or {})
     for h in holds.get("holds") or []:
@@ -237,7 +243,7 @@ def slots_sentence(slots: list) -> str:
 # ------------------------------------------------------------------ who / how to reach them
 def _contact_for(name: str) -> dict:
     """{name, phone, email, workspace_id, cls} for a person named in words, from the leads, the
-    owners' phone book, HoneyBook contacts and the phone threads. Empty fields when unknown."""
+    owners' phone book, the CRM's contacts and the phone threads. Empty fields when unknown."""
     want = re.sub(r"\s+", " ", str(name or "")).strip().lower()
     out = {"name": name.strip(), "phone": "", "email": "", "workspace_id": "", "cls": ""}
     if not want:
@@ -248,7 +254,7 @@ def _contact_for(name: str) -> dict:
             nm = " ".join(x for x in (L.get("name"), L.get("partner")) if x).lower()
             if want in nm or (L.get("name") and str(L["name"]).lower() in want):
                 out.update({"name": L.get("name") or name, "phone": str(L.get("phone") or ""), "email": str(L.get("email") or ""), "cls": "lead",
-                            "workspace_id": str(L.get("workspace_id") or L.get("hb_workspace_id") or "")})
+                            "workspace_id": str(crm.field(L, "thread_id") or "")})
                 break
     except OSError:
         pass
@@ -271,9 +277,9 @@ def _contact_for(name: str) -> dict:
                 out["name"] = t.get("name") or out["name"]
                 break
     if not out["workspace_id"]:
-        snap = C.load_json(C.vault_path(scfg().get("hb_snapshot") or "dashboard/data/honeybook.json"), {}) or {}
+        snap = crm.snapshot()
         for p in snap.get("projects") or []:
-            if want.split(" ")[0] in str(p.get("name") or "").lower() and str(p.get("status") or "") != "archived":
+            if want.split(" ")[0] in str(p.get("name") or "").lower() and crm.status(p) != "archived":
                 out["workspace_id"] = str(p.get("id") or "")
                 break
     return out
@@ -315,8 +321,8 @@ def request_from_ticket(t: dict) -> dict:
         req.update({"who": re.sub(r"<.*?>", "", frm).strip(" \"'"), "channel": "email", "to": em.group(0) if em else frm,
                     "from": _mail_from_for(lane, str(p.get("account") or "")), "in_reply_to": p.get("message_id"),
                     "subject": ("Re: " + str(p.get("subject") or "")).replace("Re: Re:", "Re:")})
-    elif kind in ("inquiry_new", "hb_message_in"):
-        req.update({"who": p.get("name") or p.get("couple") or str(t.get("title") or "").split(":")[0], "channel": "honeybook",
+    elif kind in {"inquiry_new"} | crm.kinds("INBOUND_KINDS"):
+        req.update({"who": p.get("name") or p.get("couple") or str(t.get("title") or "").split(":")[0], "channel": crm.CHANNEL,
                     "workspace_id": p.get("workspace_id") or p.get("project_id") or "", "in_reply_to_id": p.get("comm_id") or ""})
     elif kind == "owner1_request":
         m = re.search(r"\b(?:call|meeting|chat|zoom)\s+with\s+([A-Z][\w'’-]+(?:\s+(?:&|and)\s+[A-Z][\w'’-]+)?(?:\s+[A-Z][\w'’-]+)?)", str(p.get("text") or t.get("summary") or ""))
@@ -328,22 +334,22 @@ def request_from_ticket(t: dict) -> dict:
         elif c["email"]:
             req.update({"channel": "email", "to": c["email"], "from": _mail_from_for(lane), "subject": scfg().get("templates", {}).get("email_subject", "A quick call")})
         elif c["workspace_id"]:
-            req.update({"channel": "honeybook", "workspace_id": c["workspace_id"]})
+            req.update({"channel": crm.CHANNEL, "workspace_id": c["workspace_id"]})
     return req
 
 
 def request_for(name: str, channel: str = "", to: str = "", lane: str = "wedding") -> dict:
-    """What `propose` needs, from an owner's words ("set up a call with example", Sage's `call` field)."""
+    """What `propose` needs, from an owner's words ("set up a call with Delia", Sage's `call` field)."""
     c = _contact_for(name)
     req = {"who": c["name"] or name, "lane": lane, "cls": c["cls"]}
     to = str(to or "")
-    channel = channel or ("text" if (to and "@" not in to) or (not to and c["phone"]) else "email" if (to or c["email"]) else "honeybook" if c["workspace_id"] else "")
+    channel = channel or ("text" if (to and "@" not in to) or (not to and c["phone"]) else "email" if (to or c["email"]) else crm.CHANNEL if c["workspace_id"] else "")
     if channel == "text":
         req.update({"channel": "text", "to": to or c["phone"], "account": _text_account_for(lane)})
     elif channel == "email":
         req.update({"channel": "email", "to": to or c["email"], "from": _mail_from_for(lane), "subject": scfg().get("templates", {}).get("email_subject", "A quick call")})
-    elif channel == "honeybook":
-        req.update({"channel": "honeybook", "workspace_id": c["workspace_id"]})
+    elif _is_crm_channel(channel):
+        req.update({"channel": crm.CHANNEL, "workspace_id": c["workspace_id"]})
     return req
 
 
@@ -375,14 +381,14 @@ def message_for(req: dict, slots: list, sc: dict | None = None) -> dict:
         subj = tp.get("email_subject") if aud == "client" else (tp.get("personal_email_subject") or "A quick call")
         return {"subject": req.get("subject") or _render(subj, **kw),
                 "body": _render(tp.get("email_body") if aud == "client" else tp.get("personal_email_body"), **kw)}
-    return {"body": _render(tp.get("honeybook_body"), **kw), "subject": req.get("subject") or _render(tp.get("email_subject"), **kw)}
+    return {"body": _render(tp.get("crm_body"), **kw), "subject": req.get("subject") or _render(tp.get("email_subject"), **kw)}
 
 
 def card_for(req: dict, slots: list, msg: dict, sc: dict | None = None) -> dict:
     sc = sc or scfg()
     who = str(req.get("who") or req.get("to") or "them")
     lane = str(req.get("lane") or "personal")
-    ask = f"{who} and a call: offer these {len(slots)} times? They are open on both calendars and the HoneyBook meetings."
+    ask = f"{who} and a call: offer these {len(slots)} times? They are open on both calendars" + (f" and the {crm.name()} meetings" if crm.connected() else "") + "."
     label = "Send (Recommended)"
     q = {"header": f"Call with {_first(who)}"[:40], "lane": lane, "audience": _audience(req),
          "options": [{"label": label, "description": "sends exactly this; the hold goes on once they pick"},
@@ -403,27 +409,23 @@ def card_for(req: dict, slots: list, msg: dict, sc: dict | None = None) -> dict:
         q["question"] = (f"{ask}\n[EMAIL PREVIEW]\nFrom: {payload['from']}\nTo: {payload['to']}\nSubject: {payload['subject']}\n\n{msg['body']}")
         q["exec"] = {"kind": "email_send", "approve_label": label, "payload": payload}
     else:
-        payload = {"workspace_id": str(req.get("workspace_id") or ""), "body": msg["body"]}
-        if req.get("in_reply_to_id"):
-            payload["in_reply_to_id"] = str(req["in_reply_to_id"])
-        else:
-            payload["subject"] = msg.get("subject") or "A quick call"
-        q["question"] = f"{ask}\n[HONEYBOOK MESSAGE PREVIEW] To {who}:\n{msg['body']}"
-        q["exec"] = {"kind": "hb_message", "approve_label": label, "payload": payload}
+        ex_out = crm.message_exec(str(req.get("workspace_id") or ""), msg["body"],
+                                  msg.get("subject") or "A quick call", str(req.get("in_reply_to_id") or ""))
+        q["question"] = f"{ask}\n{crm.preview_tag()} To {who}:\n{msg['body']}"
+        if ex_out:
+            q["exec"] = dict(ex_out, approve_label=label)
     q["advice"] = advice.line({"kind": "offer", "lane": lane, "title": q["header"], "age_days": C.age_days(req.get("last_inbound_ts")) if req.get("last_inbound_ts") else 0,
                                "why": "Send offers only times that are free now; nothing is booked until they answer",
                                "waiting_on": "a lead" if req.get("cls") == "lead" else ("a client" if lane == "wedding" else "")})
     return q
 
 
-def _hb_meeting(req: dict) -> dict | None:
-    """The meeting a lead already booked through the HoneyBook scheduler, if any (lead_meetings.py):
-    2026-10-08, example & Dean had booked a call and the first draft still offered one."""
+def _crm_meeting(req: dict) -> dict | None:
+    """A meeting the lead already booked through the CRM scheduler, if any."""
     if str(req.get("lane") or "") != "wedding" or not req.get("who"):
         return None
     try:
-        import lead_meetings
-        return lead_meetings.for_unit(req.get("workspace_id") or "", couple=str(req.get("who") or ""))
+        return crm.booked_meeting(str(req.get("workspace_id") or ""), str(req.get("who") or ""))
     except Exception:  # noqa: BLE001
         return None
 
@@ -443,17 +445,17 @@ def propose(req: dict, now: datetime | None = None, dry: bool = False, busy: lis
         return {"ok": False, "reason": "scheduling disabled in tracking.json"}
     now = now or C.now_local()
     ch = str(req.get("channel") or "")
-    if ch not in ("text", "email", "honeybook"):
-        return {"ok": False, "reason": f"no way to reach {req.get('who') or 'them'}: give a phone number, an email or a HoneyBook project"}
+    if ch not in ("text", "email") and not _is_crm_channel(ch):
+        return {"ok": False, "reason": f"no way to reach {req.get('who') or 'them'}: give a phone number, an email or a CRM workspace id"}
     if ch == "text" and not _digits(req.get("to")) and "@" not in str(req.get("to") or ""):
         return {"ok": False, "reason": "a text needs their number"}
     if ch == "email" and not _EMAIL.search(str(req.get("to") or "")):
         return {"ok": False, "reason": "an email needs their address"}
-    if ch == "honeybook" and not _HEX24.fullmatch(str(req.get("workspace_id") or "")):
-        return {"ok": False, "reason": "a HoneyBook message needs the 24-hex workspace id"}
-    booked = _hb_meeting(req)
+    if _is_crm_channel(ch) and not crm.valid_thread(str(req.get("workspace_id") or "")):
+        return {"ok": False, "reason": f"a {crm.name()} message needs a valid thread id"}
+    booked = _crm_meeting(req)
     if booked:
-        return {"ok": False, "reason": f"{req.get('who') or 'they'} already booked a meeting in HoneyBook: {booked.get('when')}. Confirm that one instead of offering times."}
+        return {"ok": False, "reason": f"{req.get('who') or 'they'} already booked a meeting in {crm.name()}: {booked.get('when')}. Confirm that one instead of offering times."}
     st = _state()
     key = f"{ch}:{_digits(req.get('to')) or str(req.get('to') or req.get('workspace_id') or '').lower()}"
     live = st["proposals"].get(key)
@@ -543,8 +545,8 @@ def _inbound_since(p: dict, since: datetime) -> list:
             frm = str((t.get("payload") or {}).get("from") or "").lower()
             if ts and ts > since and str(p.get("to") or "").lower() in frm:
                 out.append((ts, f"{(t.get('payload') or {}).get('subject') or ''}\n{t.get('summary') or ''}"))
-    else:
-        snap = C.load_json(C.vault_path(scfg().get("hb_snapshot") or "dashboard/data/honeybook.json"), {}) or {}
+    elif _is_crm_channel(p.get("channel") or ""):
+        snap = crm.snapshot()
         for m in snap.get("communications") or []:
             ts = C.parse_any(m.get("created_at"))
             if ts and ts > since and str(m.get("workspace_id") or "") == str(p.get("workspace_id") or "") \
@@ -581,10 +583,11 @@ def confirm_cards(p: dict, slot: dict, sc: dict | None = None) -> list:
         q["question"] = f"{ask}\n[EMAIL PREVIEW]\nFrom: {payload['from']}\nTo: {payload['to']}\nSubject: {subj}\n\n{body}"
         q["exec"] = {"kind": "email_send", "approve_label": label, "payload": payload}
     else:
-        body = _render(tp.get("confirm_honeybook_body"), **kw)
-        payload = {"workspace_id": str(p.get("workspace_id") or ""), "body": body, "subject": str(p.get("subject") or "Our call")}
-        q["question"] = f"{ask}\n[HONEYBOOK MESSAGE PREVIEW] To {who}:\n{body}"
-        q["exec"] = {"kind": "hb_message", "approve_label": label, "payload": payload}
+        body = _render(tp.get("confirm_crm_body"), **kw)
+        ex_out = crm.message_exec(str(p.get("workspace_id") or ""), body, str(p.get("subject") or "Our call"), "")
+        q["question"] = f"{ask}\n{crm.preview_tag()} To {who}:\n{body}"
+        if ex_out:
+            q["exec"] = dict(ex_out, approve_label=label)
     q["advice"] = advice.line({"kind": "offer", "lane": lane, "title": q["header"], "why": f"they chose {when}; the hold card below keeps the slot"})
     d = C.parse_any(slot["start"])
     hold_note = f"Picked by {who} from the times offered on {p.get('ts', '')[:10]}."
@@ -671,7 +674,7 @@ def main() -> int:
     ap.add_argument("cmd", nargs="?", default="tick", choices=["tick", "propose", "slots", "status"])
     ap.add_argument("--ticket")
     ap.add_argument("--with", dest="with_name", default="")
-    ap.add_argument("--channel", default="", choices=["", "text", "email", "honeybook"])
+    ap.add_argument("--channel", default="", help="text | email | service (a message in the client's CRM thread)")
     ap.add_argument("--to", default="")
     ap.add_argument("--lane", default="")
     ap.add_argument("--days", type=int, default=None)

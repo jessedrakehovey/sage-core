@@ -8,7 +8,6 @@
    "doc": "CLAUDE.md#Production Pipeline",
    "steps": {
     "finishing-touches": {
-     "_what": "T-60 days (two months out; one month is too soon): the Finishing Touches file (never 'add-ons': it has to sound upscale) goes to the couple in HoneyBook with the owner's email, prices hidden until checkout, followed by a text. the owner's standing rule 2026-10-17. The operator confirms which collection they booked, then client_texts.py sends it without a card.",
      "subject": "{couple} ({wedding_date}) - Finishing Touches file (2 months out)",
      "trigger": {
       "type": "date",
@@ -17,14 +16,12 @@
      "expires_at": "T-40d",
      "action": {
       "skill": "",
-      "instruction": "{couple}'s wedding is {wedding_date} (about two months out). owner1's standing rule: their Finishing Touches file (the touches their collection does NOT include: toasts & speeches film, aerial cinematography, second cinematographer, iPhone content creator, feature film, raw footage...) goes out now in HoneyBook with his email, prices hidden until checkout, followed by a text. Find which collection they booked and any touches already bought: the signed 'Videography Collection Details' / contract in their HoneyBook project (read-only), or the 'Package booked' line in Wiki/Couples/<date> <Lastname>.md. Then run: python assistant/scripts/client_texts.py touches --unit {unit} --package <keepsake|classic|signature|legacy> [--has drone,second_videographer ...] [--skip ...]. If you cannot tell which collection they booked, post ONE decision card asking owner1 (options: the four collections) and stage this ticket on it; on his answer run the command. TOUCHES_HELD means post ONE decision card with the printed reason. Never write the email or build the file yourself; never say 'add-ons' to a couple.",
       "satisfied_when": {
        "check": "touches_sent"
       }
      }
     },
     "timeline-request": {
-     "_what": "T-30 days: ask the couple for the day-of timeline, vendor list and must-have shots (the HoneyBook questionnaire may already cover it; check first).",
      "subject": "{couple} ({wedding_date}) - request day-of timeline",
      "trigger": {
       "type": "date",
@@ -33,14 +30,12 @@
      "expires_at": "T-1d",
      "action": {
       "skill": "shoot-prep",
-      "instruction": "{couple}'s wedding is on {wedding_date} (30 days out). Check HoneyBook for their questionnaire/timeline. If it is missing or incomplete, draft a warm email (from the account their thread lives on) asking for the day-of timeline, ceremony + reception addresses, vendor list, and must-have shots. Post it as an exec card. If it is already in, note it and do nothing.",
       "satisfied_when": {
        "check": "timeline_on_file"
       }
      }
     },
     "questionnaire-reminder": {
-     "_what": "T-30 days: HoneyBook sent the Wedding Questionnaire at T-60 ('Questionnaire Sent' stage). If it is still blank, the standard reminder text goes out (the owner's standing rule 2026-10-17). The operator does the HoneyBook check; the words and the number are fixed.",
      "subject": "{couple} ({wedding_date}) - questionnaire reminder text (30 days out)",
      "trigger": {
       "type": "date",
@@ -49,7 +44,6 @@
      "expires_at": "T-22d",
      "action": {
       "skill": "",
-      "instruction": "{couple}'s wedding is {wedding_date} (30 days out). Check the Wedding Questionnaire in their HoneyBook project (read-only: the questionnaire smart file's responses / its status). If it has been filled out, `tickets.py done` this with a note saying so and do nothing else. If it is still blank or incomplete, run: python assistant/scripts/client_texts.py send questionnaire_reminder --unit {unit}  (the standard text, from owner1's phone, no card). If that prints CLIENT_TEXT_HELD, post ONE decision card for owner1 with the printed text and reason. Never write the text yourself.",
       "satisfied_when": {
        "check": "questionnaire_answered"
       }
@@ -65,7 +59,6 @@
      "expires_at": "T-8d",
      "action": {
       "skill": "",
-      "instruction": "{couple}'s wedding is {wedding_date} (three weeks out). Check the Wedding Questionnaire in their HoneyBook project (read-only). If it has been filled out, `tickets.py done` this with a note saying so. If it is still blank or incomplete, run: python assistant/scripts/client_texts.py send questionnaire_reminder --unit {unit}  (the standard text from owner1's phone, no card; it refuses a second send inside 7 days). If that prints CLIENT_TEXT_HELD, post ONE decision card for owner1 with the printed text and reason. Never write the text yourself.",
       "satisfied_when": {
        "check": "questionnaire_answered"
       }
@@ -81,8 +74,7 @@
      "expires_at": "T-6d",
      "action": {
       "skill": "",
-      "auto": "client_texts:checkin",
-      "instruction": "{couple}'s wedding is {wedding_date} (two weeks out) and the standard check-in text could not be sent by itself (see the note at the front of this instruction, usually no phone number on file). Look for their number (HoneyBook contact, lead file, their last text to owner1), then post ONE card for owner1 with the number you found (or that none exists) and the text to send (python assistant/scripts/client_texts.py send checkin --unit {unit} --dry-run prints it). owner1 can add 'phone' to the ledger entry {unit} in scripts/projects/project_state.json so the rest of the chain can text them."
+      "auto": "client_texts:checkin"
      }
     },
     "prep-checkin": {
@@ -95,7 +87,6 @@
      "expires_at": "T-1d",
      "action": {
       "skill": "shoot-prep",
-      "instruction": "Run the shoot-prep skill for {couple} ({wedding_date}): build the call sheet / run-of-show from the wiki couple note + HoneyBook, verify gear + backup plan, and draft the pre-shoot check-in email as an exec card. Never state a delivery date; leave [owner1: confirm] blanks.",
       "satisfied_when": {
        "check": "outbound_since",
        "days": 7
@@ -211,8 +202,7 @@
      },
      "expires_at": "T+3d",
      "action": {
-      "skill": "inquiry-reply",
-      "instruction": "{couple} inquired at {anchor} and no reply has been carded yet. Read the inquiry (HoneyBook / the mail ticket), draft the reply with the inquiry-reply skill and post it as an exec card. Availability and pricing stay as [owner1: confirm] blanks."
+      "skill": "inquiry-reply"
      }
     },
     "quote-followup-48h": {
@@ -224,8 +214,7 @@
      },
      "expires_at": "T+6d",
      "action": {
-      "skill": "inquiry-reply",
-      "instruction": "A proposal went to {couple} on {anchor}. If HoneyBook still shows it unsigned, draft a light, no-pressure follow-up (any questions? happy to hop on a call) as an exec card. If signed, note it and do nothing."
+      "skill": "inquiry-reply"
      }
     },
     "quote-followup-7d": {
@@ -382,7 +371,6 @@
   }
  },
  "inputs": {
-  "_doc": "triage_next.py (2026-10-18): every client input leads to its next action. `facts` = the words that mean a fact is in the message (regex, case-insensitive, matched against the message plus the sender's two previous texts). `actions` = what each fact leads to, in order; gate auto = code does it now, card = code posts the exec card (the owner's tap runs it), operator = left for the drafter. `needs` names what the step requires (a HoneyBook workspace, a ledger unit); without it the step is skipped or handed to the operator. Business words live here, not in code.",
   "facts": {
    "copy_on_everything": {
     "any": [
@@ -435,10 +423,8 @@
   "actions": {
    "contact": [
     {
-     "do": "hb_add_participant",
      "gate": "card",
-     "needs": "workspace",
-     "detail": "add them to the couple's HoneyBook project (HoneyBook mails them the invite; every message and file then reaches them)"
+     "needs": "workspace"
     },
     {
      "do": "also_notify",
@@ -455,10 +441,8 @@
    ],
    "copy_on_everything": [
     {
-     "do": "hb_add_participant",
      "gate": "card",
-     "needs": "workspace",
-     "detail": "copy on everything = a participant on the HoneyBook project"
+     "needs": "workspace"
     },
     {
      "do": "also_notify",
@@ -476,7 +460,6 @@
      "why": "they said the questionnaire is done"
     },
     {
-     "do": "hb_note",
      "gate": "auto",
      "needs": "workspace"
     },
@@ -488,11 +471,9 @@
    ],
    "lost": [
     {
-     "do": "hb_set_stage",
      "gate": "card",
      "needs": "workspace",
-     "reason": "went another direction",
-     "detail": "archive the project in HoneyBook as lost"
+     "reason": "went another direction"
     },
     {
      "do": "followups_stop",
@@ -500,7 +481,6 @@
      "why": "went another direction"
     },
     {
-     "do": "hb_note",
      "gate": "auto",
      "needs": "workspace"
     },
@@ -512,16 +492,12 @@
    ],
    "date_change": [
     {
-     "do": "hb_project_update",
-     "gate": "operator",
-     "detail": "the wedding date moved: confirm the new date with them, then an hb_project_update card (project_date) + the ledger wedding_date + re-arm the chain + the calendar hold"
+     "gate": "operator"
     }
    ],
    "venue_change": [
     {
-     "do": "hb_project_update",
-     "gate": "operator",
-     "detail": "new venue: hb_project_update card (project_location) + the couple page + the venue note"
+     "gate": "operator"
     }
    ],
    "reply": [
@@ -540,7 +516,6 @@
      "why": "they sent the timeline / list"
     },
     {
-     "do": "hb_note",
      "gate": "auto",
      "needs": "workspace"
     },
@@ -552,7 +527,6 @@
    ],
    "yes_to_proposal": [
     {
-     "do": "hb_note",
      "gate": "auto",
      "needs": "workspace",
      "detail": "note the yes on the project; the proposal / contract step is the operator's reply"

@@ -45,9 +45,9 @@ check("two classes with a threshold of 20", set(classes) == {"record_write", "ro
 check("a tracking_fix card is a record write", P.classify(card("q1", "tracking_fix", "Weekly record check"), None, classes) == "record_write")
 check("a calendar hold is a record write", P.classify(card("q2", "calendar_hold", "Date from Mom"), None, classes) == "record_write")
 fu = {"kind": "followup", "payload": {"sop": "wedding-lifecycle", "step": "thank-you"}}
-check("the thank-you email (by its follow-up step) is a routine client send", P.classify(card("q3", "email_send", "example thank you"), fu, classes) == "routine_client_send")
+check("the thank-you email (by its follow-up step) is a routine client send", P.classify(card("q3", "email_send", "Sloane thank you"), fu, classes) == "routine_client_send")
 check("a 'footage is safe' text (by header words) is a routine client send", P.classify(card("q4", "imessage_send", "Footage is safe: Sara"), None, classes) == "routine_client_send")
-check("a reply to a lead is NOT routine (no step, no words)", P.classify(card("q5", "imessage_send", "Text reply: example"), None, classes) == "")
+check("a reply to a lead is NOT routine (no step, no words)", P.classify(card("q5", "imessage_send", "Text reply: Delia"), None, classes) == "")
 check("a card with no exec is in no class", P.classify({"questions": [{"header": "Hot lead - what next?"}]}, None, classes) == "")
 
 # ------------------------------------------------------------------ as-is
@@ -71,10 +71,10 @@ for i in range(22):
 # a routine send with one edit in the middle, two as-is after
 for i, (opt, rev) in enumerate([("Approve (Recommended)", False), ("Approve (Recommended)", True), ("Approve (Recommended)", False), ("Approve (Recommended)", False)]):
     qid = f"s{i:012d}"
-    cards_db[qid] = card(qid, "email_send", "example thank you")
+    cards_db[qid] = card(qid, "email_send", "Sloane thank you")
     answers[qid] = A(qid, opt, (t0 + timedelta(days=2, hours=i)).strftime("%Y-%m-%dT%H:%M:%S"), epoch=(t0 + timedelta(days=2, hours=i)).timestamp(), revised=rev)
 # a lead reply: never counted
-cards_db["lead0000000000"] = card("lead0000000000", "imessage_send", "Text reply: example", "Send (Recommended)")
+cards_db["lead0000000000"] = card("lead0000000000", "imessage_send", "Text reply: Delia", "Send (Recommended)")
 answers["lead0000000000"] = A("lead0000000000", "Send (Recommended)", "2026-10-14T10:00:00", epoch=(NOW - timedelta(days=1)).timestamp())
 # a tap by someone who is not an owner
 cards_db["x0000000000000"] = card("x0000000000000", "calendar_hold", "Date", "Add to calendar (Recommended)")

@@ -90,7 +90,7 @@ def in_window(now: datetime) -> bool:
 
 def resolve_person(name: str) -> dict | None:
     """An owner in people.json by key or first name; None when unknown."""
-    want = re.sub(r"[^a-z ]", "", str(name or "").lower()).strip()
+    want = re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()     # digits kept: a template's owner6
     if not want:
         return None
     for key, u in (core.owners() or core.people().get("users") or {}).items():   # owners only (a staff member is not checked back with, 2026-10-24)

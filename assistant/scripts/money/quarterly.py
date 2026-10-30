@@ -10,8 +10,8 @@ Safe harbour: when quarterly.prior_year_total_tax is set, the lower of the two i
 
 Each due date (money.json -> quarterly.due) is ARMED through followups.py as the existing `money /
 quarterly-estimate` step (T-10d, unit q:<year>-<n>); the amount it should name is in
-data/money/quarterly.json for whoever works the ticket. After a HoneyBook payment lands (bucket
-income:honeybook) ONE card suggests the set-aside, stating what Relay's auto-split already moves
+data/money/quarterly.json for whoever works the ticket. After a CRM client payment lands (bucket
+income:crm) ONE card suggests the set-aside, stating what Relay's auto-split already moves
 when money.json -> relay.splits_pct is filled in. Report only: nothing here moves or pays anything.
 
   python assistant/scripts/money/quarterly.py            # tick (the spine runs this)
@@ -28,7 +28,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import common as C  # noqa: E402
+import crm  # noqa: E402
 
 OUT = C.DIR / "quarterly.json"
 
@@ -155,7 +157,7 @@ def arm_next(est: dict, c: dict, dry: bool) -> bool:
 def new_payments(led: dict, st: dict, today: date | None = None, since_days: int = 14) -> list:
     seen = set(st.get("set_aside_seen") or [])
     floor = ((today or date.today()) - timedelta(days=since_days)).isoformat()
-    rows = [t for t in led["transactions"].values() if t.get("bucket") == "income:honeybook" and not t.get("pending")
+    rows = [t for t in led["transactions"].values() if t.get("bucket") == "income:crm" and not t.get("pending")
             and t["id"] not in seen and str(t.get("posted") or "") >= floor and float(t.get("amount") or 0) > 0]
     rows.sort(key=lambda t: t.get("posted", ""))
     return rows
@@ -179,7 +181,7 @@ def set_aside_card(rows: list, est: dict, led: dict, c: dict) -> dict:
         advice = f"💡 Set aside {C.money(want)} ({pct * 100:.0f}% of it) for taxes before spending the rest; Q{(est.get('next_due') or {}).get('n', '?')} is due {(est.get('next_due') or {}).get('date', '?')}."
     n = len(rows)
     q = {"header": "Money: set-aside", "lane": "money",
-         "question": (f"{n} HoneyBook payment{'s' if n != 1 else ''} landed ({C.money(total)}) in {', '.join(sorted(accts))}. "
+         "question": (f"{n} {crm.name()} payment{'s' if n != 1 else ''} landed ({C.money(total)}) in {', '.join(sorted(accts))}. "
                       f"At this year's rate ({pct * 100:.0f}%) set aside {C.money(want)} for taxes." + tail),
          "details": "\n".join(f"{t['posted']}  {C.money(float(t['amount']), True)}  {t.get('description', '')[:50]}" for t in rows),
          "advice": advice,

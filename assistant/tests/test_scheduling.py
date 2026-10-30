@@ -23,7 +23,31 @@ import common as C  # noqa: E402
 import scheduling as S  # noqa: E402
 import cards  # noqa: E402
 import exec_store as es  # noqa: E402
+if "acme_message" not in es.KIND_LANES:                        # no CRM plugin here (the bare engine): a stand-in kind
+    es.KIND_LANES["acme_message"] = "crm"
+    es.REQUIRED_KEYS["acme_message"] = [("workspace_id",), ("body",)]
 from alib import save_json  # noqa: E402
+import crm as _crm  # noqa: E402
+
+
+class _AcmeConn:
+    CRM = True; SERVICE = "AcmeCRM"; PREVIEW_TAG = "[ACME PREVIEW]"
+    CHANNEL_ALIASES = {"acme"}; MESSAGE_KINDS = {"acme_message"}; INBOUND_KINDS = {"acme_message_in"}
+    FIELD_ALIASES = {}
+    @staticmethod
+    def valid_thread(s):
+        import re as _re; return bool(_re.fullmatch(r"[0-9a-f]{24}", str(s or "")))
+    @staticmethod
+    def message_exec(thread_id, body, subject="", in_reply_to=""):
+        pa = {"workspace_id": thread_id, "body": body}
+        if in_reply_to: pa["in_reply_to_id"] = in_reply_to
+        elif subject: pa["subject"] = subject
+        return {"kind": "acme_message", "payload": pa}
+    @staticmethod
+    def booked_meeting(thread_id, who=""): return None
+
+_crm._plugins = lambda: [_AcmeConn()]
+_crm._ALIASES = None
 
 FAILS = []
 NOW = datetime(2026, 10, 15, 12, 0)          # Thursday noon (the busy-block fixtures are literal dates around it)
@@ -48,7 +72,7 @@ google = [{"title": "Dentist", "start": "2026-10-16T10:00:00-07:00", "end": "202
           {"account": "x", "error": "boom"}]
 cal = {"events": [{"date": "2026-10-20", "time": "14:00", "hours": 1.0, "title": "Phone call with Will", "owner": "owner1"},
                   {"date": "2026-10-21", "time": None, "all_day": True, "title": "Trip", "booking": "", "owner": "owner1"}]}
-snap = {"meetings": [{"start": "2026-10-19T10:00:00-07:00", "end": "2026-10-19T10:30:00-07:00", "title": "example & Dean call"}]}
+snap = {"meetings": [{"start": "2026-10-19T10:00:00-07:00", "end": "2026-10-19T10:30:00-07:00", "title": "Delia & Hollis call"}]}
 holds = {"holds": [{"title": "Call: Sam", "date": "2026-10-22", "time": "16:00", "duration_min": 30}]}
 props = {"text:1": {"status": "sent", "who": "staff1", "slots": [{"start": "2026-10-16 14:00", "duration_min": 30}]},
          "text:2": {"status": "expired", "who": "Old", "slots": [{"start": "2026-10-16 15:00", "duration_min": 30}]}}
@@ -56,8 +80,8 @@ busy = S.busy_blocks(NOW, 7, sc, google=google, cal=cal, snap=snap, holds=holds,
 labels = {l for _, _, l in busy}
 check("google timed + wedding all-day block; a birthday all-day and an error row do not",
       "Dentist" in labels and "Glenrock wedding" in labels and "Birthday" not in labels, labels)
-check("calendar file, HoneyBook meeting, our hold and a live offer all block; an expired offer and a plain all-day trip do not",
-      "Phone call with Will" in labels and "HoneyBook: example & Dean call" in labels and "hold: Call: Sam" in labels
+check("calendar file, AcmeCRM meeting, our hold and a live offer all block; an expired offer and a plain all-day trip do not",
+      "Phone call with Will" in labels and "AcmeCRM: Delia & Hollis call" in labels and "hold: Call: Sam" in labels
       and "offered to staff1" in labels and "offered to Old" not in labels and "Trip" not in labels, labels)
 # google times arrive with an offset: the dentist is 10:00 local whatever the machine zone
 dent = next(b for b in busy if b[2] == "Dentist")
@@ -76,13 +100,13 @@ check("slot text reads like a person wrote it", S.slot_text({"start": "2026-10-2
 # ------------------------------------------------------------------ the three card shapes, through the real guards
 cards.rulings.find = lambda *a, **k: []
 slots = [{"start": "2026-10-16 11:30", "duration_min": 30}, {"start": "2026-10-20 10:00", "duration_min": 30}, {"start": "2026-10-21 16:00", "duration_min": 30}]
-req_t = {"who": "example example & Dean", "channel": "text", "to": "+18055550123", "account": "owner1-iphone", "lane": "wedding", "cls": "lead", "key": "text:8055550123",
+req_t = {"who": "Delia Vantongeren & Hollis", "channel": "text", "to": "+18055550123", "account": "owner1-iphone", "lane": "wedding", "cls": "lead", "key": "text:8055550123",
          "last_inbound_ts": "2026-10-15T11:50:00"}
 msg = S.message_for(req_t, slots, sc)
 q = S.card_for(req_t, slots, msg, sc)
 ex, err = cards._sanitize_exec(q)
 check("text card: imessage_send, [TEXT PREVIEW], body verbatim, under 320 chars, first name only",
-      ex and not err and ex["kind"] == "imessage_send" and "[TEXT PREVIEW]" in q["question"] and len(msg["body"]) <= 320 and msg["body"].startswith("Hi example!"), (err, len(msg["body"])))
+      ex and not err and ex["kind"] == "imessage_send" and "[TEXT PREVIEW]" in q["question"] and len(msg["body"]) <= 320 and msg["body"].startswith("Hi Delia!"), (err, len(msg["body"])))
 check("text card carries all three times in words", all(S.slot_text(s) in msg["body"] for s in slots), msg["body"])
 r = cards.post([q], "test", lane="wedding")
 check("text card passes cards.post (draft lint, freshness, recommendation)", r["posted"], r)
@@ -94,12 +118,12 @@ ex, err = cards._sanitize_exec(q)
 check("email card: email_send from the allowed identity, from/to/subject/body verbatim, reply threaded",
       ex and not err and ex["kind"] == "email_send" and ex["payload"]["in_reply_to"] == "<m1@x>" and "example-org" in ex["payload"]["body"], err)
 check("email card passes cards.post", cards.post([q], "test", lane="wedding")["posted"])
-req_h = {"who": "Olivia", "channel": "honeybook", "workspace_id": "b500baf6ded6b3284d8e147e", "lane": "wedding", "key": "honeybook:b500baf6ded6b3284d8e147e"}
+req_h = {"who": "Olivia", "channel": _crm.CHANNEL, "workspace_id": "b500baf6ded6b3284d8e147e", "lane": "wedding", "key": f"{_crm.CHANNEL}:b500baf6ded6b3284d8e147e"}
 msg = S.message_for(req_h, slots, sc)
 q = S.card_for(req_h, slots, msg, sc)
 ex, err = cards._sanitize_exec(q)
-check("HoneyBook card: hb_message with a subject when not a reply, preview marker present", ex and not err and ex["kind"] == "hb_message"
-      and ex["payload"].get("subject") and "[HONEYBOOK MESSAGE PREVIEW]" in q["question"], err)
+check("CRM card: connector exec kind with a subject when not a reply, preview marker present", ex and not err and ex["kind"] == "acme_message"
+      and ex["payload"].get("subject") and _crm.preview_tag() in q["question"], err)
 req_p = {"who": "Dave", "channel": "text", "to": "+18055550001", "account": "owner1-iphone", "lane": "personal", "key": "text:8055550001"}
 msg = S.message_for(req_p, slots, sc)
 q = S.card_for(req_p, slots, msg, sc)
@@ -112,7 +136,7 @@ check("no price / date / turnaround words in any template",
 # refusals
 check("no channel -> a plain reason", not S.propose({"who": "X", "lane": "wedding"}, now=NOW, dry=True)["ok"])
 check("a text without a number is refused", not S.propose({"who": "X", "channel": "text", "to": "", "lane": "wedding"}, now=NOW, dry=True)["ok"])
-check("a HoneyBook message without a 24-hex workspace is refused", not S.propose({"who": "X", "channel": "honeybook", "workspace_id": "abc", "lane": "wedding"}, now=NOW, dry=True)["ok"])
+check("a AcmeCRM message without a 24-hex workspace is refused", not S.propose({"who": "X", "channel": "acme", "workspace_id": "abc", "lane": "wedding"}, now=NOW, dry=True)["ok"])
 
 # ------------------------------------------------------------------ propose end to end + the one-offer rule
 for _c in cards._live("test"):      # the template checks above left the same draft open; one message, one card (decision_keys)
@@ -142,7 +166,7 @@ qid = r["qid"]
 cards.answer(qid, "Send (Recommended)", by="owner1")          # stamped with the real clock
 REAL = datetime.now()
 stamp = lambda m: (REAL + timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%S")
-save_json(TMP / "phone_threads.json", {"+18055550123": {"name": "example", "messages": [
+save_json(TMP / "phone_threads.json", {"+18055550123": {"name": "Delia", "messages": [
     {"ts": stamp(1), "dir": "out", "text": "times", "ref": "tk-1"},
     {"ts": stamp(2), "dir": "in", "text": "The first one works great!", "ref": ""}]}})
 t = S.tick(now=REAL + timedelta(minutes=5), dry=False)
@@ -173,9 +197,9 @@ check("declined reply -> status declined, no card; a 14-day-old offer expires", 
 
 # ------------------------------------------------------------------ requests from tickets and from words
 tk = {"id": "t1", "kind": "imessage_in", "lane": "wedding", "created": "2026-10-15T11:00:00Z",
-      "payload": {"from": "+18055550123", "name": "example", "text": "can we hop on a call this week?", "account": "owner1-iphone", "received": "2026-10-15T11:00:00"}}
+      "payload": {"from": "+18055550123", "name": "Delia", "text": "can we hop on a call this week?", "account": "owner1-iphone", "received": "2026-10-15T11:00:00"}}
 rq = S.request_from_ticket(tk)
-check("a text ticket -> text channel from the same phone account", rq["channel"] == "text" and rq["to"] == "+18055550123" and rq["account"] == "owner1-iphone" and rq["who"] == "example")
+check("a text ticket -> text channel from the same phone account", rq["channel"] == "text" and rq["to"] == "+18055550123" and rq["account"] == "owner1-iphone" and rq["who"] == "Delia")
 tk = {"id": "t2", "kind": "email", "lane": "wedding", "created": "2026-10-15T11:00:00Z",
       "payload": {"from": "Sharon Ko <sharon@example.com>", "subject": "drone footage", "message_id": "<m1@x>", "account": "example"}}
 rq = S.request_from_ticket(tk)
@@ -185,7 +209,7 @@ check("a mail ticket -> email from the account it arrived on, threaded, Re: subj
 (TMP / "leads" / "lead1.json").write_text(json.dumps({"lead": {"name": "Arden", "partner": "Reese", "phone": "+1 (555) 057-8657", "email": "ar@example.com"}}), encoding="utf-8")
 tk = {"id": "t3", "kind": "owner1_request", "lane": "wedding", "created": "2026-10-15T11:00:00Z", "payload": {"text": "set up a call with Arden next week"}}
 rq = S.request_from_ticket(tk)
-check("'set up a call with Arden' -> the lead's number, text channel", rq["channel"] == "text" and "555-057-8657" in rq["to"].replace(" ", "").replace("(", "").replace(")", "").replace("-", "") and rq["who"] == "Arden", rq)
+check("'set up a call with Arden' -> the lead's number, text channel", rq["channel"] == "text" and "5550578657" in rq["to"].replace(" ", "").replace("(", "").replace(")", "").replace("-", "") and rq["who"] == "Arden", rq)
 rq = S.request_for("Arden", channel="email")
 check("request_for honours a channel the owner named", rq["channel"] == "email" and rq["to"] == "ar@example.com" and rq["from"] == "owner3@example.invalid", rq)
 rq = S.request_for("Nobody Known")

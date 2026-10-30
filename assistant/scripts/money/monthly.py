@@ -1,6 +1,6 @@
 """monthly.py - the plain-sentence money readback on the 1st, to the owners' shared space.
 
-Last month from the ledger: income (HoneyBook called out), spend by bucket with the top few on each
+Last month from the ledger: income (CRM payments called out), spend by bucket with the top few on each
 side, business profit and its change against the month before, balances by account kind, and where
 the next quarterly stands. Posted once per month (money.json -> monthly.day / after) through the
 agent's own poster (assistant/agent/bridge.post: home space once, outbox, thread root) so owner
@@ -19,8 +19,10 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import common as C  # noqa: E402
 import quarterly  # noqa: E402
+import crm  # noqa: E402
 
 AGENT = C.ROOT / "agent"
 
@@ -41,7 +43,7 @@ def _sums(led: dict, first: date, last: date, r: dict) -> dict:
             continue
         if b.get("kind") == "income":
             out["income"] += amt
-            if t.get("bucket") == "income:honeybook":
+            if t.get("bucket") == "income:crm":
                 out["income_hb"] += amt
         elif b.get("kind") == "expense":
             side = "biz" if b.get("side") == "business" else "personal"
@@ -84,7 +86,7 @@ def readback_text(led: dict, year: int, month: int, c: dict | None = None) -> st
     lines = [f"Money, {name}:"]
     inc = f"Income {C.money(cur['income'])}"
     if cur["income_hb"]:
-        inc += f", {C.money(cur['income_hb'])} of it HoneyBook payments"
+        inc += f", {C.money(cur['income_hb'])} of it {crm.name()} payments"
     lines.append(inc + ".")
     biz = f"Business spend {C.money(cur['biz_total'])}"
     if cur["biz"]:

@@ -44,7 +44,7 @@ def _is_root(message_name: str) -> bool:
     """A top-level Chat message is spaces/S/messages/ID.ID; a reply in its thread is spaces/S/messages/ID.OTHER.
     Until 2026-10-29 this file compared only the thread part, so EVERY reply in a thread counted as a fresh
     top-level message: THIS THREAD SO FAR was never built for a reply, and the brain was handed the space's
-    newest three lines instead (the Lensrentals / example / Chris guess under the back-taxes line)."""
+    newest three lines instead (the Lensrentals / Teo / Chris guess under the back-taxes line)."""
     m = re.match(r"spaces/[^/]+/messages/([^/.]+)\.([^/.]+)$", str(message_name or ""))
     return bool(m) and m.group(1) == m.group(2)
 

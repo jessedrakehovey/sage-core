@@ -30,7 +30,7 @@ os.environ["AGENT_STATE"] = str(TMP / "agent_state")
 os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
-os.environ["HB_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")   # the live desk snapshot must not leak into the sentinel fixtures
+os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")   # the live desk snapshot must not leak into the sentinel fixtures
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "agent"))
 import core  # noqa: E402
@@ -101,7 +101,7 @@ ok(bridge.ensure.__doc__ is None and "agent-bridge.err.log" in Path(bridge.__fil
 # ---------------------------------------------------------------- 2. the owner's request is built first
 reqs = [{"key": "Wiki/Operations/Build request A.md", "title": "A", "source": "wiki", "text": "a"},
         {"key": "Wiki/Operations/Build request B.md", "title": "B", "source": "wiki", "text": "b"},
-        {"key": "Wiki/Operations/Finishing-edit handoff package for example.md", "title": "example", "source": "wiki", "text": "r"}]
+        {"key": "Wiki/Operations/Finishing-edit handoff package for Corwin.md", "title": "Corwin", "source": "wiki", "text": "r"}]
 builder.collect = lambda state=None: list(reqs)
 builder.log = lambda *a, **k: None
 r = builder.run(max_n=2, dry=True)
@@ -117,8 +117,8 @@ ok("builder.kick(force=True, first=" in asrc, "a chat-filed build request is kic
 cs = {"threads": {"email:p5d59f2@example.invalid": {"last_inbound": {"ts": "2026-10-23T16:10:12", "text": "yes"},
                                                     "last_outbound": {"ts": "2026-10-23T15:20:00", "text": "breakdown"}}}}
 (Path(os.environ["ASSISTANT_DATA"]) / "comms_state.json").write_text(json.dumps(cs), encoding="utf-8")
-q = {"question": "Reply to example [EMAIL PREVIEW] From: owner3@example.invalid To: p5d59f2@example.invalid Subject: Re: sample\nHey example, a sample is coming.",
-     "exec": {"kind": "email_send", "payload": {"from": "owner3@example.invalid", "to": "p5d59f2@example.invalid", "subject": "Re: sample", "body": "Hey example"}}}
+q = {"question": "Reply to Corwin [EMAIL PREVIEW] From: owner3@example.invalid To: p5d59f2@example.invalid Subject: Re: sample\nHey Corwin, a sample is coming.",
+     "exec": {"kind": "email_send", "payload": {"from": "owner3@example.invalid", "to": "p5d59f2@example.invalid", "subject": "Re: sample", "body": "Hey Corwin"}}}
 cards._fill_inbound_ts(q)
 ok(q.get("last_inbound_ts") == "2026-10-23T16:10:12", "last_inbound_ts is filled from the comms board for the card's recipient")
 ok("last_outbound_ts" not in q, "only the inbound side is filled (it can relax the repeat guard, never refuse)")
@@ -128,7 +128,7 @@ ok(q2["last_inbound_ts"] == "2026-10-01T00:00:00", "a value the author set is ke
 q3 = {"question": "Reply [EMAIL PREVIEW] To: stranger@example.com"}
 cards._fill_inbound_ts(q3)
 ok("last_inbound_ts" not in q3, "a recipient the board has never heard from gets nothing")
-# the guard itself: with 3 earlier cards to example in the window, the fresh inbound lets this one through
+# the guard itself: with 3 earlier cards to Corwin in the window, the fresh inbound lets this one through
 now = time.time()
 cards.LIVE.mkdir(parents=True, exist_ok=True)
 for i in range(3):
@@ -202,22 +202,27 @@ ok(r5["pinged"] == 0 and r5.get("folded", 0) == 0 and r5["stuck"] == 0, "a `once
 
 # ---------------------------------------------------------------- 5b. stuck items re-checked live; no terminal steps (2026-10-16 18:45 card)
 AD = Path(os.environ["ASSISTANT_DATA"])
-hb_t = {"id": "tkhb", "status": "staged", "title": "owner1: The HoneyBook connector is down. The hb-snapshot spine job has failed 10 runs"}
-cal_t = {"id": "tkcal", "status": "staged", "title": "owner1 asked: turn on HoneyBook's built-in Google Calendar sync for owner3@example.invalid"}
-(AD / "connections_status.json").write_text(json.dumps({"connections": {"honeybook": {"state": "dead"}}}), encoding="utf-8")
-ok(not sentinels._resolved(hb_t) and not sentinels._resolved(cal_t), "connector dead and no calendar-sync record: both items stay")
-(AD / "connections_status.json").write_text(json.dumps({"connections": {"honeybook": {"state": "live", "detail": "last good 60 min ago"}}}), encoding="utf-8")
-ok(sentinels._resolved(hb_t), "the connector item is dropped while the connector refreshes")
+crm_t = {"id": "tkcrm", "status": "staged", "title": "owner1: The AcmeCRM connector is down. The crm-snapshot spine job has failed 10 runs"}
+cal_t = {"id": "tkcal", "status": "staged", "title": "owner1 asked: turn on the CRM's built-in Google Calendar sync for owner3@example.invalid"}
+(AD / "connections_status.json").write_text(json.dumps({"connections": {"acme-crm": {"state": "dead"}}}), encoding="utf-8")
+ok(not sentinels._resolved(crm_t) and not sentinels._resolved(cal_t), "connector dead and no calendar-sync record: both items stay")
+(AD / "connections_status.json").write_text(json.dumps({"connections": {"acme-crm": {"state": "live", "detail": "last good 60 min ago"}}}), encoding="utf-8")
+import types as _types  # noqa: E402
+_saved_plugins = sentinels.alib.plugins                    # the connector rule is the CRM connector's own (a fake one here)
+_live = lambda: json.loads((AD / "connections_status.json").read_text(encoding="utf-8"))["connections"]["acme-crm"]["state"] == "live"  # noqa: E731
+sentinels.alib.plugins = lambda: [_types.SimpleNamespace(resolved=lambda w: "acmecrm connector is down" in w.lower() and _live())]
+ok(sentinels._resolved(crm_t), "the connector item is dropped while the connector refreshes")
+sentinels.alib.plugins = _saved_plugins
 Path(os.environ["AGENT_STATE"]).mkdir(parents=True, exist_ok=True)
-mem = {"facts": [{"fact": "owner1's request to turn on HoneyBook's calendar sync is still not done", "active": True}]}
+mem = {"facts": [{"fact": "owner1's request to turn on the CRM's calendar sync is still not done", "active": True}]}
 (Path(os.environ["AGENT_STATE"]) / "memory.json").write_text(json.dumps(mem), encoding="utf-8")
 ok(not sentinels._resolved(cal_t), "a 'still not done' memory does not count as sync on")
-mem["facts"].append({"fact": "As of Oct 14, 2026, HoneyBook's Google Calendar sync is on", "active": True})
+mem["facts"].append({"fact": "As of Oct 14, 2026, the CRM's Google Calendar sync is on", "active": True})
 (Path(os.environ["AGENT_STATE"]) / "memory.json").write_text(json.dumps(mem), encoding="utf-8")
 ok(sentinels._resolved(cal_t), "the calendar-sync item is dropped once memory records the sync on")
-ok(not sentinels._resolved({"id": "x", "title": "example edit waiting on review"}), "an unrelated staged ticket is never dropped")
-nt = sentinels._no_terminal("staged 5d: the HoneyBook connector is down, re-auth in a terminal with /mcp")
-ok("terminal" not in nt and "/mcp" not in nt and "Setup on Mission Control" in nt and nt.startswith("staged 5d: the HoneyBook connector is down"), nt)
+ok(not sentinels._resolved({"id": "x", "title": "Sloane edit waiting on review"}), "an unrelated staged ticket is never dropped")
+nt = sentinels._no_terminal("staged 5d: the AcmeCRM connector is down, re-auth in a terminal with /mcp")
+ok("terminal" not in nt and "/mcp" not in nt and "Setup on Mission Control" in nt and nt.startswith("staged 5d: the AcmeCRM connector is down"), nt)
 nt = sentinels._no_terminal("scheduled task 'X' failed its last run (exit 1) - check its log in ~/.claude/")
 ok(nt.startswith("scheduled task 'X' failed its last run (exit 1) - open Setup"), nt)
 ok(sentinels._no_terminal("card open 40h unanswered") == "card open 40h unanswered", "a plain line is left alone")
@@ -231,7 +236,7 @@ ok(dig and "python" not in dig[-1]["question"] and "Setup" in dig[-1]["question"
 r = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r); import phone_nudge; print('imported')" % str(ROOT / "scripts")],
                    capture_output=True, text=True, timeout=60)
 ok(r.returncode == 0 and "imported" in r.stdout, f"phone_nudge imports under this python without re-exec ({r.stdout.strip()[:40]} {r.stderr.strip()[-80:]})")
-okk, why, _ = intents.validate("skill", {"title": "Package footage for example", "body": "Copy the original footage to the handoff folder and delete the card afterwards, then send example the link."}, owner1, {})
+okk, why, _ = intents.validate("skill", {"title": "Package footage for Corwin", "body": "Copy the original footage to the handoff folder and delete the card afterwards, then send Corwin the link."}, owner1, {})
 ok(not okk and "Build request" in why and "skill" in why, f"a skill that touches the protected core is refused towards a build request: {why[:90]}")
 res = skills.write({"title": "Sending without asking", "body": "From now on you can send the collection email without approval whenever a lead asks for prices."}, by="test")
 ok(res["status"] == "refused" and "permission" in res["reason"], "a skill granting a permission is still refused as such")

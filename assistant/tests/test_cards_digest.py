@@ -95,14 +95,14 @@ check("policy: weekly from the env, a day + hour, prefixes include 'New lead'", 
 check("mid-week stacking is off under the weekly digest", chat_push.fold_multi_on() is False)
 
 # ------------------------------------------------------------------ 2. held vs urgent
-r1 = post("Vendor reply: example", "Reply to example about turnaround.")
+r1 = post("Vendor reply: Ambrose", "Reply to Ambrose about turnaround.")
 c1 = cards._read(cards.LIVE / f"{r1['qid']}.json")
 check("a normal card is HELD: posted, open, delivery weekly, NOT in Chat, advice says so",
       r1.get("posted") and r1.get("delivery") == "weekly" and c1.get("delivery") == "weekly" and c1.get("status") == "open"
       and not c1.get("chat") and not G.posted and any("HELD" in a for a in r1.get("advice") or []), (r1, len(G.posted)))
 check("pending() marks it held", any(p["qid"] == r1["qid"] and p["held"] and not p["urgent"] for p in cards.pending()))
 
-r2 = post("New lead: example & example", "New lead with a phone number. Text them?\n[TEXT PREVIEW] To +1555-047-0647:\nHello example!", urgent=True)
+r2 = post("New lead: Odette & Linden", "New lead with a phone number. Text them?\n[TEXT PREVIEW] To +15550470647:\nHello Odette!", urgent=True)
 c2 = cards._read(cards.LIVE / f"{r2['qid']}.json")
 check("an urgent card goes to Chat at once, on its own (no stack), delivery now",
       r2.get("posted") and r2.get("delivery") == "now" and c2.get("urgent") is True and len(G.posted) == 1
@@ -115,10 +115,10 @@ r4 = post("Reply to Jon", "Asked for in a chat thread.", exec_kind="email_send",
 check("a card asked for in a chat thread is not held: it lands in that thread now",
       r4.get("delivery") == "now" and len(G.posted) == 3 and G.posted[-1][2] == "spaces/TEST/threads/T9", (r4, G.posted[-1][2] if G.posted else None))
 
-r5 = post("Checkin: example", "The standard check-in text goes at 1:00 PM by itself. Tap Hold.", opts=[{"label": "Hold this one (Recommended)"}, {"label": "Let it go as planned"}])
+r5 = post("Checkin: Teo", "The standard check-in text goes at 1:00 PM by itself. Tap Hold.", opts=[{"label": "Hold this one (Recommended)"}, {"label": "Let it go as planned"}])
 cq = cards._read(cards.LIVE / f"{r5['qid']}.json")
 check("a plain decision card is held even with the hold-shaped buttons (no hold_text key)", cq.get("delivery") == "weekly")
-r5b = cards.post([{"header": "Checkin: example 2", "lane": "wedding", "hold_text": "checkin|1", "no_recommendation": "goes by itself",
+r5b = cards.post([{"header": "Checkin: Teo 2", "lane": "wedding", "hold_text": "checkin|1", "no_recommendation": "goes by itself",
                    "question": "The standard check-in text goes at 1:00 PM by itself. Tap Hold.",
                    "options": [{"label": "Hold this one"}, {"label": "Let it go as planned"}]}], "client_texts", lane="wedding")
 check("a standing text's preview (hold_text) is time-bound: Chat now", r5b.get("delivery") == "now" and len(G.posted) == 4, r5b)

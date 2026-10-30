@@ -6,11 +6,11 @@ new since the last run:
 
   phone threads   every inbound text (assistant/data/phone_threads.json), including the personal
                   ones text_gate never tickets (ruling 13: Sage still mines them for dates)
-  tickets         email and HoneyBook inquiry tickets (the mail sensor's subject + snippet)
+  tickets         email and CRM inquiry tickets (the mail sensor's subject + snippet)
   chat            the owners' own lines in the shared space (data/agent/transcript.jsonl); OFF since
                   2026-10-17 (mining.json sources.chat): Sage already hears those lines, a hold card quoting
                   the owner's own words back is noise
-  HoneyBook       client messages in the desk snapshot, when the snapshot carries them
+  CRM             client messages in the desk snapshot, when the snapshot carries them
 
 A date beside a commitment word from a couple / planner / vendor / family / friend / owner
 becomes a PROPOSED calendar hold; a money sender's due / renewal / action-required date becomes a
@@ -42,6 +42,7 @@ import advice  # noqa: E402
 import common as C  # noqa: E402
 
 sys.path.insert(0, str(C.SCRIPTS))
+import crm  # noqa: E402
 import mail_arm  # noqa: E402
 
 CFG_PATH = C.ROOT / "mining.json"
@@ -258,7 +259,7 @@ class Context:
     def known_subject(self, handle: str) -> tuple:
         """An unknown number's subject from Sage's memory and the wiki -> (subject, suspect), ('', False)
         when neither mentions it. Suspect = a mention calls it unchecked / a possible scam (the
-        '+1555-051-2351: Coverage will end on 10/' hold, 2026-10-19)."""
+        '+15550512351: Coverage will end on 10/' hold, 2026-10-19)."""
         k = self._k(handle)
         if not k or "@" in k:
             return "", False
@@ -333,9 +334,10 @@ def messages_phone(since: datetime | None, threads: dict | None = None) -> list:
 def messages_tickets(since: datetime | None, tickets: dict | None = None) -> list:
     out = []
     tix = tickets if tickets is not None else C.tickets_all()
+    _crm_inbound = crm.kinds("INBOUND_KINDS")
     for t in tix.values():
         kind, src = str(t.get("kind") or ""), str(t.get("source") or "")
-        if kind not in ("email", "inquiry_new", "hb_message_in", "imessage_in"):
+        if kind not in {"email", "inquiry_new", "imessage_in"} | _crm_inbound:
             continue
         p = t.get("payload") or {}
         ts = C.parse_any(p.get("received") if kind == "imessage_in" else t.get("created"))
@@ -353,7 +355,7 @@ def messages_tickets(since: datetime | None, tickets: dict | None = None) -> lis
         extra = {"ticket": t.get("id"), "ticket_kind": kind, "account": p.get("account"), "message_id": p.get("message_id"),
                  "workspace_id": p.get("workspace_id") or p.get("project_id")}
         out.append(_msg("ticket", t.get("id"), handle, name, t.get("lane"), ts, body, subject=p.get("subject") or "",
-                        bulk=bool(p.get("bulk")), channel="honeybook" if src.startswith("honeybook") else "email", extra=extra))
+                        bulk=bool(p.get("bulk")), channel=crm.CHANNEL if kind in _crm_inbound else "email", extra=extra))
     return out
 
 
@@ -373,10 +375,10 @@ def messages_chat(since: datetime | None, rows: list | None = None, owners: dict
     return out
 
 
-def messages_honeybook(since: datetime | None, snap: dict | None = None) -> list:
-    """Client messages in the desk snapshot (`communications`), when hb_snapshot carries them."""
+def messages_crm(since: datetime | None, snap: dict | None = None) -> list:
+    """Client messages in the desk snapshot (`communications`), when the CRM snapshot carries them."""
     out = []
-    snap = snap if snap is not None else (C.load_json(C.VAULT / "dashboard" / "data" / "honeybook.json", {}) or {})
+    snap = snap if snap is not None else crm.snapshot()
     for m in snap.get("communications") or snap.get("messages") or []:
         if not isinstance(m, dict) or str(m.get("direction") or "in").lower() not in ("in", "inbound", "client"):
             continue
@@ -386,8 +388,8 @@ def messages_honeybook(since: datetime | None, snap: dict | None = None) -> list
         frm = m.get("from") or {}
         handle = str((frm.get("email") if isinstance(frm, dict) else frm) or m.get("email") or "").lower()
         name = str((frm.get("name") if isinstance(frm, dict) else "") or m.get("name") or "")
-        out.append(_msg("honeybook", m.get("id") or f"{handle}|{m.get('created_at')}", handle, name, "wedding", ts,
-                        m.get("body") or m.get("text"), subject=m.get("subject") or "", channel="honeybook",
+        out.append(_msg(crm.CHANNEL, m.get("id") or f"{handle}|{m.get('created_at')}", handle, name, "wedding", ts,
+                        m.get("body") or m.get("text"), subject=m.get("subject") or "", channel=crm.CHANNEL,
                         extra={"workspace_id": m.get("workspace_id"), "comm_id": m.get("id")}))
     return out
 
@@ -523,7 +525,7 @@ def _calendar_titles(day: str) -> list:
 
 def _reply_handle(ex: dict) -> str:
     """The person an outbound (reply) card writes to, keyed like Context._k ('' when it is not one)."""
-    if ex.get("kind") not in ("email_send", "imessage_send", "hb_message"):
+    if ex.get("kind") not in {"email_send", "imessage_send"} | crm.kinds("MESSAGE_KINDS"):
         return ""
     to = str((ex.get("payload") or {}).get("to") or "")
     em = _EMAIL.search(to)
@@ -637,8 +639,8 @@ def gather(ctx: Context, since: datetime | None, sources: dict) -> list:
         out += messages_tickets(since)
     if sources.get("chat", False):
         out += messages_chat(since, owners={k: v for k, v in ctx.owners.items() if "@" not in k and not k.isdigit()} or {"owner1": "owner1", "owner6": "owner6"})
-    if sources.get("honeybook_messages", True):
-        out += messages_honeybook(since)
+    if sources.get("crm_messages", True):
+        out += messages_crm(since)
     return out
 
 

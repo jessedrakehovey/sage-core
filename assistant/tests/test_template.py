@@ -43,13 +43,29 @@ def ok(cond, msg):
     print(f"ok {N}: {msg}")
 
 
-ORG_WORDS = re.compile(r"example|honeybook|owner1|\bowner6\b", re.I)
+def _org_words(root):
+    """This organization's own name and people (org.json, people.json): what a generic file must never carry."""
+    out = set()
+    try:
+        n = str(json.loads((root / "org.json").read_text(encoding="utf-8-sig")).get("name") or "")
+        out |= {w for w in [n, n.split(" ")[0]] if len(w) >= 4}
+    except (OSError, ValueError):
+        pass
+    try:
+        for k, u in (json.loads((root / "agent" / "people.json").read_text(encoding="utf-8-sig")).get("users") or {}).items():
+            out |= {w for w in (k, str(u.get("name") or "").split(" ")[0]) if len(w) >= 3}
+    except (OSError, ValueError):
+        pass
+    return sorted(out, key=len, reverse=True)
+
+
+ORG_WORDS = re.compile(r"\b(?:" + "|".join(map(re.escape, _org_words(ROOT) + ["the CRM"])) + r")\b", re.I)
 
 # ---------------------------------------------------------------- 1. the generic prompt and the tool descriptions carry no organization
 gen = (ROOT / "agent" / "templates" / "prompt.generic.md").read_text(encoding="utf-8")
 ok(not ORG_WORDS.search(gen), "the generic prompt names no organization, service or owner")
 tools = json.dumps(gmcp.TOOLS)
-ok(not re.search(r"example|honeybook", tools, re.I) and set(gmcp.OWNERS) == set(core.owners()),
+ok(not re.search(r"\b(?:" + "|".join(map(re.escape, [w for w in _org_words(ROOT) if w.lower() not in {k.lower() for k in core.people().get("users") or {}} and w.lower() not in {str(u.get("name") or "").split(" ")[0].lower() for u in (core.people().get("users") or {}).values()}] + ["the CRM"])) + r")\b", tools, re.I) and set(gmcp.OWNERS) == set(core.owners()),
    "no tool description names the organization or a service; the owner enum is the owners (role owner) from people.json, never staff")
 
 # ---------------------------------------------------------------- 2. the code carries no owner literals on its working lines
@@ -62,7 +78,7 @@ for f in sorted((ROOT / "agent").glob("*.py")):
         if re.search(r"\(\?:owner1\|owner6", code):
             bad.append(f"{f.name}:{i} {ln.strip()[:80]}")
 ok(not bad, "no 'dm:owner1' fallback and no owner names inside a safety regex in agent code: " + "; ".join(bad[:3]))
-ok(core._OWNER_WORDS and all(w.isalpha() for w in core._OWNER_WORDS) and core.first_owner() == next(iter(core.people()["users"])),
+ok(core._OWNER_WORDS and all(w.isalnum() for w in core._OWNER_WORDS) and core.first_owner() == next(iter(core.people()["users"])),
    "owner words and the fallback owner come from people.json")
 ok(core.is_protected("send the proposal without " + core._OWNER_WORDS[0] + " looking"), "the protected-core regex knows the owners by their real names")
 

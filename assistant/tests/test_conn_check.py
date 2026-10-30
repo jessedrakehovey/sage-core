@@ -113,7 +113,7 @@ only = cc.run(registry=reg, only="b")
 check("run --only keeps the other rows", set(only) == {"a", "b", "c", "d"})
 check("summary line", cc.summary(out).startswith("CONN live=0 dead=3 not_configured=0 manual=1"), cc.summary(out))
 
-# ---- a sensor error that is not about sign-in is a code fault, never "re-authorise it" (HoneyBook 10/9-10/13)
+# ---- a sensor error that is not about sign-in is a code fault, never "re-authorise it" (the CRM 10/9-10/13)
 reg2 = TMP / "registry2.json"
 row = {"id": "hb", "name": "HB", "owner": "owner1", "renew": "re-authorise", "auth_errors": r"unauthori[sz]ed|\b401\b|oauth",
        "fault_renew": "fix the code", "check": {"type": "status_file", "path": "data:s_hb.json", "ts_field": "last_ok", "max_age_h": 3}}

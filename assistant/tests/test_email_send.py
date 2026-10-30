@@ -93,7 +93,7 @@ rc, out = run("refused")
 check("server refusal is NOT_SENT", rc == 1 and out.startswith("NOT_SENT server refused"), out)
 rc, out = run("mid")
 check("a failure while handing the message over is DELIVERY_UNVERIFIED", rc == 1 and out.startswith("DELIVERY_UNVERIFIED"), out)
-sys.argv = ["email_send.py", "--from", "example@example.com", "--to", "sara@example.com", "--subject", "x", "--body-file", str(body)]
+sys.argv = ["email_send.py", "--from", "example@other-business.invalid", "--to", "sara@example.com", "--subject", "x", "--body-file", str(body)]
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     rc = email_send.main()
@@ -101,7 +101,7 @@ check("property identity is still refused", rc == 1 and buf.getvalue().strip() =
 
 # replies: References chain + "Re: <parent subject>", then the sent copy's Gmail thread is checked
 PARENT = "<pb96da4@example.invalid>"
-GM = {PARENT: {"thrid": "111", "refs": "<root@x.com>", "subject": "Re: example (6/20) - drone footage?"}}
+GM = {PARENT: {"thrid": "111", "refs": "<root@x.com>", "subject": "Re: Sloane & Bram (6/20) - drone footage?"}}
 email_send._gm_lookup = lambda acct, frm, mid, tries=1, wait=3.0: GM.get(mid, {})
 
 
@@ -121,7 +121,7 @@ GM["<sentid@example.invalid>"] = {"thrid": "111"}
 rc, out, m = reply("pb96da4@example.invalid")
 check("reply: In-Reply-To gets angle brackets", m["In-Reply-To"] == PARENT, m["In-Reply-To"])
 check("reply: References = parent's References + its Message-ID", m["References"] == "<root@x.com> " + PARENT, m["References"])
-check("reply: subject is exactly 'Re: <original subject>'", m["Subject"] == "Re: example (6/20) - drone footage?", m["Subject"])
+check("reply: subject is exactly 'Re: <original subject>'", m["Subject"] == "Re: Sloane & Bram (6/20) - drone footage?", m["Subject"])
 check("reply: same Gmail thread reports THREAD=ok", rc == 0 and out.startswith("SENT=1") and out.endswith("THREAD=ok"), out)
 GM["<sentid@example.invalid>"] = {"thrid": "999"}
 rc, out, m = reply(PARENT)

@@ -94,7 +94,7 @@ def main():
     except Exception:
         payload = {}
 
-    # Headless cron sessions (operator ticks, the HoneyBook transports, dreaming itself, the
+    # Headless cron sessions (operator ticks, the CRM transports, dreaming itself, the
     # scouts) are not the owner working: 11 of 13 logged sessions on 2026-10-01 were crons, which
     # dreaming then re-read every night. The headless launchers set WV_HEADLESS=1.
     if os.environ.get("WV_HEADLESS") == "1":

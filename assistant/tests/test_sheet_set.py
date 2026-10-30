@@ -30,6 +30,13 @@ import cards  # noqa: E402
 import exec_store as es  # noqa: E402
 import drain  # noqa: E402
 import sheet_fix  # noqa: E402
+if not g.CONFIG.is_file():                               # the bare engine ships no google.json: the accounts this test names
+    g.CONFIG = TMP / "google.json"
+    g.CONFIG.write_text(json.dumps({"accounts": {
+        "owner1-personal": {"address": "owner4@example.invalid", "person": "owner1", "calendars": ["primary"]},
+        "owner1-films": {"address": "owner3@example.invalid", "person": "owner1", "calendars": ["primary"],
+                        "extra_scopes": ["https://www.googleapis.com/auth/spreadsheets"]},
+        "owner6": {"address": "owner6@example.invalid", "person": "owner6", "calendars": ["primary"]}}}), encoding="utf-8")
 
 FAILS = []
 
@@ -258,76 +265,78 @@ check("a drain that died mid-write leaves WRITE UNVERIFIED, never a blind retry"
       and "WRITE UNVERIFIED" in es.fold()["tk-stalesheet"]["result"] and "sheet" in es.fold()["tk-stalesheet"]["result"])
 
 # ---------------------------------------------------------------- 5. sheet_fix: plan from the live tabs, ONE card, state machine
-SHEET.clear()
-SHEET.update(fresh_sheet())
-cfg = sheet_fix.load_config(HERE.parent.parent / "pricing" / "sheet_edits.json")
-check("config carries the business facts, not the code", cfg["account"] == ACCT and cfg["spreadsheet_id"] == SID and len(cfg["edits"]) == 3)
-pl = sheet_fix.plan(cfg, g)
-refs = {c["a1"]: c for c in pl["cells"]}
-check("plan finds the month cells by header + key, not by hard-coded letters",
-      {"season_multipliers!D2", "season_multipliers!D3", "season_multipliers!D8", "season_multipliers!D9"} <= set(refs)
-      and all(refs[f"season_multipliers!D{r}"]["before"] == 0.95 and refs[f"season_multipliers!D{r}"]["value"] == 1 for r in (2, 3, 8, 9)), sorted(refs))
-check("plan finds Mon-Thu by day_index", {f"day_multipliers!C{r}" for r in (3, 4, 5, 6)} <= set(refs) and "day_multipliers!C2" not in refs and "day_multipliers!C7" not in refs)
-check("plan appends the toasts row after the last filled row, copying the extra column from drone",
-      refs.get("addons!A11", {}).get("value") == "toasts_speeches_film" and refs.get("addons!B11", {}).get("value") == "Full Toasts & Speeches Film"
-      and refs.get("addons!C11", {}).get("value") == 500 and refs.get("addons!D11", {}).get("value") is True and refs.get("addons!E11", {}).get("value") == "extras"
-      and all(refs[f"addons!{c}11"]["before"] == "" for c in "ABCDE"), sorted(refs))
-check("13 cells, no problems", len(pl["cells"]) == 13 and not pl["problems"] and not pl["skipped"], (len(pl["cells"]), pl["problems"]))
-qtext = sheet_fix.question(cfg, pl, g)
-check("the question names every cell with before -> after", all(f"{c['a1']}: {g.cell_text(c['before']) or '(empty)'} -> {g.cell_text(c['value'])}" in qtext for c in pl["cells"]))
-check("the question carries the why", "no slow-season or weekday discounts" in qtext)
+SHEET_EDITS = HERE.parent.parent / "pricing" / "sheet_edits.json"     # the organization's own sheet: absent in the bare engine
+if SHEET_EDITS.is_file():
+    SHEET.clear()
+    SHEET.update(fresh_sheet())
+    cfg = sheet_fix.load_config(SHEET_EDITS)
+    check("config carries the business facts, not the code", cfg["account"] == ACCT and cfg["spreadsheet_id"] == SID and len(cfg["edits"]) == 3)
+    pl = sheet_fix.plan(cfg, g)
+    refs = {c["a1"]: c for c in pl["cells"]}
+    check("plan finds the month cells by header + key, not by hard-coded letters",
+          {"season_multipliers!D2", "season_multipliers!D3", "season_multipliers!D8", "season_multipliers!D9"} <= set(refs)
+          and all(refs[f"season_multipliers!D{r}"]["before"] == 0.95 and refs[f"season_multipliers!D{r}"]["value"] == 1 for r in (2, 3, 8, 9)), sorted(refs))
+    check("plan finds Mon-Thu by day_index", {f"day_multipliers!C{r}" for r in (3, 4, 5, 6)} <= set(refs) and "day_multipliers!C2" not in refs and "day_multipliers!C7" not in refs)
+    check("plan appends the toasts row after the last filled row, copying the extra column from drone",
+          refs.get("addons!A11", {}).get("value") == "toasts_speeches_film" and refs.get("addons!B11", {}).get("value") == "Full Toasts & Speeches Film"
+          and refs.get("addons!C11", {}).get("value") == 500 and refs.get("addons!D11", {}).get("value") is True and refs.get("addons!E11", {}).get("value") == "extras"
+          and all(refs[f"addons!{c}11"]["before"] == "" for c in "ABCDE"), sorted(refs))
+    check("13 cells, no problems", len(pl["cells"]) == 13 and not pl["problems"] and not pl["skipped"], (len(pl["cells"]), pl["problems"]))
+    qtext = sheet_fix.question(cfg, pl, g)
+    check("the question names every cell with before -> after", all(f"{c['a1']}: {g.cell_text(c['before']) or '(empty)'} -> {g.cell_text(c['value'])}" in qtext for c in pl["cells"]))
+    check("the question carries the why", "no slow-season or weekday discounts" in qtext)
 
-sheet_fix.STATE = TMP / "sheet_fix_state.json"
-token(with_sheets=False)
-code, line = sheet_fix.run(cfg, "auto", g)
-check("auto: waits for consent, exit 0, names the command", code == 0 and "waiting for consent" in line and f"auth {ACCT}" in line, line)
-code, line = sheet_fix.run(cfg, "post", g)
-check("by hand: the consent wait exits 3", code == 3)
-token(with_sheets=True)
-code, line = sheet_fix.run(cfg, "plan", g)
-check("plan mode prints the card text and posts nothing", code == 0 and "season_multipliers!D2: 0.95 -> 1" in line and not sheet_fix.open_card(SID))
-code, line = sheet_fix.run(cfg, "auto", g)
-q1 = re.search(r"card (q[0-9a-f]+) posted", line)
-check("auto: posts ONE card", code == 0 and q1 and sheet_fix.open_card(SID) == q1.group(1), line)
-code, line = sheet_fix.run(cfg, "auto", g)
-check("auto: never a second card while one is open", "waiting on card" in line and len([p for p in cards.pending() if p["exec_kind"] == "sheet_set"]) == 1, line)
-cards.answer(q1.group(1), "Skip")
-code, line = sheet_fix.run(cfg, "auto", g)
-check("Skip -> declined, no re-post", "declined" in line and not sheet_fix.open_card(SID), line)
-n0 = len(CALLS)
-code, line = sheet_fix.run(cfg, "auto", g)
-check("declined is remembered without touching the sheet", "declined" in line and len(CALLS) == n0)
-sheet_fix.STATE.unlink()
-code, line = sheet_fix.run(cfg, "auto", g)
-q2 = re.search(r"card (q[0-9a-f]+) posted", line)
-check("a fresh state posts again", bool(q2), line)
-cards.answer(q2.group(1), "Write the cells")
-code, line = sheet_fix.run(cfg, "auto", g)
-check("auto: waits while the ticket is queued", "ticket" in line and "queued" in line, line)
-res = drain.drain()
-check("the spine's drain writes all 13 cells", res["done"] == 1 and SHEET["season_multipliers"][8][3] == 1 and SHEET["day_multipliers"][4][2] == 1
-      and SHEET["addons"][10] == ["toasts_speeches_film", "Full Toasts & Speeches Film", 500, True, "extras"], (res, SHEET["addons"][10:]))
-code, line = sheet_fix.run(cfg, "auto", g)
-check("after the write: nothing to do, state done", "nothing to do" in line and json.loads(sheet_fix.STATE.read_text()).get("done"), line)
-n0 = len(CALLS)
-code, line = sheet_fix.run(cfg, "auto", g)
-check("done is remembered: no API call, no card", "done" in line and len(CALLS) == n0 and not sheet_fix.open_card(SID), line)
-pl2 = sheet_fix.plan(cfg, g)
-check("re-plan on the fixed sheet: all skipped, nothing to write", not pl2["cells"] and len(pl2["skipped"]) == 9 and not pl2["problems"], pl2)
-bad = json.loads(json.dumps(cfg))
-bad["edits"][0]["col"] = "multiplyer"
-code, line = sheet_fix.run(bad, "post", g)
-check("a column the sheet does not have is a problem, not a card", code == 2 and "cannot plan" in line and "multiplyer" in line and not sheet_fix.open_card(SID), line)
-bad = json.loads(json.dumps(cfg))
-bad["edits"][0]["keys"] = [13]
-code, line = sheet_fix.run(bad, "post", g)
-check("a key with no row is a problem", code == 2 and "0 rows with month_number=13" in line, line)
+    sheet_fix.STATE = TMP / "sheet_fix_state.json"
+    token(with_sheets=False)
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("auto: waits for consent, exit 0, names the command", code == 0 and "waiting for consent" in line and f"auth {ACCT}" in line, line)
+    code, line = sheet_fix.run(cfg, "post", g)
+    check("by hand: the consent wait exits 3", code == 3)
+    token(with_sheets=True)
+    code, line = sheet_fix.run(cfg, "plan", g)
+    check("plan mode prints the card text and posts nothing", code == 0 and "season_multipliers!D2: 0.95 -> 1" in line and not sheet_fix.open_card(SID))
+    code, line = sheet_fix.run(cfg, "auto", g)
+    q1 = re.search(r"card (q[0-9a-f]+) posted", line)
+    check("auto: posts ONE card", code == 0 and q1 and sheet_fix.open_card(SID) == q1.group(1), line)
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("auto: never a second card while one is open", "waiting on card" in line and len([p for p in cards.pending() if p["exec_kind"] == "sheet_set"]) == 1, line)
+    cards.answer(q1.group(1), "Skip")
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("Skip -> declined, no re-post", "declined" in line and not sheet_fix.open_card(SID), line)
+    n0 = len(CALLS)
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("declined is remembered without touching the sheet", "declined" in line and len(CALLS) == n0)
+    sheet_fix.STATE.unlink()
+    code, line = sheet_fix.run(cfg, "auto", g)
+    q2 = re.search(r"card (q[0-9a-f]+) posted", line)
+    check("a fresh state posts again", bool(q2), line)
+    cards.answer(q2.group(1), "Write the cells")
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("auto: waits while the ticket is queued", "ticket" in line and "queued" in line, line)
+    res = drain.drain()
+    check("the spine's drain writes all 13 cells", res["done"] == 1 and SHEET["season_multipliers"][8][3] == 1 and SHEET["day_multipliers"][4][2] == 1
+          and SHEET["addons"][10] == ["toasts_speeches_film", "Full Toasts & Speeches Film", 500, True, "extras"], (res, SHEET["addons"][10:]))
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("after the write: nothing to do, state done", "nothing to do" in line and json.loads(sheet_fix.STATE.read_text()).get("done"), line)
+    n0 = len(CALLS)
+    code, line = sheet_fix.run(cfg, "auto", g)
+    check("done is remembered: no API call, no card", "done" in line and len(CALLS) == n0 and not sheet_fix.open_card(SID), line)
+    pl2 = sheet_fix.plan(cfg, g)
+    check("re-plan on the fixed sheet: all skipped, nothing to write", not pl2["cells"] and len(pl2["skipped"]) == 9 and not pl2["problems"], pl2)
+    bad = json.loads(json.dumps(cfg))
+    bad["edits"][0]["col"] = "multiplyer"
+    code, line = sheet_fix.run(bad, "post", g)
+    check("a column the sheet does not have is a problem, not a card", code == 2 and "cannot plan" in line and "multiplyer" in line and not sheet_fix.open_card(SID), line)
+    bad = json.loads(json.dumps(cfg))
+    bad["edits"][0]["keys"] = [13]
+    code, line = sheet_fix.run(bad, "post", g)
+    check("a key with no row is a problem", code == 2 and "0 rows with month_number=13" in line, line)
 
-# the CLI against a token dir without the scope never reaches Google (exit 3, the consent line)
-env = dict(os.environ, AGENT_GOOGLE_HOME=str(TMP / "noscope"))
-(TMP / "noscope").mkdir()
-r = subprocess.run([sys.executable, str(SCRIPTS / "sheet_fix.py"), "--plan"], capture_output=True, text=True, env=env, cwd=str(HERE.parent.parent))
-check("CLI without consent: exit 3 and the auth command", r.returncode == 3 and "waiting for consent" in r.stdout and f"auth {ACCT}" in r.stdout, r.stdout + r.stderr)
+    # the CLI against a token dir without the scope never reaches Google (exit 3, the consent line)
+    env = dict(os.environ, AGENT_GOOGLE_HOME=str(TMP / "noscope"))
+    (TMP / "noscope").mkdir()
+    r = subprocess.run([sys.executable, str(SCRIPTS / "sheet_fix.py"), "--plan"], capture_output=True, text=True, env=env, cwd=str(HERE.parent.parent))
+    check("CLI without consent: exit 3 and the auth command", r.returncode == 3 and "waiting for consent" in r.stdout and f"auth {ACCT}" in r.stdout, r.stdout + r.stderr)
 
 print(f"\n{'ALL PASS' if not FAILS else 'FAILURES: ' + ', '.join(FAILS)} (scratch {TMP})")
 sys.exit(1 if FAILS else 0)

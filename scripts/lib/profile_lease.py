@@ -9,7 +9,7 @@ where example/Google Voice executors contend for their own profiles.) On the wed
 side the contenders are:
 
   * the wedding ``playwright-cli`` MCP (local-scope override)  -> ``pw-wv-cli-profile``
-  * ``scripts/honeybook/hb_session.py`` (HoneyBook automation) -> ``pw-wv-cli-profile``
+  * the CRM connector's own browser automation (if it has one)   -> ``pw-wv-cli-profile``
 
 Wedding code must never lease a property profile; the ~/.claude/boundary guard blocks it.
 
@@ -167,9 +167,9 @@ class _Lease:
         self.label = label
         self._released = False
         self._stop = threading.Event()
-        self._hb = threading.Thread(target=self._beat, name=f"lease-hb-{lock.name}",
+        self._beat_thread = threading.Thread(target=self._beat, name=f"lease-beat-{lock.name}",
                                     daemon=True)
-        self._hb.start()
+        self._beat_thread.start()
 
     def _beat(self):
         while not self._stop.wait(HEARTBEAT_S):
@@ -269,7 +269,7 @@ def acquire_profile_lease(profile, label: str = "", timeout: float = DEFAULT_TIM
 
         if time.time() >= deadline and not warned:
             # Never steal from a LIVE holder (2026-10-02: a keepalive broke the owner's
-            # interactive hb-login lease after 150s and its reaper closed his sign-in
+            # interactive CRM sign-in lease after 150s and its reaper closed his sign-in
             # window). Keep waiting; _break_reason frees it on death or stale heartbeat.
             holder = (data or {}).get("pid", "?")
             _log(f"[lease] still waiting on {lock.name} after {timeout:.0f}s "
@@ -298,9 +298,9 @@ def _break_reason(lock: Path, data, stale_ttl: float):
         return "self"  # leftover from a prior run of THIS pid (rare) -> reclaim
     if not pid_alive(pid):
         return f"holder-dead(pid={pid})"
-    hb_age = time.time() - _parse_iso(data.get("heartbeat", ""))
-    if hb_age > stale_ttl:
-        return f"heartbeat-stale({hb_age:.0f}s>pid={pid})"
+    beat_age = time.time() - _parse_iso(data.get("heartbeat", ""))
+    if beat_age > stale_ttl:
+        return f"heartbeat-stale({beat_age:.0f}s>pid={pid})"
     return None
 
 

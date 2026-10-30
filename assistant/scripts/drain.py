@@ -336,7 +336,7 @@ def _exec_sheet_set(p, dry):
 EXECUTORS = {"agent_run": _exec_agent_run, "ads_apply": _exec_ads_apply, "local": _exec_local, "tracking_fix": _exec_tracking_fix, "email_send": _exec_email_send, "imessage_send": _exec_imessage_send, "calendar_hold": _exec_calendar_hold,
              "sheet_set": _exec_sheet_set}
 # The organization's own kinds run through its plugins (config.json -> plugins.modules; this organization: the CRM's
-# executors in crm_honeybook.py, which call back into _run / PERM / UNVERIFIED here). alib.plugins skips a module that
+# connector's executors, which call back into _run / PERM / UNVERIFIED here). alib.plugins skips a module that
 # is not here, so the engine drains its own kinds alone.
 try:
     import alib as _alib
@@ -428,7 +428,7 @@ def _reopen_card(t, result) -> bool:
     a card-approved ticket that failed PERMANENTLY before anything was handed over comes back as the
     SAME card (cards.reopen), headed by what went wrong, so his tap retries it - no operator ticket, no
     fresh card. Never for an UNVERIFIED result (the message may have landed: the operator checks Sent
-    mail / HoneyBook first). -> True when the card is open again."""
+    mail / the CRM first). -> True when the card is open again."""
     ref = str(t.get("approval_ref") or "")
     if not ref.startswith("card:") or "UNVERIFIED" in str(result).upper():
         return False
@@ -634,7 +634,7 @@ def _drain_locked(lane, dry, min_age_s):
             out["exception"] += 1
             continue
         # an unfilled [the owner: ...] blank never leaves the machine, even on a ticket minted before the
-        # mint-time guard existed (example, 2026-10-18)
+        # mint-time guard existed (Marisa, 2026-10-18)
         if t["kind"] in es.OUTBOUND_KINDS and es.unfilled_blanks(t.get("payload") or {}):
             es.set_status(t["id"], "exception", PERM + "the message still has an unfilled blank")
             _surface_exception(t, "unfilled blank in the message")

@@ -14,7 +14,7 @@ otherwise derived from how it is checked:
   terminal   open a console on the PC running the row's own renew command (setup_creds.py,
              vault.py add, gh auth login ...): the owner types the secret there, hidden
   env        a console that asks for ONE value (hidden) and stores it as a User env var
-  window     the HoneyBook sign-in window (scripts/honeybook/hb_signin_window.py --spawn)
+  window     a CRM sign-in window (connector-provided script, spawned in --spawn mode)
   signin     the agent's own browser ON SCREEN at the service's sign-in page; the owner signs
              in once and the session persists (the doer's profile)
   open_url   open a page in the default browser (an app-password page, a token page)
@@ -46,6 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from alib import DATA, OUT, ROOT, VAULT, VENV_PY, load_json, now_iso, save_json  # noqa: E402
+import crm
 
 REGISTRY = ROOT / "connections.json"
 STATUS = DATA / "connections_status.json"
@@ -104,9 +105,6 @@ def recipe(row: dict) -> dict:
         return {**s, "label": s.get("label") or _label(s["kind"])}
     ct = str((row.get("check") or {}).get("type") or "")
     rid, renew = str(row.get("id") or ""), str(row.get("renew") or "")
-    if rid in ("hb-browser", "hb-doer"):
-        return {"kind": "window", "profile": "hb" if rid == "hb-browser" else "doer", "label": "Open sign-in window",
-                "how": "A HoneyBook sign-in window opens on the PC and waits; sign in with Google there."}
     if ct == "imap":
         acct = str((row.get("check") or {}).get("account") or "")
         return {"kind": "terminal", "argv": [PY, "assistant/scripts/setup_creds.py", "mail", acct], "label": "Enter app password",
@@ -350,9 +348,11 @@ def run(rid: str, action: str = "", by: str = "") -> dict:
     elif kind == "env":
         res = _console([PY, "assistant/scripts/setup_actions.py", "--prompt-env", str(rc.get("name") or "")], f"Setup: {row['name']}")
     elif kind == "window":
-        subprocess.Popen([PY, "scripts/honeybook/hb_signin_window.py", "--spawn", str(rc.get("profile") or "doer")], cwd=str(VAULT),
-                         creationflags=NO_WINDOW, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        res = {"ok": True, "message": "A HoneyBook sign-in window is opening on the PC. Sign in there, then tap Check."}
+        win_script = str(rc.get("script") or crm._hook("SIGNIN_WINDOW_SCRIPT") or "")
+        if win_script:
+            subprocess.Popen([PY, win_script, "--spawn", str(rc.get("profile") or "doer")], cwd=str(VAULT),
+                             creationflags=NO_WINDOW, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        res = {"ok": True, "message": f"A {crm.name()} sign-in window is opening on the PC. Sign in there, then tap Check."}
     elif kind == "signin":
         res = _browser("signin", str(rc.get("url") or row.get("url") or ""))
     elif kind == "open_url":

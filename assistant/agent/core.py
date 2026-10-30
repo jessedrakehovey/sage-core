@@ -27,12 +27,20 @@ from pathlib import Path
 
 AGENT = Path(__file__).resolve().parent                  # assistant/agent
 VAULT = AGENT.parents[1]
-STATE = Path(os.environ["AGENT_STATE"]) if os.environ.get("AGENT_STATE") else AGENT / "state"
 # A test that scopes the assistant's store (ASSISTANT_DATA) but not the agent's must never write
 # into the live transcript: 2026-10-09 06:30 the dreaming self-test's fixture cards ("Sara prep" to
 # sara@example.com, "Reply to Mom") landed in Sage's live conversation and it asked the owners about them.
 DATA = Path(os.environ["AGENT_DATA"]) if os.environ.get("AGENT_DATA") else (
     Path(os.environ["ASSISTANT_DATA"]) / "agent" if os.environ.get("ASSISTANT_DATA") else AGENT.parent / "data" / "agent")
+# A run whose store is not the live one (a test's scratch folder) keeps its state and its roster writes there too:
+# 2026-10-29 test_whois wrote memory facts into the live state/ and test_chat_push pinned a fixture Chat id
+# ("users/42") onto an owner in the live people.json.
+try:
+    SCOPED = DATA.resolve() != (AGENT.parent / "data" / "agent").resolve()
+except OSError:
+    SCOPED = True
+STATE = Path(os.environ["AGENT_STATE"]) if os.environ.get("AGENT_STATE") else (DATA / "state" if SCOPED else AGENT / "state")
+PEOPLE = Path(os.environ["AGENT_PEOPLE"]) if os.environ.get("AGENT_PEOPLE") else AGENT / "people.json"
 SUGGESTIONS = Path(os.environ["AGENT_SUGGESTIONS"]) if os.environ.get("AGENT_SUGGESTIONS") \
     else VAULT / "Memory" / "skill-suggestions.md"
 
@@ -186,7 +194,7 @@ def scope_of(convo: str, space: str = "") -> str:
 
 
 def people() -> dict:
-    return load(AGENT / "people.json", {"roles": {}, "users": {}})
+    return load(PEOPLE, {"roles": {}, "users": {}})
 
 
 def is_owner(person: dict | None) -> bool:
@@ -252,7 +260,9 @@ def person_for(handle: str = "", email: str = "", chat_user: str = "") -> dict |
                 # pin the Chat id the first time this person writes, so gchat.mentionize can tag them
                 u["chat_user"] = chat_user
                 try:
-                    save(AGENT / "people.json", p)
+                    if SCOPED and PEOPLE == AGENT / "people.json":
+                        raise OSError("a scoped run never writes the live roster")
+                    save(PEOPLE, p)
                 except OSError:
                     pass
             return {"key": key, **u}

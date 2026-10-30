@@ -5,8 +5,8 @@ calendar : fetches each configured *secret iCal URL* (read-only by nature; store
            the owners' Google calendars through Sage's read token (assistant/agent/
            google_api.py). Writes the next N days to data/calendar.json for the morning
            brief. A wedding-looking event is labelled booked / inquiry / unconfirmed from
-           HoneyBook's own lead-vs-client status (not every wedding on the calendar is a
-           booking: HoneyBook's calendar sync puts leads there too), and only a BOOKED one
+           the CRM's own lead-vs-client status (not every wedding on the calendar is a
+           booking: the CRM's calendar sync puts leads there too), and only a BOOKED one
            tickets shoot prep.
 clash    : a booked wedding whose date falls inside an owner's all-day / multi-day / long
            event (a trip) posts its own card, "Oct 10 Glenrock: you are on Catalina. Who
@@ -29,6 +29,7 @@ from alib import ensure_venv
 ensure_venv()
 
 import tickets
+import crm
 from alib import DATA, VAULT, config, load_json, now_iso, save_json, secret
 
 
@@ -154,9 +155,9 @@ def _tokens(s):
 
 
 def classify_booking(ev, snap_projects):
-    """('booked' | 'inquiry' | 'unconfirmed', HoneyBook project name) for a wedding-looking
-    calendar event, from HoneyBook's workspace status (client = signed or paid). Matched on
-    the date plus a name word in the title; a lone HoneyBook project on that date also
+    """('booked' | 'inquiry' | 'unconfirmed', CRM project name) for a wedding-looking
+    calendar event, from the CRM's workspace status (client = signed or paid). Matched on
+    the date plus a name word in the title; a lone CRM project on that date also
     matches. No match, or a snapshot without status, is 'unconfirmed': never a booking."""
     same_day = [p for p in snap_projects if str(p.get("date") or "")[:10] == ev["date"]]
     words = _tokens(ev.get("title"))
@@ -209,7 +210,7 @@ def sense_calendar():
     cfg = config()["calendar"]
     today, horizon = date.today(), date.today() + timedelta(days=cfg["lookahead_days"])
     upcoming, notes, items = [], [], []
-    snap_projects = load_json(VAULT / "dashboard" / "data" / "honeybook.json", {}).get("projects") or []
+    snap_projects = crm.snapshot().get("projects") or []
     for feed in cfg["feeds"]:
         if not feed.get("enabled"):
             continue
@@ -238,7 +239,7 @@ def sense_calendar():
         upcoming += [e for e in rows if e["date"] <= horizon.isoformat()]
     for e in upcoming + [r for r in away if r not in upcoming]:
         if any(w in e["title"].lower() for w in cfg["wedding_words"]):
-            e["booking"], e["hb_project"] = classify_booking(e, snap_projects)
+            e["booking"], e["crm_project"] = classify_booking(e, snap_projects)
             days = (date.fromisoformat(e["date"]) - today).days
             if 0 <= days <= cfg["shoot_prep_days"] and e["booking"] == "booked" and e["date"] <= horizon.isoformat():
                 items.append({"source": "calendar", "source_id": f"prep|{e['uid']}|{e['date']}", "lane": "wedding",
@@ -303,10 +304,10 @@ def arm_lifecycle(projects, cfg):
         if not isinstance(p, dict):
             continue
         if p.get("stage") == "inquiry":
-            # still a lead in HoneyBook (no signed contract or payment): no timeline request,
+            # still a lead in the CRM (no signed contract or payment): no timeline request,
             # no week-of confirmation to a couple who has not booked. Held, not dismissed, so
-            # the chain re-arms the day sense_honeybook re-stages it "booked".
-            followups.cancel_unit("wedding-lifecycle", key, "still an inquiry in HoneyBook", hold=True)
+            # the chain re-arms once the CRM re-stages it "booked".
+            followups.cancel_unit("wedding-lifecycle", key, "still an inquiry in the CRM", hold=True)
             continue
         if p.get("stage") in TERMINAL_STAGES:
             # stop the chain that was armed while the project was live. A delivered film keeps
@@ -344,7 +345,7 @@ def check_clashes(away, today):
     """A BOOKED wedding (ledger stage not inquiry / terminal) whose date falls inside an owner's
     all-day, multi-day or long event posts ONE standalone card per wedding+date. An inquiry
     never clashes: an unsigned lead on a trip day is not a shoot. A guest trip to somebody
-    else's wedding IS an away day; only an event matched to a HoneyBook project is not."""
+    else's wedding IS an away day; only an event matched to a CRM project is not."""
     if not away:
         return 0
     projects = load_json(VAULT / config()["projects"]["state_file"], {}).get("projects", {})
@@ -353,8 +354,8 @@ def check_clashes(away, today):
     for key, p in projects.items():
         if not isinstance(p, dict) or p.get("stage") in NOT_BOOKED_STAGES:
             continue
-        if p.get("honeybook_status") in ("lead", "lead_sent") and not p.get("confirmed_by"):
-            continue                   # HoneyBook says unsigned: the weekly drift ticket asks, a clash card would assume
+        if crm.status(p) in ("lead", "lead_sent") and not p.get("confirmed_by"):
+            continue                   # the CRM says unsigned: the weekly drift ticket asks, a clash card would assume
         wd = str(p.get("wedding_date") or p.get("date") or "")[:10]
         try:
             wdate = date.fromisoformat(wd)
@@ -363,7 +364,7 @@ def check_clashes(away, today):
         if not 0 <= (wdate - today).days <= CLASH_DAYS:
             continue
         hits = [e for e in away if e["date"] <= wd <= e["end_date"] and (e["all_day"] or e["hours"] >= AWAY_MIN_HOURS)
-                and e.get("booking") not in ("booked", "inquiry")      # a HoneyBook shoot, not a trip
+                and e.get("booking") not in ("booked", "inquiry")      # a CRM shoot, not a trip
                 and not (_tokens(e["title"]) & _tokens(p.get("couple") or key))]
         sid = f"clash|{key}|{wd}"
         if not hits or sid in latch:
@@ -376,7 +377,7 @@ def check_clashes(away, today):
               "question": (f"{day}: {couple}'s wedding is booked, but {names} "
                            f"{'is' if len(who) == 1 else 'are'} away: {'; '.join(_away_label(e) for e in hits[:3])}. "
                            "Who shoots it?"),
-              "details": (f"Ledger: {key}, stage '{p.get('stage')}', HoneyBook status '{p.get('honeybook_status') or '?'}'. "
+              "details": (f"Ledger: {key}, stage '{p.get('stage')}', {crm.name()} status '{crm.status(p) or '?'}'. "
                           "Calendar: " + "; ".join(f"{e['title']} {e['date']}..{e['end_date']} ({e['feed']})" for e in hits[:5])),
               "no_recommendation": "only the owners know who is free to cover it",
               "options": [{"label": "owner6 shoots it"}, {"label": "Hiring a shooter"},

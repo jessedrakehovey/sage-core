@@ -35,7 +35,7 @@ check("steps for an unknown connection -> ''", connect.steps("nope") == "")
 
 for msg in ("can you set up simplefin for me", "let's connect my banks", "link my bank accounts please", "how do I set up SimpleFIN"):
     check(f"asked: {msg!r}", connect.asked(msg) == "bank-simplefin", connect.asked(msg))
-for msg in ("what's my bank balance", "set up a call with example", "the bank called"):
+for msg in ("what's my bank balance", "set up a call with Teo", "the bank called"):
     check(f"not asked: {msg!r}", connect.asked(msg) == "", connect.asked(msg))
 
 # a general bank ask while a feed is down -> the Relay/Plaid steps first (the owner 2026-10-17)
@@ -90,14 +90,14 @@ check("the CONNECTIONS hint names the chat-settable connection", "Chat setup ava
 
 # the morning brief's CONNECTIONS sentence (plan 2026-10-18 section 2): what is NOT connected + how to fix it, config-driven
 status = {"mail-personal": {"state": "not_configured"}, "calendar-personal": {"state": "not_configured"}, "google-owner6": {"state": "not_configured"},
-          "bank-plaid": {"state": "dead"}, "next-insurance": {"state": "not_configured"}, "mail-example": {"state": "live"}, "honeybook": {"state": "live"}}
+          "bank-plaid": {"state": "dead"}, "next-insurance": {"state": "not_configured"}, "mail-example": {"state": "live"}, "acme-crm": {"state": "live"}}
 watch = ["mail-personal", "calendar-personal", "google-owner6", "bank-plaid", "next-insurance", "mail-example"]
 line = connect.brief_line(status, watch)
 check("one sentence, starts CONNECTIONS:, ends with a full stop, no line breaks", line.startswith("CONNECTIONS: ") and line.endswith(".") and "\n" not in line, line)
 check("names every watched connection that is not working, in config order, never a live one",
       [n for n in ("your personal Gmail (owner4@example.invalid)", "your personal calendar", "owner6's Google account", "the Relay bank feed (Plaid)", "the NEXT Insurance login") if n in line]
       == ["your personal Gmail (owner4@example.invalid)", "your personal calendar", "owner6's Google account", "the Relay bank feed (Plaid)", "the NEXT Insurance login"]
-      and "example.invalid" not in line and "HoneyBook" not in line, line)
+      and "owner3@example.invalid" not in line and "acme-crm" not in line, line)
 check("each one carries its fix: the Setup-page button or the chat phrase",
       "Setup page: Enter app password" in line and "Setup page: Enter calendar link" in line and "Setup page: Run setup (she signs in)" in line
       and 'say "set up plaid" here' in line and "Setup page: Sign in" in line, line)

@@ -41,7 +41,7 @@ DEFAULTS = {
                    "windows": {d: ["10:00", "17:00"] for d in ("mon", "tue", "wed", "thu", "fri")},
                    "prefer_times": ["10:00", "14:00", "16:00"], "slots": 3, "duration_min": 30, "slot_step_min": 30, "buffer_min": 30,
                    "min_lead_hours": 20, "days_ahead": 7, "proposal_ttl_days": 5, "all_day_blocks": ["wedding", "shoot"],
-                   "hb_snapshot": "dashboard/data/honeybook.json", "hold_title": "Call: {name}", "ask_words": "", "templates": {}},
+                   "hold_title": "Call: {name}", "ask_words": "", "templates": {}},
     "probation": {"enabled": True, "threshold": 20, "lookback_days": 180, "classes": {}},
 }
 

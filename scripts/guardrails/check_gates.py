@@ -63,26 +63,20 @@ TARGETS = {
     # travel / lots scouts: write files + commit, so like dream_cron they carry
     # --dangerously-skip-permissions (exempt from check C). They are still held to
     # check A (no send/UI tool may ever be allow-listed) and D.
-    # hb_exec.py: the HoneyBook write transport. Exactly one tool (take_action) and a
-    # fixed deny belt; it must never gain a send/UI tool.
-    "hb-exec": ("assistant/scripts/hb_exec.py", "py"),
-    # hb_snapshot.py: the HoneyBook READ transport (snapshot refresh from the Day Spine).
-    # Exactly one tool, the read-only action; take_action itself is on its denylist.
-    "hb-snapshot": ("assistant/scripts/hb_snapshot.py", "py"),
     "travel-scout": ("travel/scripts/travel_cron.ps1", "ps1"),
     "lot-scout": ("lots/scripts/lots_cron.ps1", "ps1"),
-    # ads_cron.ps1: daily Ad Scout learning pass. Read-only tools + the read-only
-    # HoneyBook action only; must never gain take_action, Bash, or a UI/send tool.
+    # ads_cron.ps1: daily Ad Scout learning pass. Read-only tools + the CRM's read-only
+    # action only; must never gain take_action, Bash, or a UI/send tool.
     "ad-scout": ("ads/ads_cron.ps1", "ps1"),
     # agent brain (assistant/agent, 2026-10-05): the conversational agent's model turn.
-    # Read tools + the read-only HoneyBook action only. Everything it changes goes through
+    # Read tools + the CRM's read-only action only. Everything it changes goes through
     # the SUGGEST line and zero-LLM writers; it must never gain a write, send or UI tool.
     "agent-brain": ("assistant/agent/brain.py", "py"),
     # the doer (assistant/doer, 2026-10-05): Sage's hands. The ONE target that may act in a
     # browser, and only through its own private MCP server (mcp__playwright-doer__*, a Chromium
     # on the wedding profile with a CDP port); the machine-wide playwright/playwright-cli tools
     # stay on CRITICAL_NEVER_ALLOW for every target including this one. Its belt: no mail, no
-    # HoneyBook write, no web fetch, no evaluate/run_code/file_upload/network_request, Bash only
+    # CRM write, no web fetch, no evaluate/run_code/file_upload/network_request, Bash only
     # for login_fill.py (vault logins typed out of the model's sight), report.py checkpoint and
     # vault.py has; file writes only under assistant/out/doer. Irreversible steps end at a
     # checkpoint card (tier C in policy.json); drain runs the approved step through --approved.
@@ -92,14 +86,22 @@ TARGETS = {
     # --settings (fail-closed tiers: A/B run, C refused until a sha-bound card tap, NEVER refused for
     # good). No MCP servers (--strict-mcp-config, empty), no PowerShell tool, no web, no nested
     # agents; Write/Edit only under assistant/out/doer and assistant/doer/tools. The deny floor
-    # below keeps mail, HoneyBook write, every playwright click and the approval chain out.
+    # below keeps mail, CRM writes, every playwright click and the approval chain out.
     "doer-computer": ("assistant/doer/computer.py", "py"),
     # Sage's builder (assistant/agent/builder.py, 2026-10-07): turns build notes into code in a git
     # worktree with Edit/Write and Bash limited to py_compile, git diff/status and the test files.
-    # No skip-permissions, no send/UI/mail/HoneyBook-write tool; its PROTECTED_PATHS keep this file,
+    # No skip-permissions, no send/UI/mail/CRM-write tool; its PROTECTED_PATHS keep this file,
     # the baseline, .claude/ and the send path out of its diffs.
     "agent-builder": ("assistant/agent/builder.py", "py"),
 }
+# an organization's own gated scripts (its CRM connector's read and write transports, 2026-10-29) are not listed
+# here: once frozen into the baseline they are checked like the rest (the engine ships no connector)
+try:
+    for _n, _b in (json.loads(BASELINE.read_text(encoding="utf-8")).get("targets") or {}).items():
+        if _n not in TARGETS and isinstance(_b, dict) and _b.get("path"):
+            TARGETS[_n] = (str(_b["path"]), str(_b.get("type") or "py"))
+except (OSError, ValueError):
+    pass
 
 # dream_cron is checked for allow/deny but SKIPPED for the skip-permissions test
 # because it deliberately carries --dangerously-skip-permissions.
@@ -152,7 +154,22 @@ def _canonical_deny(text: str, kind: str) -> set:
         m = re.search(r"\$denied\s*=\s*@\((.*?)\)\s*-join", text, re.DOTALL)
     else:
         m = re.search(r"DENIED(?:_TOOLS)?\s*=\s*\",\"\.join\(\[(.*?)\]\)", text, re.DOTALL)
-    return _tokens(m.group(1)) if m else set()
+    out = _tokens(m.group(1)) if m else set()
+    # the organization's CRM connector write tools are added to the belt at runtime (2026-10-29: the engine names
+    # no CRM); a target counts them only when its code calls the helper that adds them
+    if (kind == "py" and re.search(r"\b(_apply_crm_tools|_denied_with_crm)\(", text)) or \
+            (kind == "ps1" and re.search(r"plugin_set\('MCP_WRITE_TOOLS'\).*\n.*\$denied\s*=\s*\$denied\s*\+", text)):
+        out |= _connector_write_tools()
+    return out
+
+
+def _connector_write_tools() -> set:
+    try:
+        sys.path.insert(0, str(VAULT / "assistant" / "scripts"))
+        import alib
+        return {t for t in alib.plugin_set("MCP_WRITE_TOOLS") if TOKEN_RE.fullmatch(t)}
+    except Exception:  # noqa: BLE001
+        return set()
 
 
 def _all_allow(text: str, kind: str) -> set:

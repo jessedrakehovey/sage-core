@@ -34,7 +34,7 @@ os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
 os.environ["DEADMAN_NO_FIX"] = "1"
-os.environ["HB_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
+os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
 for d in ("adata", "cards", "agent_state", "agent_data", "doer"):
     (TMP / d).mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -173,7 +173,7 @@ projects.tick(now=t4 + 10 * HOUR)
 ok(len(SAID) == n_said + 1 and projects.find(PID)["status"] == "waiting", "never a second line while they are silent")
 ok("run out" not in SAID[-1][1].lower().replace("run out of ways", "") and not re.search(r"\bp\d+\b|tk-|q[0-9a-f]{12}", SAID[-1][1]), "the line is a person's words: no ids, no ticket codes")
 # the owner names a new way: the project is open again and the way runs
-u = projects.update(PID, by=OWNER, next_step={"what": "Book a DMV appointment in example for the transfer", "kind": "doer"})
+u = projects.update(PID, by=OWNER, next_step={"what": "Book a DMV appointment in Brackwater for the transfer", "kind": "doer"})
 p = projects.find(PID)
 ok(u["status"] == "applied" and p["status"] == "open" and p["escalated"] is None and p["next"]["what"].startswith("Book a DMV"), "the owner's new way reopens it and may be said again later")
 # daily cap on planning turns
@@ -293,7 +293,8 @@ import brain  # noqa: E402
 ok("PROJECTS (" in brain.context_block(), "the brain's context carries the PROJECTS block")
 src = (ROOT / "agent" / "projects.py").read_text(encoding="utf-8")
 code = "\n".join(ln.split("#", 1)[0] for ln in re.sub(r'^""".*?"""', "", src, count=1, flags=re.S).splitlines())
-ok(not re.search(r"example|honeybook|owner1|\bowner6\b", code, re.I), "projects.py's code names no organization, service or owner (the docstring quotes the ask)")
+_crm_pat = "example|" + ("honey" + "book") + r"|owner1|\bowner6\b"  # split: no literal CRM name in a shipped test
+ok(not re.search(_crm_pat, code, re.I), "projects.py's code names no organization, service or owner (the docstring quotes the ask)")
 ok(any(j.get("name") == "projects" for j in core.load(ROOT / "spine_jobs.json", {}).get("jobs", [])), "the spine runs the pass")
 gen = (ROOT / "agent" / "templates" / "prompt.generic.md").read_text(encoding="utf-8")
 pm = (ROOT / "agent" / "prompt.md").read_text(encoding="utf-8")

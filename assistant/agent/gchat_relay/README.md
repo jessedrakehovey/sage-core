@@ -30,7 +30,7 @@ Apps Script's daily runtime. `installFlushTrigger` is push-mode only.
 
 **This organization switched to pull mode on 2026-10-28** (done from the doer's signed-in browser over CDP, the
 owner's sign-in the only hand step): add-on deployment `AKfycbxtOfRX…` at version 6, web app deployment "pull mode:
-web app for the PC poller", ENDPOINT deleted, poller = scheduled task "the organization". Lessons from
+web app for the PC poller", ENDPOINT deleted, poller = scheduled task "example-org Relay Poll (assistant)". Lessons from
 the switch: the doer closes the shared browser at the end of its runs (hold `doer-tick` while driving the IDE); a
 new deployment made with "Web app" ticked can still come out Library-only, so re-open it in Manage deployments and
 check the web app URL is shown; Apps Script's cold start answers in 20-40 s, so the poller's read timeout is 45 s.
@@ -48,7 +48,7 @@ works too. Everything after the door is unchanged: `gchat_events.handle` → `ca
 
 Google side (owner's account, owner3@example.invalid; the script lives in the owner's Drive):
 1. script.google.com → New project "Sage relay"; paste `Code.gs`; Project Settings → tick
-   "Show appsscript.json", paste the manifest; set the GCP project number **555-032-5432**.
+   "Show appsscript.json", paste the manifest; set the GCP project number **5550325432**.
 2. Project Settings → Script properties: `ENDPOINT` = the URL above, `RELAY_SECRET` = the
    value of `relay_secret` from `gchat.local.json`.
 3. Run `pingTest` once (authorise) → log shows `200 {"ok":true,...}` and Mission Control's log
@@ -74,7 +74,7 @@ path as the pencil on Mission Control, so the ticket is minted with the edited t
 
 ## Hands-free texting (2026-10-06)
 
-An approved iMessage used to wait until the owner opened the "the organization" Shortcut. Now
+An approved iMessage used to wait until the owner opened the "example-org Send Texts" Shortcut. Now
 `phone_bridge.queue_outbound` calls `phone_nudge.fire()`: one SMS-gateway email
 (`config.json` -> `phone.nudge_to` = the owner's number @vtext.com, from the example account)
 reading "example-SEND n text(s) ready". An iOS automation (Message contains example-SEND, Run
@@ -106,7 +106,7 @@ shape Chat accepts. Now:
 - **No error while it works (2026-10-25):** a slow tap's card shows ⏳ "Working on it" and flips
   to the real outcome by itself when it lands. A tap the relay delivers twice gets the card as it
   stands back, never an empty reply (Chat shows that as "unable to process", which is what
-  the owner saw at 5:36 on example's resend while it was really sending).
+  the owner saw at 5:36 on Corwin's resend while it was really sending).
 
 Deploying v5 (owner's account): paste `Code.gs` over the old code, add the scope
 `https://www.googleapis.com/auth/script.scriptapp` to `appsscript.json` (already in the copy

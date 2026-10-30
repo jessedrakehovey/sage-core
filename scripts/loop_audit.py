@@ -26,7 +26,7 @@ DESIGN — two halves, cleanly separated:
   2. GAP CHECK: compares the proposal index against an optional actions feed:
          Memory/audit/the owner_actions.jsonl
      one JSON object per line, e.g.:
-         {"ts":"2026-07-06","channel":"email","key":"couple-Glenrock-Ivybridge",
+         {"ts":"2026-07-06","channel":"email","key":"couple-glenrock-ivybridge",
           "subject":"delivery ready","scope":"couple"}
          {"ts":"2026-07-06","channel":"skill-apply","key":"wiki-ingest step fix",
           "scope":"skill"}

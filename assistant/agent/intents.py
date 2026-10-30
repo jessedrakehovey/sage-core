@@ -56,7 +56,17 @@ BLOCKED_KINDS = ("capability", "signin", "fact", "tap", "connection")
 # a decision card's buttons (cards.py: a label under 7 words and 46 chars, "(Recommended)" included)
 DECIDE_OPTIONS = (2, 3)
 DECIDE_LABEL_WORDS, DECIDE_LABEL_CHARS = 5, 30
-CHANNELS = ("text", "email", "service", "honeybook")   # honeybook = the old name for service
+def _channels() -> tuple:
+    """Valid channel names, including any old aliases the CRM connector registers."""
+    try:
+        import alib
+        aliases = alib.plugin_set("CHANNEL_ALIASES")
+    except Exception:  # noqa: BLE001
+        aliases = set()
+    return ("text", "email", "service") + tuple(a for a in sorted(aliases) if a not in ("text", "email", "service"))
+
+
+CHANNELS = _channels()   # built once at import; includes the connector's legacy channel aliases
 
 
 def lanes() -> tuple:
@@ -77,7 +87,7 @@ def lanes() -> tuple:
 def failed_send(qid: str = "", hours: float = 24.0) -> tuple:
     """(qid, ticket) of a card an owner approved whose send then failed: the card is consumed, its newest ticket is an
     exception and nothing for it is queued, running or done. Without a qid: the ONE such card failed in the last
-    `hours` (none or several -> ("", {})). An UNVERIFIED failure may have landed, so then only hb_message qualifies
+    `hours` (none or several -> ("", {})). An UNVERIFIED failure may have landed, so then only a CRM message kind qualifies
     (its executor reads the client's thread in the service before it sends, so a landed message is never sent twice)."""
     sys.path.insert(0, str(core.AGENT.parent / "scripts"))
     import cards
@@ -94,7 +104,13 @@ def failed_send(qid: str = "", hours: float = 24.0) -> tuple:
         last = max(tks, key=lambda x: str(x.get("ts_done") or x.get("ts") or ""))
         if last.get("status") != "exception" or (not qid and es._done_ts(last) < cutoff):
             continue
-        if "UNVERIFIED" in str(last.get("result") or "").upper() and last.get("kind") != "hb_message":
+        _msg_kinds = set()
+        try:
+            import alib
+            _msg_kinds = alib.plugin_set("MESSAGE_KINDS")
+        except Exception:  # noqa: BLE001
+            pass
+        if "UNVERIFIED" in str(last.get("result") or "").upper() and last.get("kind") not in _msg_kinds:
             continue
         if (cards._read(cards.DONE / f"{q}.json") or {}).get("status") != "consumed" or cards._read(cards.LIVE / f"{q}.json"):
             continue
@@ -453,7 +469,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         import exec_store as es
         card = cards._read(cards.LIVE / f"{qid}.json")
         if (not card or card.get("status") != "open") and not skip:
-            # the owner 2026-10-28 20:27 "Fix it and send" after the approved example & example follow-up failed:
+            # the owner 2026-10-28 20:27 "Fix it and send" after the approved Teo & Wren follow-up failed:
             # Sage promised "the card here in a few minutes" and the operator reopened it in another thread. A card the
             # owner already approved whose send provably failed comes back and is approved on their words, same turn.
             fq, ft = failed_send(qid)
@@ -665,7 +681,20 @@ def _validate_decide(payload: dict, t: dict) -> tuple:
                   f"and that you'd go with {rec!r}. Do not ask the question in chat as well, and never end on 'would you like'."), clean
 
 
-_WEDDING = re.compile(r"\b(wedding|lead|couple|bride|groom|honeybook|client|venue|film|shoot|inquir|retainer|proposal|contract|deliver|editor)", re.I)
+def _wedding_re():
+    try:
+        import crm as _crm_m
+        crm_word = re.escape(_crm_m.name().lower())
+    except Exception:  # noqa: BLE001
+        crm_word = ""
+    pat = r"\b(wedding|lead|couple|bride|groom|client|venue|film|shoot|inquir|retainer|proposal|contract|deliver|editor"
+    if crm_word and crm_word not in ("the crm", ""):
+        pat += "|" + crm_word
+    pat += ")"
+    return re.compile(pat, re.I)
+
+
+_WEDDING = _wedding_re()
 
 
 def _guess_lane(text: str) -> str:
@@ -716,7 +745,12 @@ _RESEND = re.compile(r"\b(resend|second text|again|follow[- ]?up|one more)\b", r
 def _check_draft(d: dict, ask_text: str = "") -> str:
     """A draft the brain wrote itself: enough to post a card (cards.py validates the rest)."""
     ch = _s(d.get("channel")).lower()
-    if ch == "honeybook":
+    try:
+        import alib
+        _aliases = alib.plugin_set("CHANNEL_ALIASES")
+    except Exception:  # noqa: BLE001
+        _aliases = set()
+    if ch in _aliases:
         ch = d["channel"] = "service"
     if ch == "text" and _s(d.get("to")) and not _RESEND.search(ask_text + " " + _s(d.get("text"))):
         prev = recent_text_to(_s(d.get("to")))
@@ -746,8 +780,16 @@ def _check_draft(d: dict, ask_text: str = "") -> str:
         except Exception:  # noqa: BLE001
             if not re.fullmatch(r"\+?\d{10,15}", re.sub(r"[\s().-]", "", _s(d.get("to")))):
                 return "draft.to must be one phone number."
-    if ch == "service" and not re.fullmatch(r"[0-9a-f]{24}", _s(d.get("workspace_id"))):
-        return "draft.workspace_id must be the client's 24-hex workspace id (from the read-only connector)."
+    if ch == "service":
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        try:
+            import crm as _crm_m
+            tid = _s(d.get("thread_id") or d.get("workspace_id"))
+            if not _crm_m.valid_thread(tid):
+                return "draft.thread_id must be the client's CRM thread id (from the read-only connector)."
+        except Exception:  # noqa: BLE001
+            if not re.fullmatch(r"[0-9a-f]{24}", _s(d.get("thread_id") or d.get("workspace_id"))):
+                return "draft.thread_id must be the client's CRM thread id (from the read-only connector)."
     if re.search(r"\[(?:owner1|OWNER|TODO|FILL)[^\]]*\]", _s(d.get("text")), re.I):
         return "the draft still has a blank in square brackets; fill it or ask the one question."
     if _s(d.get("send_at")):

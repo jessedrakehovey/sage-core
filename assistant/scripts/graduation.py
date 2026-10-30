@@ -4,8 +4,8 @@ The property OS's followups/graduation.py: an allowlisted action class with enou
 rate, zero breaches and zero clawbacks is RECOMMENDED for autonomy and the owner flips it. Ported, scaled to this
 volume (tracking.json -> graduation):
 
-  classes      the exec kinds that may ever graduate (internal writes gated by a card today: hb_add_participant,
-               hb_set_stage, sheet_set, hb_note, hb_project_update). Anything the protected core names is
+  classes      the exec kinds that may ever graduate (internal writes gated by a card today; list comes from
+               the CRM connector's GRADUATION_CLASSES attr). Anything the protected core names is
                FOREVER_GATED here whatever the file says: outbound sends, money, the doer's steps, prices, dates.
   min_samples  resolved taps of that kind (default 10; the property uses 25 at its volume)
   approve_min  share approved (not Skip/Drop), default 0.90
@@ -31,21 +31,34 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 from alib import DATA, load_json  # noqa: E402
+import crm  # noqa: E402
 
 TRACKING = ROOT / "tracking.json"
 STATE = DATA / "graduation.json"
-FOREVER_GATED = {"email_send", "imessage_send", "hb_message", "hb_touches_send", "ads_apply", "agent_run", "hb_automation_approve",
-                 "hb_proposal_draft", "calendar_hold", "local", "tracking_fix"}
+# Engine-owned forever-gated kinds (outbound sends, money, browser agent, etc.); CRM-specific
+# forever-gated kinds (e.g. outbound CRM messages) are merged in dynamically via crm.kinds().
+FOREVER_GATED = {"email_send", "imessage_send", "ads_apply", "agent_run", "calendar_hold", "local", "tracking_fix"}
 DEFAULTS = {"enabled": True, "min_samples": 10, "approve_min": 0.90, "window_days": 90,
-            "classes": ["hb_add_participant", "hb_set_stage", "sheet_set", "hb_note", "hb_project_update"]}
+            "classes": []}
 SKIP = re.compile(r"^\s*(skip|drop|dismiss|ignore|not now|later|remind me|leave it|never mind|cancel|no\b)", re.I)
+
+
+def _all_forever_gated() -> frozenset:
+    """Engine-owned forever-gated kinds plus any the CRM connector adds."""
+    return frozenset(FOREVER_GATED | crm.kinds("FOREVER_GATED"))
+
+
+def _graduation_classes() -> list:
+    """Exec kinds eligible for graduation: the engine's own (sheet_set) plus the CRM connector's."""
+    return ["sheet_set"] + sorted(crm.kinds("GRADUATION_CLASSES") - {"sheet_set"})
 
 
 def cfg() -> dict:
     t = load_json(TRACKING, {}) or {}
     g = t.get("graduation") if isinstance(t.get("graduation"), dict) else {}
+    base_classes = g.get("classes") if g.get("classes") else _graduation_classes()
     out = {**DEFAULTS, **{k: v for k, v in g.items() if not str(k).startswith("_")}}
-    out["classes"] = [c for c in (out.get("classes") or []) if c not in FOREVER_GATED]
+    out["classes"] = [c for c in base_classes if c not in _all_forever_gated()]
     return out
 
 
@@ -105,7 +118,7 @@ def stats(kind: str, window_days: int) -> dict:
 
 def eligible(kind: str, c: dict | None = None) -> tuple:
     c = c or cfg()
-    if kind in FOREVER_GATED or kind not in c["classes"]:
+    if kind in _all_forever_gated() or kind not in c["classes"]:
         return False, "never graduates"
     s = stats(kind, int(c["window_days"]))
     if s["resolved"] < int(c["min_samples"]):
@@ -120,10 +133,9 @@ def eligible(kind: str, c: dict | None = None) -> tuple:
 def offer(kind: str, why: str, dry: bool = False) -> dict:
     """ONE decide card by code. The tap flips the gate; code never flips it alone."""
     import cards
-    names = {"hb_add_participant": "adding a partner or planner to a couple's HoneyBook project",
-             "hb_set_stage": "moving a HoneyBook project to its next stage (or marking it lost)",
-             "sheet_set": "writing cells on the pricing sheet", "hb_note": "an internal HoneyBook note",
-             "hb_project_update": "a HoneyBook project field (date, location, details)"}
+    _cn = crm.name()
+    # CRM-specific kind descriptions: engine owns only sheet_set; connector kinds fall back to the kind name.
+    names = {"sheet_set": "writing cells on the pricing sheet"}
     what = names.get(kind, kind.replace("_", " "))
     q = {"header": f"Make it automatic? {what}"[:60], "lane": "wedding", "audience": "internal", "urgent": False,
          "question": (f"You have approved {what} unchanged every time ({why}). Shall I do it without a card from now on? "

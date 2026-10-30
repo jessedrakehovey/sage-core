@@ -92,9 +92,9 @@ def title_of(p: Path, body: str) -> str:
 
 def chunk_body(body: str):
     """Greedily pack paragraphs into ~CHUNK_CHARS windows on blank-line splits."""
-    Kingsmere = [pp.strip() for pp in re.split(r"\n\s*\n", body) if pp.strip()]
+    kingsmere = [pp.strip() for pp in re.split(r"\n\s*\n", body) if pp.strip()]
     chunks, buf = [], ""
-    for para in Kingsmere:
+    for para in kingsmere:
         if buf and len(buf) + len(para) + 2 > CHUNK_CHARS:
             chunks.append(buf)
             buf = para

@@ -10,7 +10,7 @@ no model.
             reads it too).
   Hygiene   ONE card: every drift finding, numbered; the approve button mints one `tracking_fix`
             ticket that applies every row with a record fix (internal writes only); rows that
-            need the owner's own hand (a HoneyBook stage, "what happened at X?") are listed for him.
+            need the owner's own hand (a CRM stage move, "what happened at X?") are listed for him.
             "Skip this week" latches nothing: the same rows come back next week unless fixed.
 
   python assistant/scripts/tracking/weekly.py            # tick (the spine runs this hourly)
@@ -28,6 +28,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import crm  # noqa: E402
 import drift  # noqa: E402
 
 AGENT = C.ROOT / "agent"
@@ -104,7 +106,7 @@ def _post_text(text: str, dry: bool) -> bool:
 
 def _groups(fs: list, rows: list) -> list:
     """[{title, rows}] in the order the rows already have: a finding's subject is the part of its
-    title before ':' (example: editing has started), else the lane; rows about one subject fold
+    title before ':' (Sloane: editing has started), else the lane; rows about one subject fold
     together, and the first row of each group stays visible when the section is collapsed."""
     out, by = [], {}
     for f, row in zip(fs, rows):
@@ -118,22 +120,23 @@ def _groups(fs: list, rows: list) -> list:
 
 
 def _advice(fs: list, fixes: list) -> str:
-    """The one-line advice under the weekly card. 2026-10-18: HoneyBook stage moves are fixes the tap applies
-    (hb_set_stage through the connector), so the line says how many touch HoneyBook and that the target stage's
-    own automation may run; the old '[HoneyBook, your hand]' count is gone."""
-    hb = sum(1 for f in fixes if str(f.get("op") or "") == "hb_stage")
-    manual = sum(1 for f in fs if f.get("manual") == "honeybook")
+    """The one-line advice under the weekly card. 2026-10-18: CRM stage moves are fixes the tap applies
+    (through the connector), so the line says how many touch the CRM and that the target stage's
+    own automation may run; manual CRM stages are counted separately."""
+    crm_fixes = sum(1 for f in fixes if str(f.get("op") or "") in drift.stage_ops())
+    manual = sum(1 for f in fs if f.get("manual") and f.get("manual") not in ("ask",))
+    crm_nm = crm.name()
     if not fixes:
-        return "Nothing here writes anything" + (f"; {manual} HoneyBook stage{'s' if manual != 1 else ''} wait for you." if manual else ".")
+        return "Nothing here writes anything" + (f"; {manual} {crm_nm} stage{'s' if manual != 1 else ''} wait{'s' if manual == 1 else ''} for you." if manual else ".")
     n = len(fixes)
     parts = [f"Approve: {n} fix{'es' if n != 1 else ''}"]
-    if hb:
-        parts.append(f"{hb} move{'s' if hb == 1 else ''} a HoneyBook stage (read back afterwards; that stage's HoneyBook automation may run)")
-    if n - hb:
-        parts.append(f"{n - hb} only move internal stages or close stale reminders")
+    if crm_fixes:
+        parts.append(f"{crm_fixes} move{'s' if crm_fixes == 1 else ''} a {crm_nm} stage (read back afterwards; that stage's automation may run)")
+    if n - crm_fixes:
+        parts.append(f"{n - crm_fixes} only move internal stages or close stale reminders")
     line = parts[0] + ": " + "; ".join(parts[1:]) + "."
     if manual:
-        line += f" {manual} HoneyBook stage{'s' if manual != 1 else ''} still wait for you."
+        line += f" {manual} {crm_nm} stage{'s' if manual != 1 else ''} still wait{'s' if manual == 1 else ''} for you."
     return line
 
 
@@ -144,7 +147,7 @@ def hygiene_card(fs: list, max_rows: int) -> dict | None:
     fixes = [f["fix"] for f in fs if f.get("fix")]
     rows = []
     for i, f in enumerate(fs, 1):
-        tag = "fix" if f.get("fix") else ("HoneyBook, your hand" if f.get("manual") == "honeybook" else "tell me")
+        tag = "fix" if f.get("fix") else (f"{crm.name()}, your hand" if f.get("manual") and f.get("manual") not in ("ask",) else "tell me")
         rows.append(f"{i}. {f['text']} [{tag}]" + (f" Fix: {f['fix']['desc']}." if f.get("fix") else ""))
     lanes = sorted({f["lane"] for f in fs})
     q = {"header": "Weekly record check", "lane": lanes[0] if len(lanes) == 1 else "personal",

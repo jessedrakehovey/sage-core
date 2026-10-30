@@ -36,6 +36,7 @@ ROOT = HERE.parent
 VAULT = ROOT.parent
 sys.path.insert(0, str(HERE))
 from alib import DATA, load_json  # noqa: E402
+import crm
 
 STORE = DATA / "scorecard.jsonl"
 LEARN_DIR = Path(os.environ.get("ASSISTANT_LEARNINGS") or (ROOT / "learnings"))
@@ -44,13 +45,25 @@ IGNORED_BELOW = 0.10
 DEAD_DAYS = 7
 REPEAT = re.compile(r"\b(again|still|didn'?t|did not|never|you (told|said)|where is|nothing happened|not working|fail(ed|ure)?|wrong|no card)\b", re.I)
 SKIP_OPTS = re.compile(r"^\s*(skip|drop|dismiss|ignore|not now|later|remind me|leave it|never mind|cancel|no\b)", re.I)
-FAILURE_CLASSES = [("credential", r"sign(ed)? out|password|login|credential|token|not configured|no login|re-?auth"),
-                   ("timeout", r"time(d)? out|timeout|unverified"),
-                   ("connector", r"honeybook|connector|is not a function|\bapi\b|http|sheet"),
-                   ("browser", r"browser|click|element|snapshot|doer|page"),
-                   ("phone", r"phone|outbox|\back\b|imessage|\btext\b"),
-                   ("refused", r"refus|forbid|not allowed|policy|blank"),
-                   ("model-claimed", r"no deed|claim with no|said")]
+_FAILURE_CLASSES_BASE = [
+    ("credential", r"sign(ed)? out|password|login|credential|token|not configured|no login|re-?auth"),
+    ("timeout", r"time(d)? out|timeout|unverified"),
+    ("connector", None),   # filled lazily with crm.name()
+    ("browser", r"browser|click|element|snapshot|doer|page"),
+    ("phone", r"phone|outbox|\back\b|imessage|\btext\b"),
+    ("refused", r"refus|forbid|not allowed|policy|blank"),
+    ("model-claimed", r"no deed|claim with no|said"),
+]
+
+
+def _failure_classes():
+    crm_word = re.escape(crm.name().lower())
+    return [(name, (rf"{crm_word}|connector|is not a function|\bapi\b|http|sheet" if rx is None else rx))
+            for name, rx in _FAILURE_CLASSES_BASE]
+
+
+# kept for import compatibility (callers that read the list directly)
+FAILURE_CLASSES = _failure_classes()
 
 
 def _ts(s) -> float:
@@ -64,7 +77,7 @@ def _classify(detail: str, kind: str = "") -> str:
     if kind == "said":
         return "model-claimed"
     d = str(detail or "")
-    for name, rx in FAILURE_CLASSES:
+    for name, rx in _failure_classes():
         if re.search(rx, d, re.I):
             return name
     return "other"

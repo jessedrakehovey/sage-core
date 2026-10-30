@@ -40,6 +40,8 @@ from alib import DATA, config, load_json, save_json  # noqa: E402
 STATE_DIR = DATA / "followups"
 STATE_PATH, LOG_PATH = STATE_DIR / "state.json", STATE_DIR / "log.jsonl"
 SOP_MAP_PATH = Path(os.environ.get("SOP_MAP") or (Path(__file__).resolve().parent.parent / "data" / "sop_map.json"))
+if not SOP_MAP_PATH.is_file() and not os.environ.get("SOP_MAP"):   # the bare engine: the scrubbed template
+    SOP_MAP_PATH = SOP_MAP_PATH.parents[1] / "templates" / "data" / SOP_MAP_PATH.name
 VALID_STATUS = {"waiting", "fired", "done", "dismissed", "expired"}
 VALID_TRIGGER = {"mail", "date", "manual"}
 _VAR_RE = re.compile(r"\{([a-zA-Z0-9_]+)\}")
@@ -274,7 +276,7 @@ def cancel_unit(sop, unit, why="cancelled", keep_steps=(), hold=False):
     fired items are dismissed and their still-open follow-up tickets are closed, so nothing
     keeps reminding the owner about a couple who is no longer a client. Returns how many stopped.
     hold=True parks them as 'expired' instead, which arm_chain may re-arm: a wedding that is
-    still a lead (not signed) gets its chain back the day HoneyBook calls it a client."""
+    still a lead (not signed) gets its chain back the day the CRM calls it a client."""
     n, ids = 0, set()
     with StateLock():
         st = load_state()
@@ -371,7 +373,7 @@ def _meeting_hold(st, it, now):
     """A lead who booked a meeting or call gets no nudge, no reply chase, nothing (the owner 2026-10-08,
     Arden & Reese: "they booked a meeting, no email needed"). True = skip this tick, silently.
     The item waits (and does not expire) until a day after the meeting; then, with no new meeting,
-    the first held nudge fires (its instruction still checks HoneyBook for a signature) and the
+    the first held nudge fires (its instruction still checks the CRM for a signature) and the
     other held steps of that lead are closed, so a passed meeting costs the couple one nudge at most."""
     try:
         import lead_meetings

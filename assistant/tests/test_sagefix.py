@@ -72,15 +72,15 @@ google_api.accounts_of = lambda key: ["owner1-personal"]
 
 # ---------------------------------------------------------------- 1. eight events a reply, then change and remove by title
 evs = [{"title": f"Catalina day {i}", "start": f"2026-10-{9 + i:02d}", "all_day": True} for i in range(3)]
-evs.append({"title": "example: signature couples shoot (Solvang)", "start": "2026-10-17", "all_day": True})
+evs.append({"title": "Teo: signature couples shoot (Solvang)", "start": "2026-10-17", "all_day": True})
 lines = actions.apply({"event": evs}, owner1, {"convo": "dm:owner1"})
 ok(len(CAL["created"]) == 4 and not lines, "four events in one reply, no confirmation noise")
 made = actions.made_events()
-ok(len(made) == 4 and made[-1]["title"].startswith("example") and made[-1]["account"] == "owner1-personal", "the ledger lists the events the agent made")
+ok(len(made) == 4 and made[-1]["title"].startswith("Teo") and made[-1]["account"] == "owner1-personal", "the ledger lists the events the agent made")
 blk = actions.events_block()
-ok("CALENDAR EVENTS YOU ADDED" in blk and "example: signature couples shoot" in blk, "the events block names them for the next turn")
+ok("CALENDAR EVENTS YOU ADDED" in blk and "Teo: signature couples shoot" in blk, "the events block names them for the next turn")
 
-lines = actions.apply({"event_change": {"match": "example", "start": "2026-10-17 17:25", "end": "2026-10-17 18:30", "location": "Solvang"}}, owner1, {})
+lines = actions.apply({"event_change": {"match": "teo", "start": "2026-10-17 17:25", "end": "2026-10-17 18:30", "location": "Solvang"}}, owner1, {})
 ok(not lines and CAL["updated"] and CAL["updated"][-1]["id"] == "ev4" and CAL["updated"][-1]["start"] == "2026-10-17 17:25" and CAL["updated"][-1]["all_day"] is False,
    "a placeholder the agent made is changed to a timed event, quietly")
 lines = actions.apply({"event_change": {"match": "catalina", "title": "x"}}, owner1, {})
@@ -127,7 +127,7 @@ ts = lambda d: time.strftime("%Y-%m-%d %H:%M", time.localtime(now - d))  # noqa:
 core.append(core.TRANSCRIPT, {"ts": ts(300), "convo": convo, "who": "owner1", "text": "What do you mean unanswered vendor email?", "channel": "gchat"})
 core.append(core.TRANSCRIPT, {"ts": ts(240), "convo": convo, "who": name, "text": "Fair, that was clunky...", "channel": "gchat"})
 ok(bridge.recently_answered(convo, owner1, "What do you mean unanswered vendor email?", now), "the same words again within 15 min, already answered: a repeat")
-ok(not bridge.recently_answered(convo, owner1, "What do you mean unanswered vendor email? Also the example one", now), "different words are not a repeat")
+ok(not bridge.recently_answered(convo, owner1, "What do you mean unanswered vendor email? Also the Teo one", now), "different words are not a repeat")
 core.append(core.TRANSCRIPT, {"ts": ts(120), "convo": convo, "who": "owner1", "text": "How do I dispose of the sand?", "channel": "gchat"})
 ok(not bridge.recently_answered(convo, owner1, "How do I dispose of the sand?", now), "an unanswered question asked again is NOT a repeat: it gets a turn")
 core.append(core.TRANSCRIPT, {"ts": ts(60), "convo": convo, "who": name, "text": "Bag it, tie it, regular trash.", "channel": "doer"})

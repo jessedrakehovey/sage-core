@@ -21,7 +21,7 @@ REALERT_H; a recovery is said once):
   probe    assistant/data/comms_probe_state.json  `last_wake` older than 40 min inside 07:00-21:30
   disk     the vault's drive under 5 GB free
 
-Scheduled as its own Windows task ("the organization", every 30 min, assistant/tasks/Deadman.xml),
+Scheduled as its own Windows task ("example-org Deadman (assistant)", every 30 min, assistant/tasks/Deadman.xml),
 NOT a spine job. Last line: RESULT DEADMAN ok=<n> stale=<names>.
 
   python assistant/scripts/deadman.py [--dry-run] [--status]
@@ -210,9 +210,9 @@ def _muted(cls: str) -> bool:
 FIX_GAP_MIN = 20
 # what the deadman tries by itself before a word reaches the owner (2026-10-25)
 FIXES = {
-    "probe": ["schtasks", "/run", "/tn", "example-org"],
+    "probe": ["schtasks", "/run", "/tn", "example-org Comms Probe (assistant)"],
     "bridge": [PY, str(VAULT / "assistant" / "agent" / "bridge.py"), "--ensure"],
-    "spine": ["schtasks", "/run", "/tn", "example-org"],
+    "spine": ["schtasks", "/run", "/tn", "example-org Day Spine (assistant)"],
 }
 
 

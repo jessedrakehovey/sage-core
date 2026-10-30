@@ -108,7 +108,7 @@ check("tap: 'Have Sage do it' queues an operator ticket and closes the entry",
       r["ok"] and price_key not in [e["key"] for e in pending.entries()] and tk)
 
 check("tap: an ordinary ask goes to the operator, not the doer", tk and all(t.get("kind") == "owner1_request" for t in tk))
-ask(f"sage-dream-ask-{day}-110000-1", "Put staff1 on the Vision Meeting in the HoneyBook Scheduler as a second host (Multiple hosts, Add host).")
+ask(f"sage-dream-ask-{day}-110000-1", "Put staff1 on the Vision Meeting in the CRM Scheduler as a second host (Multiple hosts, Add host).")
 host_key = next(e["key"] for e in pending.entries() if "Scheduler" in e["text"])
 r = pending.answer(host_key, pending.DO_IT, by="owner1")
 dk = [t for t in tickets._load().values() if "Scheduler as a second host" in str(t.get("summary"))]
@@ -127,7 +127,7 @@ check("tap: 'Have Sage do it' on a sheet check goes to the doer, read-only, not 
       and look_key not in [e["key"] for e in pending.entries()]
       and "handed to the doer" in SUGG.read_text(encoding="utf-8"))
 check("routing: a change to a sheet is not a read-only look", not pending._is_look(PRICE)
-      and pending._is_look("Look at example.invalid and see if the pricing page loads"))
+      and pending._is_look("Look at example.com and see if the pricing page loads"))
 
 staff1_key = next(e["key"] for e in pending.entries() if "staff1" in e["text"])
 r = pending.answer(staff1_key, pending.DROP, by="owner1")

@@ -98,7 +98,23 @@ ASK_FOR_MESSAGE = re.compile(_LEAD + _VERB + r"\b", re.I)
 _NOT_AN_ASK = re.compile(r"^\s*(?:did|do|does|have|has|is|are|was|were|what|when|who|why|how|which|any)\b", re.I)
 CARD_FIELDS = ("task", "do", "card", "call")
 _QUOTED = re.compile(r"[\"“']([^\"”']{30,})[\"”']")
-_WEDDING = re.compile(r"\b(wedding|lead|couple|bride|groom|honeybook|client|venue|film|shoot|inquir|retainer|proposal|contract|deliver)", re.I)
+def _wedding_re():
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import crm as _crm_m
+        crm_word = re.escape(_crm_m.name().lower())
+    except Exception:  # noqa: BLE001
+        crm_word = ""
+    pat = r"\b(wedding|lead|couple|bride|groom|client|venue|film|shoot|inquir|retainer|proposal|contract|deliver"
+    if crm_word and crm_word not in ("the crm", ""):
+        pat += "|" + crm_word
+    pat += ")"
+    return re.compile(pat, re.I)
+
+
+_WEDDING = _wedding_re()
 
 
 def asked_for_message(text: str) -> bool:
@@ -187,6 +203,6 @@ def lead_intake_text(person_name: str, text: str, url: str) -> str:
     return (f"{person_name} forwarded a new wedding lead: {str(text or '').strip()[:600]}\n\n"
             f"Open the lead page {url} in the signed-in browser and read it. Report the couple's names, the wedding date, "
             "the venue and city, the guest count and budget if shown, what coverage they asked for, their message, and their "
-            "phone and email (or say they are hidden). Then check that date in HoneyBook's calendar and say whether it is open "
+            f"phone and email (or say they are hidden). Then check that date in the CRM's calendar and say whether it is open "
             "or what is booked on it. If the contact details are hidden behind a paid step (Zola's Connect spends credits), do "
             "not take it: stop there as a checkpoint so the owner decides on the card. Never reply to the couple.")

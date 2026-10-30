@@ -10,9 +10,9 @@
       "lane": "wedding",
       "what": "package a wedding for the remote editor (editor-handoff skill): 1080p proxies, audio, reference render, READ ME, straight into Dropbox; hours of rendering, best overnight",
       "cmd": ["{resolve_python}", "editor/handoff.py", "build", "{couple}"],
-      "args": {"couple": "the couple as the Resolve project names them, e.g. example"},
+      "args": {"couple": "the couple as the Resolve project names them, e.g. Sloane & Bram"},
       "options": {"editor": ["--editor", "{editor}"]},
-      "aliases": ["handoff", "editor handoff", "handoff build", "package for example", "example handoff", "build the handoff", "export for example"]
+      "aliases": ["handoff", "editor handoff", "handoff build", "package for corwin", "corwin handoff", "build the handoff", "export for corwin"]
     },
     {
       "key": "handoff_return",
@@ -22,7 +22,7 @@
       "cmd": ["{resolve_python}", "editor/handoff.py", "return", "{couple}", "{drp}"],
       "args": {"couple": "the couple as the Resolve project names them", "drp": "full path of the .drp he sent back"},
       "options": {"media": ["--media", "{media}"], "editor": ["--editor", "{editor}"]},
-      "aliases": ["handoff return", "example sent the project back", "bring example's edit in", "import example's drp", "editor return"]
+      "aliases": ["handoff return", "corwin sent the project back", "bring corwin's edit in", "import corwin's drp", "editor return"]
     }
   ]
 }

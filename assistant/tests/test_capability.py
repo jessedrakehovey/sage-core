@@ -67,7 +67,7 @@ NOTES, KICKS = [], []
 WIKI = TMP / "Wiki"
 
 
-def fake_write(note, by="", commit=True):
+def fake_write(note, by="", commit=True, ask=""):
     NOTES.append(dict(note, by=by))
     p = WIKI / "Personal" / (re.sub(r"[^\w .-]+", " ", note["title"]).strip() + ".md")
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -85,13 +85,13 @@ cases = [
     ("I can't switch the scout off from here, even with your OK, because the scheduled task itself is off limits to me.", "capability"),
     ("I can't time a send, because a card goes out the moment you tap it. So I set a reminder for 8:00 AM.", "capability"),
     ("Nothing like that exists yet, so I'm putting it in to be built.", "capability"),
-    ("- Tried: I checked the project.\n- Blocked because: there is no way for me to attach a questionnaire file to a HoneyBook project.\n- Need from you: nothing yet.", "capability"),
+    ("- Tried: I checked the project.\n- Blocked because: there is no way for me to attach a questionnaire file to a AcmeCRM project.\n- Need from you: nothing yet.", "capability"),
     ("owner1, the staff1 Meet setup needs owner4@example.invalid signed in to the doer's browser. That sign-in is a password step I can't do for you.", "signin"),
     ("Please tap Skip on it so it doesn't send twice; I can't answer cards for you.", "tap"),
     ("I couldn't find your dad's number in the contacts or the text log. What's his number?", "fact"),
     ("owner6's calendar isn't connected yet, so I can't see hers.", "connection"),
     ("That is outside what I may do (never change or reset a password, even when asked).", "protected"),
-    ("Contracted for example and example: the film, 8 hours of coverage, aerial.", "none"),
+    ("Contracted for Sloane and Bram: the film, 8 hours of coverage, aerial.", "none"),
     ("If I can't reach it I'll say so.", "none"),
     ("The numbers can rank shots but can't judge taste.", "none"),
     ("I'd add a line that he can't sign contracts or spend money.", "none"),
@@ -108,8 +108,8 @@ for text, want in cases:
     ok(got == want, f"classify -> {want}: {text[:60]!r} (got {got})")
 
 # ---------------------------------------------------------------- 2. after_turn: a can't with nothing behind it files the build, once
-ask = "book the meeting today in HoneyBook by sending a scheduling link, create a custom questionnaire from our meeting, and connect with their wedding planner"
-line = cap.after_turn(owner1, ask, "I sent the scheduling link card below. I can't create a custom questionnaire from here, HoneyBook has no way for me to build one.", [], CTX)
+ask = "book the meeting today in AcmeCRM by sending a scheduling link, create a custom questionnaire from our meeting, and connect with their wedding planner"
+line = cap.after_turn(owner1, ask, "I sent the scheduling link card below. I can't create a custom questionnaire from here, AcmeCRM has no way for me to build one.", [], CTX)
 ok(line == cap.LINE_BUILDING and len(NOTES) == 1 and KICKS and KICKS[-1][0] is True and KICKS[-1][1] == "Wiki/Personal/" + NOTES[0]["title"] + ".md"
    or (line == cap.LINE_BUILDING and len(NOTES) == 1 and KICKS[-1][0] is True), "a can't with no deed: ONE build request filed and kicked first, one sentence for the reply")
 body = NOTES[0]["body"]
@@ -120,15 +120,15 @@ g1 = next(iter(st["gaps"].values()))
 ok(g1["cls"] == "capability" and g1["status"] == "building" and g1["attempts"] == 1 and g1["thread"] == CTX["thread"], "the gap is open, building, attempt 1, in the asking thread")
 ok(any(it["kind"] == "build" and it["ref"] == g1["build"] and it["thread"] == CTX["thread"] for it in commitments.open_rows()),
    "a commitment row holds the build, so the thread gets the outcome receipt")
-line2 = cap.after_turn(owner1, "please build a custom questionnaire from our meeting in HoneyBook and connect their wedding planner", "I still can't make a questionnaire from here.", [], CTX)
+line2 = cap.after_turn(owner1, "please build a custom questionnaire from our meeting in AcmeCRM and connect their wedding planner", "I still can't make a questionnaire from here.", [], CTX)
 ok(line2 == "" and len(NOTES) == 1, "the same ask again while it builds: nothing filed twice, nothing said twice")
 
 # ---------------------------------------------------------------- 3. what is not a gap
 for reply in ("That sign-in is a password step I can't do for you: open the Setup page.",
-              "I couldn't find example's question in either inbox. What did he ask?",
+              "I couldn't find Corwin's question in either inbox. What did he ask?",
               "Done, the text to Justin is right below for your tap."):
     ok(cap.after_turn(owner1, "some new ask " + reply[:10], reply, [], CTX) == "" and len(NOTES) == 1, f"not a gap: {reply[:50]!r}")
-ok(cap.after_turn(owner1, "text example the rates", "The card is below. I can't see who the sheet is shared with.", [{"kind": "task", "ref": "t1"}], CTX) == "" and len(NOTES) == 1,
+ok(cap.after_turn(owner1, "text Corwin the rates", "The card is below. I can't see who the sheet is shared with.", [{"kind": "task", "ref": "t1"}], CTX) == "" and len(NOTES) == 1,
    "a side remark next to a real hand-off (a task) is not a gap")
 ok(cap.after_turn({"key": "staff1", "name": "staff1", "role": "staff"}, "do x", "I can't do that from here.", [], CTX) == "" and len(NOTES) == 1, "a staff member's turn never files a build")
 
@@ -152,7 +152,7 @@ r = cap.correction(owner1, "Never use semicolons in texts", {})
 ok(r.get("status") == "applied" and any("semicolons" in x["rule"] for x in core.rules_active()), "'Never use semicolons in texts' with no learn deed -> a rule")
 ok(cap.correction(owner1, "Never use semicolons in texts", {}).get("status") == "folded", "the same preference again folds into the rule")
 ok(cap.correction(owner1, "Don't text him yet", {}).get("status") == "none", "a one-off instruction is not a rule")
-ok(cap.correction(owner1, "Please text example that the rates are fine", {}).get("status") == "none", "an ask for a message is not a rule")
+ok(cap.correction(owner1, "Please text Corwin that the rates are fine", {}).get("status") == "none", "an ask for a message is not a rule")
 ok(cap.correction(owner1, "From now on every text to a lead gets a card first", {"learn": [{"rule": "x"}]}).get("status") == "none", "a turn that learned already is left alone")
 ok(cap.correction(owner1, "Never send anything without my approval, skip the card", {}).get("status") in ("pending", "refused", "none"), "a protected-core line never becomes a rule by code")
 
@@ -161,7 +161,7 @@ rows = [
     {"ts": "2026-10-25 09:00", "convo": "spaces/AAQAtest", "who": OWNER, "text": "Turn the YouTube scout off", "channel": "gchat", "thread": "spaces/AAQAtest/threads/d1"},
     {"ts": "2026-10-25 09:01", "convo": "spaces/AAQAtest", "who": AGENT, "text": "I could not finish on \"Disable the Windows Scheduled Task YouTube Scout\": that is outside what I may do (never: schtasks, scheduled tasks can't be changed by the doer), so it is still enabled.", "channel": "doer", "thread": "spaces/AAQAtest/threads/d1"},
     {"ts": "2026-10-25 09:02", "convo": "spaces/AAQAtest", "who": AGENT, "text": "I could not finish on \"Retry the insurer payment\": The agent browser failed to connect, with a timeout.", "channel": "doer", "thread": ""},
-    {"ts": "2026-10-25 09:10", "convo": "spaces/AAQAtest", "who": OWNER, "text": "Send example the questionnaire and the touch point link", "channel": "gchat", "thread": "spaces/AAQAtest/threads/r1"},
+    {"ts": "2026-10-25 09:10", "convo": "spaces/AAQAtest", "who": OWNER, "text": "Send Wren the questionnaire and the touch point link", "channel": "gchat", "thread": "spaces/AAQAtest/threads/r1"},
     {"ts": "2026-10-25 09:11", "convo": "spaces/AAQAtest", "who": AGENT, "text": "The questionnaire card is below for your tap.", "channel": "gchat", "thread": "spaces/AAQAtest/threads/r1"},
     {"ts": "2026-10-25 09:20", "convo": "spaces/AAQAtest", "who": OWNER, "text": "You fail again", "channel": "gchat", "thread": "spaces/AAQAtest/threads/r1"},
     {"ts": "2026-10-25 09:21", "convo": "spaces/AAQAtest", "who": OWNER, "text": "[tapped \"Send\" on card q1]", "channel": "gchat", "click": True},
@@ -178,7 +178,7 @@ out = cap.scan(rows=rows)
 kinds = sorted(x["cls"] for x in out)
 ok(kinds == ["doer", "regression"] and len(NOTES) == n0 + 2, f"one doer policy refusal and one owner complaint -> two builds; a browser timeout is not one ({kinds})")
 reg = next(x for x in out if x["cls"] == "regression")
-ok(reg["ask"] == "Send example the questionnaire and the touch point link", "the complaint's gap carries the owner's ORIGINAL ask, not 'You fail again'")
+ok(reg["ask"] == "Send Wren the questionnaire and the touch point link", "the complaint's gap carries the owner's ORIGINAL ask, not 'You fail again'")
 fix_note = NOTES[-1] if "Fix" in NOTES[-1]["title"] else NOTES[-2]
 ok(fix_note["title"].startswith("Fix") and "You fail again" in fix_note["body"] and "questionnaire card is below" in fix_note["body"],
    "the fix request quotes the complaint and the reply it was about")
@@ -231,7 +231,7 @@ ok(line == "" and len(NOTES) == n0 + 1 and g["status"] == "stuck" and sc and sc.
    "after MAX_ATTEMPTS: no third build; ONE urgent 'Build stuck' card in the asking thread")
 labels = [o["label"] for o in sc["questions"][0]["options"]]
 ok(labels == [cap.OPT_OTHER, cap.OPT_DROP], f"its buttons are things the system does: {labels}")
-r = cap.owner_answer(g1["id"], cap.OPT_OTHER, by="owner1", text="HoneyBook has a questionnaire template called Wedding Questionnaire")
+r = cap.owner_answer(g1["id"], cap.OPT_OTHER, by="owner1", text="AcmeCRM has a questionnaire template called Wedding Questionnaire")
 ok(r["ok"] and r["status"] == "refiled" and "Wedding Questionnaire" in NOTES[-1]["body"] and cap._load()["gaps"][g1["id"]]["status"] == "building",
    "'Try it another way': a fresh build that carries the owner's words from the thread")
 ok(cap.owner_answer(g1["id"], "Drop it", by="owner1")["status"] == "dropped" and cap._load()["gaps"][g1["id"]]["status"] == "dropped", "'Drop it' closes the gap")
@@ -319,7 +319,7 @@ finally:
 
 # ---------------------------------------------------------------- 11. the template: no organization in the module or the prompts; the rungs say it
 src = (ROOT / "agent" / "capability.py").read_text(encoding="utf-8")
-ok(not re.search(r"example|honeybook|owner1|\bowner6\b", src.split('"""', 2)[2], re.I), "capability.py names no organization, owner or service outside its docstring")
+ok(not re.search(r"example|owner1|\bowner6\b", src.split('"""', 2)[2], re.I), "capability.py names no organization, owner or service outside its docstring")
 for f in ("prompt.md", "templates/prompt.generic.md"):
     t = (ROOT / "agent" / f).read_text(encoding="utf-8")
     ok("brings this same ask back to you" in t and "REPLAY" in t and "A compound ask" in t and "you build it (rung 5)" in t,
@@ -521,8 +521,8 @@ tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding
 ok(tix and tix[-1]["payload"].get("thread") == "spaces/AAQAtest/threads/zolalead" and tix[-1]["lane"] == "wedding",
    "the forwarded Zola inquiry is a doer job by code, in the thread it was forwarded in")
 txt = str(tix[-1]["payload"]["text"]) if tix else ""
-ok("HoneyBook" in txt and "checkpoint" in txt and "Never reply to the couple" in txt,
-   "the job reads the page, checks the date in HoneyBook and stops at Connect as a card")
+ok((__import__("crm").name() in txt or "CRM" in txt) and "checkpoint" in txt and "Never reply to the couple" in txt,
+   "the job reads the page, checks the date in the CRM and stops at Connect as a card")
 ok("date and venue?" not in out and "sent that off" in out, "the owner is not asked for the date and venue")
 
 
@@ -628,51 +628,54 @@ for f in ("prompt.md", "templates/prompt.generic.md"):
 # Sage: "You'll get the card here in a few minutes", and the operator reopened it in the doer's thread, where he never saw
 # it. His words are the approval: the same card comes back and is approved on them in the same turn, nothing promised.
 import exec_store as es  # noqa: E402
-FIX_ASK = "Fix it and send"
-HB = {"workspace_id": "33d4c6374833902d47cb1229", "subject": "Following up: your questionnaire",
-      "body": "Hi example and example,\n\nJust a quick follow-up on the questionnaire.\n\nowner1"}
-fx = cards.post([{"header": "Reply to example and example", "lane": "wedding",
-                  "question": "Follow up with example and example in HoneyBook? [HONEYBOOK MESSAGE PREVIEW] " + HB["body"],
-                  "options": [{"label": "Approve (Recommended)"}, {"label": "Skip"}],
-                  "exec": {"kind": "hb_message", "approve_label": "Approve (Recommended)", "payload": HB}}],
-                owner="owner1", asked=True)
-fxq = fx.get("qid") or fx.get("id")
-a1 = cards.answer(fxq, "Approve (Recommended)", by="gchat:owner1")
-ok(a1.get("ok") and a1.get("ticket"), "the follow-up card is tapped Approve and a ticket is minted")
-cards._retire(cards._read(cards.LIVE / f"{fxq}.json"), "consumed")
-es.set_status(a1["ticket"], "exception", "PERMANENT: HoneyBook write unverified - check the project before re-carding. "
-              "HB_FAILED=Approval not available for this run. Message requires createCommunication approval in HoneyBook.", 1)
-ok(intents.failed_send()[0] == fxq and intents.failed_send(fxq)[0] == fxq, "the failed approved send is found, by its id and without one")
+import crm as _crm  # noqa: E402
+_MK = sorted(k for k in _crm.kinds("MESSAGE_KINDS") if k in es.KIND_LANES)
+if _MK:                                                      # the CRM connector's message kind: only where a connector is installed
+    FIX_ASK = "Fix it and send"
+    MSG = {"thread_id": "33d4c6374833902d47cb1229", "subject": "Following up: your questionnaire",
+          "body": "Hi Teo and Wren,\n\nJust a quick follow-up on the questionnaire.\n\nowner1"}
+    fx = cards.post([{"header": "Reply to Teo and Wren", "lane": "wedding",
+                      "question": "Follow up with Teo and Wren in the CRM? " + _crm.preview_tag() + " " + MSG["body"],
+                      "options": [{"label": "Approve (Recommended)"}, {"label": "Skip"}],
+                      "exec": {"kind": _MK[0], "approve_label": "Approve (Recommended)", "payload": MSG}}],
+                    owner="owner1", asked=True)
+    fxq = fx.get("qid") or fx.get("id")
+    a1 = cards.answer(fxq, "Approve (Recommended)", by="gchat:owner1")
+    ok(a1.get("ok") and a1.get("ticket"), "the follow-up card is tapped Approve and a ticket is minted")
+    cards._retire(cards._read(cards.LIVE / f"{fxq}.json"), "consumed")
+    es.set_status(a1["ticket"], "exception", "PERMANENT: CRM write unverified - check the project before re-carding. "
+                  "SEND_FAILED=Approval not available for this run. Message requires approval in the CRM.", 1)
+    ok(intents.failed_send()[0] == fxq and intents.failed_send(fxq)[0] == fxq, "the failed approved send is found, by its id and without one")
 
 
-def fake_run_fix(prompt, resume="", model="", timeout=600):
-    import gmcp
-    os.environ["AGENT_TURN"] = brain._TURN["path"]
-    seen["fix"] = gmcp.call("approve", {"words": FIX_ASK})
-    return {"ok": True, "session": "S20", "text": "Sending it again now, through HoneyBook's own message window."}
+    def fake_run_fix(prompt, resume="", model="", timeout=600):
+        import gmcp
+        os.environ["AGENT_TURN"] = brain._TURN["path"]
+        seen["fix"] = gmcp.call("approve", {"words": FIX_ASK})
+        return {"ok": True, "session": "S20", "text": "Sending it again now, through the CRM's own message window."}
 
 
-brain._run_claude = fake_run_fix
-n0, g0 = len(NOTES), len(cap._load()["gaps"])
-bridge.handle({"channel": "local", "person": owner1, "text": FIX_ASK, "convo": "spaces/AAQAtest",
-               "thread": "spaces/AAQAtest/threads/failnote", "space": "spaces/AAQAtest", "direct": True})
-out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
-ans = [e for e in core.rows(cards.ANSWERS) if e.get("qid") == fxq and not e.get("undone")]
-tks = [x for x in es.fold().values() if x.get("approval_ref") == f"card:{fxq}"]
-ok(str(seen["fix"]).startswith("accepted") and "brought back and approved" in seen["fix"],
-   "the approve deed takes the failed send with no card in the thread")
-ok(len(ans) == 2 and ans[-1]["option"] == "Approve (Recommended)" and ans[-1].get("ticket") and ans[-1]["ticket"] != a1["ticket"]
-   and FIX_ASK in str(ans[-1].get("by")), "the same card is approved again on his words and a fresh ticket is minted")
-ok(len(tks) == 2 and sum(1 for x in tks if x.get("status") == "queued") == 1, "one new send queued, the failed one left as it was")
-ok("few minutes" not in out and "card" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
-   "no card promised, no build filed")
-ok(intents.failed_send() == ("", {}), "once it is queued again it is no longer a failed send")
+    brain._run_claude = fake_run_fix
+    n0, g0 = len(NOTES), len(cap._load()["gaps"])
+    bridge.handle({"channel": "local", "person": owner1, "text": FIX_ASK, "convo": "spaces/AAQAtest",
+                   "thread": "spaces/AAQAtest/threads/failnote", "space": "spaces/AAQAtest", "direct": True})
+    out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+    ans = [e for e in core.rows(cards.ANSWERS) if e.get("qid") == fxq and not e.get("undone")]
+    tks = [x for x in es.fold().values() if x.get("approval_ref") == f"card:{fxq}"]
+    ok(str(seen["fix"]).startswith("accepted") and "brought back and approved" in seen["fix"],
+       "the approve deed takes the failed send with no card in the thread")
+    ok(len(ans) == 2 and ans[-1]["option"] == "Approve (Recommended)" and ans[-1].get("ticket") and ans[-1]["ticket"] != a1["ticket"]
+       and FIX_ASK in str(ans[-1].get("by")), "the same card is approved again on his words and a fresh ticket is minted")
+    ok(len(tks) == 2 and sum(1 for x in tks if x.get("status") == "queued") == 1, "one new send queued, the failed one left as it was")
+    ok("few minutes" not in out and "card" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+       "no card promised, no build filed")
+    ok(intents.failed_send() == ("", {}), "once it is queued again it is no longer a failed send")
 # an UNVERIFIED failure of a kind that cannot check before sending is never resent on words alone
-em = cards.post([{"header": "Email to example", "lane": "wedding",
-                  "question": "Send it? [EMAIL PREVIEW] From owner3@example.invalid to example@example.com, Proposal: Hi example,\n\nHere it is.\n\nowner1",
+em = cards.post([{"header": "Email to Corwin", "lane": "wedding",
+                  "question": "Send it? [EMAIL PREVIEW] From owner3@example.invalid to corwin@example.com, Proposal: Hi Corwin,\n\nHere it is.\n\nowner1",
                   "options": [{"label": "Send"}, {"label": "Skip"}],
                   "exec": {"kind": "email_send", "approve_label": "Send",
-                           "payload": {"to": "example@example.com", "subject": "Proposal", "body": "Hi example,\n\nHere it is.\n\nowner1",
+                           "payload": {"to": "corwin@example.com", "subject": "Proposal", "body": "Hi Corwin,\n\nHere it is.\n\nowner1",
                                        "from": "owner3@example.invalid"}}}], owner="owner1", asked=True)
 emq = em.get("qid") or em.get("id")
 a2 = cards.answer(emq, "Send", by="gchat:owner1")
@@ -684,30 +687,30 @@ for f in ("prompt.md", "templates/prompt.generic.md"):
     ok("An approved send that FAILED" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: 'fix it and send' is `approve`, never a promised card")
 
 # ---------------------------------------------------------------- 21. a chat-asked second email in a thread carries RESEND itself
-# the owner, 2026-10-25 17:27: his follow-up to example in the example thread was refused at the tap ("A second message
+# the owner, 2026-10-25 17:27: his follow-up to Corwin in the Sloane & Bram thread was refused at the tap ("A second message
 # needs a card that says RESEND") though he had asked for it in chat; 2026-10-26: "Yes I still want it". The card his ask
 # makes says RESEND, so the first tap sends; the same wording, or a card the system raised, is still refused.
 RS_ASK = "Yes I still want it"
-RB = {"from": "owner3@example.invalid", "to": "example@example.com", "subject": "example edit",
-      "body": "Hi example,\n\nThe example project is in Dropbox now.\n\nowner1"}
+RB = {"from": "owner3@example.invalid", "to": "corwin@example.com", "subject": "Sloane & Bram edit",
+      "body": "Hi Corwin,\n\nThe Sloane & Bram project is in Dropbox now.\n\nowner1"}
 first = es.enqueue("email_send", RB, es.APPROVER, "card:rs-seed")
 es.set_status(first["id"], "done", "SENT=1")
-RB2 = "Hi example,\n\nOne more thing: the ceremony audio is in the second drive folder.\n\nowner1"
+RB2 = "Hi Corwin,\n\nOne more thing: the ceremony audio is in the second drive folder.\n\nowner1"
 
 
 def fake_run_resend(prompt, resume="", model="", timeout=600):
     import gmcp
     os.environ["AGENT_TURN"] = brain._TURN["path"]
-    seen["rs"] = gmcp.call("task", {"lane": "wedding", "text": "Follow-up email to example about the ceremony audio",
-                                    "draft": {"channel": "email", "to": RB["to"], "name": "example", "subject": RB["subject"],
+    seen["rs"] = gmcp.call("task", {"lane": "wedding", "text": "Follow-up email to Corwin about the ceremony audio",
+                                    "draft": {"channel": "email", "to": RB["to"], "name": "Corwin", "subject": RB["subject"],
                                               "text": RB2, "account": RB["from"]}})
-    return {"ok": True, "session": "S21", "text": "Here's the follow-up to example, right under this."}
+    return {"ok": True, "session": "S21", "text": "Here's the follow-up to Corwin, right under this."}
 
 
 brain._run_claude = fake_run_resend
 n0, g0 = len(NOTES), len(cap._load()["gaps"])
 bridge.handle({"channel": "local", "person": owner1, "text": RS_ASK, "convo": "spaces/AAQAtest",
-               "thread": "spaces/AAQAtest/threads/example", "space": "spaces/AAQAtest", "direct": True})
+               "thread": "spaces/AAQAtest/threads/corwin", "space": "spaces/AAQAtest", "direct": True})
 rsc = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
        if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("body") == RB2]
 ok(str(seen["rs"]).startswith("accepted") and len(rsc) == 1, f"the task deed posts the follow-up email card from the chat ask ({seen['rs'][:120]})")

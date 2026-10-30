@@ -4,7 +4,7 @@ the owner 2026-10-27: "Sage still sends me lots of system noise I don't want to 
 exactly like interacting with a real person." In the three days before, 81 cards and 128 code-posted lines reached
 the home space, and about half were the machinery talking: "Heads up: the comms probe has stopped", "Drain ran:
 DRAIN ran=0 done=0", "Still waiting on you: card open 39h unanswered", "Still not built: ...", "Not done:
-NOT_CONFIGURED smtp:personal (set with setup_creds.py ...)", "Text to +1555-073-4973 handed to the phone", the same
+NOT_CONFIGURED smtp:personal (set with setup_creds.py ...)", "Text to +15550734973 handed to the phone", the same
 "I built a fix" twice in two threads, cards headed "Not confirmed: agent run", "A nightly self-test failed",
 "Spine job cards-sweep failing". Each poster had its own words and its own idea of urgency.
 
@@ -14,7 +14,7 @@ poster's flag:
 
   voice.gate(text, channel="", space="") -> str   the line as a person would say it; '' when it must not reach Chat
   voice.classify(text) -> str                      its class ('' = ordinary words)
-  voice.names(text) -> str                         +1555-049-1349 -> example example IV (contacts); an unknown number is
+  voice.names(text) -> str                         +15550491349 -> Corwin Castellan IV (contacts); an unknown number is
                                                    shown as (555) 049-1349
   voice.polish(text) -> str                        ids, ticket codes, markers and Message-IDs a person never says
   voice.plain(error) -> str                        an error code in plain words
@@ -66,7 +66,16 @@ _BUILT = re.compile(r"^(?:That's built now, the one you asked for|I built a fix 
 _BUILT_PLAIN = re.compile(r"^I built (?:that thing|a couple of things) you asked for: (?P<w>.*?)\.? It's live now; if anything feels off.*$", re.S)
 _HANDED = re.compile(r"^Text to (?P<to>\S+) handed to the phone at (?P<when>[^;]+); the phone's Shortcut sends it\.?$")
 _EMAILED = re.compile(r"^Sent by email to (?P<to>.+?) at (?P<when>\d{1,2}:\d\d ?[AP]M)(?: \(Message-ID [^)]*\))?(?P<rest>.*)$", re.S)
-_HB = re.compile(r"^Sent in HoneyBook at (?P<when>\d{1,2}:\d\d ?[AP]M)(?: \(HoneyBook message [^)]*\))?(?:; HoneyBook logged it at [^.]*)?\.?$")
+def _crm_sent_re():
+    """Regex for 'Sent in <CRM name> at HH:MM ...'; rebuilt each call so connector changes take effect."""
+    try:
+        import crm as _crm_m
+        n = re.escape(_crm_m.name())
+    except Exception:  # noqa: BLE001
+        n = r"(?:the CRM)"
+    return re.compile(
+        r"^Sent in " + n + r" at (?P<when>\d{1,2}:\d\d ?[AP]M)"
+        r"(?: \(" + n + r" message [^)]*\))?(?:; " + n + r" logged it at [^.]*)?\.?$")
 _CONFIRMED_TEXT = re.compile(r"^Confirmed at \d{1,2}:\d\d ?[AP]M: the text to (?P<to>\S+) went \(they replied, so it went\)\.?$")
 _CONFIRMED = re.compile(r"^Confirmed at \d{1,2}:\d\d ?[AP]M: (?P<kind>.+?) landed \((?P<d>.*)\)\.?$", re.S)
 _NOT_DONE = re.compile(r"^Not done: (?P<why>.+?)\.? The card is back (?P<where>.+)$", re.S)
@@ -87,9 +96,9 @@ _SHA_DATE = re.compile(r"^[0-9a-f]{7,40} \d{4}-\d\d-\d\d(?: \d\d:\d\d)?:\s*")
 _IDS = (
     (re.compile(r"\s*\(card q[0-9a-f]{6,}\)"), ""),
     (re.compile(r"\s*\(Message-ID <?[^>)]+>?\)"), ""),
-    (re.compile(r"\s*\((?:HoneyBook )?(?:message|file|ticket|outcome) [0-9a-f]{6,}(?:, [^)]*)?\)"), ""),
+    (re.compile(r"\s*\((?:[A-Za-z]+ )?(?:message|file|ticket|outcome) [0-9a-f]{6,}(?:, [^)]*)?\)"), ""),
     (re.compile(r"\[ACTION PREVIEW\]\s*"), ""),
-    (re.compile(r"\[(?:EMAIL|TEXT|HB) PREVIEW\]\s*"), ""),
+    (re.compile(r"\[(?:EMAIL|TEXT|HB|CRM(?: MESSAGE)?|[A-Z]+) PREVIEW\]\s*"), ""),
     (re.compile(r"\s?\btk-[0-9a-f]{8,}\b"), ""),
     (re.compile(r"\b(?:qid|ticket id|outcome id)\s*[:=]?\s*q?[0-9a-f]{8,}\b", re.I), ""),
     (re.compile(r"\s*\(\s*\)"), ""),
@@ -144,7 +153,7 @@ def classify(text: str) -> str:
             return cls
     if _BUILT.match(t) or _BUILT_PLAIN.match(t):
         return "build_landed"
-    if _HANDED.match(t) or _EMAILED.match(t) or _HB.match(t) or _CONFIRMED_TEXT.match(t) or _CONFIRMED.match(t):
+    if _HANDED.match(t) or _EMAILED.match(t) or _crm_sent_re().match(t) or _CONFIRMED_TEXT.match(t) or _CONFIRMED.match(t):
         return "send_result"
     if _NOT_DONE.match(t) or _NOT_DONE2.match(t):
         return "send_failed"
@@ -193,7 +202,7 @@ def pretty_number(num: str) -> str:
 
 def names(text: str) -> str:
     """Every +1XXXXXXXXXX (and +<country> numbers) becomes the person's name when the contacts know it, else a
-    readable number. A recipient line "To +1805...:" reads "To example example IV:"."""
+    readable number. A recipient line "To +1805...:" reads "To Corwin Castellan IV:"."""
     t = str(text or "")
     if not t:
         return t
@@ -271,9 +280,14 @@ def reword(text: str, channel: str = "") -> str:
         elif "could not confirm it landed" in rest:
             tail = "; I'm not sure it landed in the same thread, so a glance at Sent mail would tell"
         return f"Emailed {who} at {when}{tail}."
-    m = _HB.match(t)
+    m = _crm_sent_re().match(t)
     if m:
-        return f"Sent in HoneyBook at {m.group('when')}."
+        try:
+            import crm as _crm_m
+            _crm_name = _crm_m.name()
+        except Exception:  # noqa: BLE001
+            _crm_name = "the CRM"
+        return f"Sent in {_crm_name} at {m.group('when')}."
     m = _CONFIRMED_TEXT.match(t)
     if m:
         who = person(m.group("to")) or pretty_number(m.group("to"))

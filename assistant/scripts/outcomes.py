@@ -44,6 +44,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from alib import DATA, load_json  # noqa: E402
+import crm  # noqa: E402
 
 STORE = DATA / "outcomes.jsonl"
 FMT = "%Y-%m-%dT%H:%M:%S"
@@ -63,12 +64,23 @@ QUIET = (21, 7)
 # route clocks (the property planner's max_wait, in minutes): a claim that has waited longer than its route
 # allows is `unverified` and the owner is asked, instead of waiting again. Overridden by tracking.json -> routes.
 ROUTES_DEFAULT = {"connector": 15, "phone": 240, "browser": 90, "operator": 150, "build": 26 * 60, "person": 2 * 24 * 60, "owner_card": 24 * 60}
-ROUTE_OF = {"email_send": "connector", "hb_message": "connector", "hb_touches_send": "connector", "hb_add_participant": "connector",
-            "hb_add_team_member": "connector", "hb_set_stage": "connector", "hb_note": "connector", "hb_project_update": "connector",
-            "hb_proposal_draft": "connector", "hb_automation_approve": "browser", "sheet_set": "connector", "imessage_send": "phone",
-            "agent_run": "browser", "do": "browser", "task": "operator", "build": "build", "followup": "person"}
-RETRY_KINDS = {"email_send", "imessage_send", "hb_message", "hb_touches_send", "hb_add_participant", "hb_set_stage", "hb_note",
-               "hb_project_update", "sheet_set", "hb_automation_approve"}
+# Engine-owned route assignments; CRM connector routes are merged in dynamically via crm.routes().
+_ROUTE_OF_ENGINE = {"email_send": "connector", "sheet_set": "connector", "imessage_send": "phone",
+                    "agent_run": "browser", "do": "browser", "task": "operator", "build": "build", "followup": "person"}
+
+
+def _route_of() -> dict:
+    """Route category per exec kind: engine base merged with CRM connector's ROUTES."""
+    return {**_ROUTE_OF_ENGINE, **crm.routes()}
+
+
+# Engine-owned retry kinds; CRM-specific ones (outbound messages, stage changes, etc.) come from crm.kinds().
+_RETRY_KINDS_ENGINE = {"email_send", "imessage_send", "sheet_set"}
+
+
+def _retry_kinds() -> frozenset:
+    """Kinds whose failures create a retry card: engine base merged with CRM connector's RETRY_KINDS."""
+    return frozenset(_RETRY_KINDS_ENGINE | crm.kinds("RETRY_KINDS"))
 
 ICON = {"claimed": "⏳", "verifying": "⏳", "verified": "✅", "unverified": "⚠️", "failed": "❌", "abandoned": "⌛"}
 
@@ -181,7 +193,7 @@ def routes() -> dict:
 
 
 def route_max_min(row: dict) -> int:
-    rc = ROUTE_OF.get(str(row.get("kind") or ""), str(row.get("route") or "").split(":")[0])
+    rc = _route_of().get(str(row.get("kind") or ""), str(row.get("route") or "").split(":")[0])
     return int(routes().get(rc) or routes().get("connector"))
 
 
@@ -194,7 +206,11 @@ def _ledger(event: str, **fields) -> None:
 
 
 # ------------------------------------------------------------------ drain: what an executor's line proves
-_HB_ID = re.compile(r"HB_DONE=([0-9a-f]{24})")
+# CRM record-id pattern comes from the connector; None when no connector is installed.
+def _crm_done_pattern():
+    return crm._hook("DONE_PATTERN")
+
+
 _MSG_ID = re.compile(r"SENT=1\s+(\S+)")
 _PHONE = re.compile(r"PHONE_QUEUED\s+(m-[0-9a-f]+)")
 
@@ -218,16 +234,17 @@ def verdict_from_exec(kind: str, ok: bool, result: str) -> tuple:
     if kind == "imessage_send":
         m = _PHONE.search(out)
         return "claimed", {"outbox": m.group(1) if m else ""}, "handed to the phone outbox; a reply or an ack confirms it"
-    if kind in ("hb_add_participant", "hb_add_team_member"):
+    _dp = _crm_done_pattern()
+    if kind in crm.kinds("PARTICIPANT_KINDS"):
         if "MEMBER=no" in out:
-            return "failed", {"result": out[:300]}, "HoneyBook accepted the call but the member list does not show them"
-        return ("verified", {"hb_id": (_HB_ID.search(out) or [None, ""])[1], "member": "yes"}, "member list read back") if _HB_ID.search(out) \
-            else ("unverified", {"result": out[:300]}, "no HoneyBook id in the result")
-    if kind == "hb_set_stage":
+            return "failed", {"result": out[:300]}, f"{crm.name()} accepted the call but the member list does not show them"
+        return ("verified", {"crm_id": (_dp.search(out) or [None, ""])[1], "member": "yes"}, "member list read back") if (_dp and _dp.search(out)) \
+            else ("unverified", {"result": out[:300]}, f"no {crm.name()} id in the result")
+    if kind in crm.kinds("STAGE_KINDS"):
         if "VERIFIED=no" in out or "ARCHIVED=no" in out:
             return "failed", {"result": out[:300]}, "the read-back shows another stage"
         if "VERIFIED=yes" in out or "ARCHIVED=yes" in out:
-            return "verified", {"hb_id": (_HB_ID.search(out) or [None, ""])[1]}, "stage read back"
+            return "verified", {"crm_id": (_dp.search(out) or [None, ""])[1]}, "stage read back"
         return "unverified", {"result": out[:300]}, "no read-back token"
     if kind == "sheet_set":
         m = re.search(r"SHEET_DONE=(\d+) VERIFIED=(\S+)", out)
@@ -236,17 +253,19 @@ def verdict_from_exec(kind: str, ok: bool, result: str) -> tuple:
         if m:
             return "failed", {"cells": int(m.group(1)), "result": out[:300]}, "the read-back did not match"
         return "unverified", {"result": out[:300]}, "no read-back token"
-    if kind == "hb_automation_approve":
-        return ("verified", {"step": out[:120]}, "HoneyBook shows the step approved") if "APPROVED_STEP=" in out \
+    if kind in crm.kinds("AUTOMATION_KINDS"):
+        return ("verified", {"step": out[:120]}, f"{crm.name()} shows the step approved") if "APPROVED_STEP=" in out \
             else ("unverified", {"result": out[:300]}, out[:160])
-    if kind.startswith("hb_"):
-        m = _HB_ID.search(out)
-        if m:
-            ev = {"hb_id": m.group(1)}
-            if "SKIPPED_EXISTING" in out:
-                ev["skipped_existing"] = True
-            return "verified", ev, "HoneyBook returned the record id"
-        return "unverified", {"result": out[:300]}, "no HoneyBook id in the result"
+    _path_check = crm._hook("owns_kind")
+    if callable(_path_check) and _path_check(kind):
+        if _dp:
+            m = _dp.search(out)
+            if m:
+                ev = {"crm_id": m.group(1)}
+                if "SKIPPED_EXISTING" in out:
+                    ev["skipped_existing"] = True
+                return "verified", ev, f"{crm.name()} returned the record id"
+        return "unverified", {"result": out[:300]}, f"no {crm.name()} id in the result"
     if kind == "agent_run":
         return "claimed", {}, "the doer's evidence settles it"
     if kind == "calendar_hold":
@@ -269,7 +288,7 @@ def from_exec(t: dict, ok: bool, result: str) -> dict:
     row = claim(kind, tid, what, lane=str(t.get("lane") or ""), by=str(t.get("approved_by") or ""), route=kind,
                 verifier=kind, card=card, meta={"approval_ref": ref})
     state, ev, detail = verdict_from_exec(kind, ok, result)
-    if state == "failed" and not card and kind in RETRY_KINDS:
+    if state == "failed" and not card and kind in _retry_kinds():
         # a standing-rule send (a quiz draft, a standing text, a triage note) failed with no card to bring back:
         # ONE urgent card by code, Retry it / Drop it (WP2). Until this an exec_exception ticket waited for an LLM run.
         row = set_state(row["id"], "failed", ev, detail)

@@ -53,7 +53,6 @@ CLAUDE = os.path.expandvars(r"%APPDATA%\npm\claude.cmd")
 ALLOWED = ",".join(["Read", "Glob", "Grep", "Edit", "Write",
                     "Bash(python -m py_compile:*)", "Bash(git diff:*)", "Bash(git status:*)"])
 DENIED = ",".join(["PowerShell", "NotebookEdit", "WebFetch", "WebSearch", "Task", "Agent",
-                   "mcp__honeybook__take_action", "mcp__honeybook__send_feedback",
                    "mcp__gmail__send_email", "mcp__gmail__delete_email",
                    "mcp__example-mail-personal__send_email", "mcp__example-mail-films__send_email",
                    "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click"])
@@ -65,7 +64,7 @@ PROTECTED_PATHS = [
     "assistant/config.json", "assistant/org.json", "assistant/agent/core.py", "assistant/agent/brain.py",
     "assistant/agent/account.py", "assistant/agent/builder.py", "assistant/agent/people.json",
     "assistant/agent/profile.json", "assistant/scripts/email_send.py", "assistant/scripts/exec_store.py",
-    "assistant/scripts/drain.py", "assistant/scripts/cards.py", "assistant/scripts/hb_exec.py",
+    "assistant/scripts/drain.py", "assistant/scripts/cards.py",
     "assistant/scripts/collection_autosend.py", "assistant/scripts/draft_lint.py",
     "assistant/scripts/rulings.py", "assistant/scripts/phone_bridge.py", "assistant/scripts/mail.py",
     "assistant/scripts/setup_creds.py", "assistant/data/", "assistant/doer/policy.json",
@@ -527,7 +526,7 @@ def _model_turn_on(req: dict, wt: Path, env: dict, acct: str | None = None) -> d
     prompt = PROMPT.format(protected=", ".join(PROTECTED_PATHS), source=req["source"], key=req["key"], text=req["text"], owner=owner,
                            agent=p.get("name", "the agent"), org=p.get("household") or p.get("name", "this organization"), feedback=feedback)
     cmd = [CLAUDE, "-p", "--model", core.profile().get("build_model", "opus"), "--output-format", "json",
-           "--max-turns", "80", "--allowedTools", ",".join([ALLOWED] + tests), "--disallowedTools", DENIED]
+           "--max-turns", "80", "--allowedTools", ",".join([ALLOWED] + tests), "--disallowedTools", _denied_with_crm()]
     try:
         r = subprocess.run(cmd, input=prompt, cwd=str(wt), capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=TURN_TIMEOUT_S, env=run_env, creationflags=core.NO_WINDOW)
@@ -639,7 +638,7 @@ def edit_state(fn):
 
 def run(max_n: int = 2, dry: bool = False, first: str = "") -> dict:
     """`first`: the request key (wiki path) an owner just filed in chat; it is built in this run whatever
-    its place in the sorted list (2026-10-23: the owner's example-handoff skill was third of three open
+    its place in the sorted list (2026-10-23: the owner's Corwin-handoff skill was third of three open
     requests, the run built the two older ones and told him "being built now" about one that waited)."""
     started = core.stamp()
     state = core.load(STATE, {})
@@ -908,11 +907,23 @@ def _named_paths(text: str) -> list:
     return sorted(out)
 
 
+def _denied_with_crm() -> str:
+    """DENIED plus the organization's CRM connector write tools (its MCP_WRITE_TOOLS): the engine lists no CRM, the
+    builder still never writes to one (2026-10-29)."""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import alib
+        extra = sorted(alib.plugin_set("MCP_WRITE_TOOLS"))
+    except Exception:  # noqa: BLE001
+        extra = []
+    return ",".join([DENIED] + extra) if extra else DENIED
+
+
 def _lane_for(req: dict) -> str:
     k = (req.get("key") or "") + " " + (req.get("title") or "")
     if "/Money/" in k or re.search(r"(?i)\b(bank|plaid|simplefin|relay|tax|money)\b", k):
         return "money"
-    if "/Operations/" in k or re.search(r"(?i)\b(lead|couple|honeybook|wedding|client|shoot|film)\b", k):
+    if "/Operations/" in k or re.search(r"(?i)\b(lead|couple|wedding|client|shoot|film)\b", k):
         return "wedding"
     return "personal"
 

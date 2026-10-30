@@ -155,7 +155,7 @@ man_after = json.loads((OUT / "engine_manifest.json").read_text(encoding="utf-8"
 check("the good release lands: engine file replaced, manifest version moved, exit 0",
       rc == 0 and "updated" in out and b"engine two: a comment" in (OUT / "assistant" / "catalog.py").read_bytes() and man_after["engine"]["version"] == "2027.01.02+aaaaaaa", out[-400:])
 check("a fresh pack's files count as unchanged by hand: nothing is held back as a conflict", "changed by hand" not in out and "conflicts" not in out.lower(), out[-300:])
-check("the pack's manifest carried the engine's full version from the export (sha included)", v1 == man["engine"]["version"] and "+" in v1, v1)
+check("the pack's manifest carried the engine's full version from the export (sha included)", v1 == man["engine"]["version"] and ("+" in v1 or not (VAULT / ".git").exists()), v1)
 check("a pack file is never touched by the update", (OUT / "assistant" / "config.json").read_bytes() == cfg_before)
 check("the previous engine is kept for rollback and the supervisor is asked to restart",
       (OUT / ".sage-engines" / "previous" / "rollback.json").exists() and json.loads((OUT / ".sage-engines" / "previous" / "rollback.json").read_text())["version"] == v1

@@ -14,7 +14,11 @@
   "model": "sonnet",
   "runs_per_day_max": 60,
   "max_turns": 60,
-  "claim_limit": 12
+  "claim_limit": 12,
+  "sensors": [
+   "sense_editor.py"
+  ],
+  "_sensors_doc": "the organization's own sensor scripts (assistant/scripts), run by operator_cron.ps1 after the engine's; a missing one is skipped"
  },
  "mail": {
   "accounts": [
@@ -59,7 +63,6 @@
     "any": [
      "wedding",
      "videograph",
-     "honeybook",
      "example-org",
      "inquiry",
      "elopement",
@@ -151,7 +154,6 @@
   "text_account": "owner1-iphone"
  },
  "texts": {
-  "_doc": "the owner's standing texts (2026-10-17): the whole client process is texted from his iPhone without a card (assistant/scripts/client_texts.py; words in assistant/data/client_texts.json). enabled:false holds every kind (each falls back to a ticket + card). kinds.<kind>:false holds one. intro_on_honeybook_inquiry: also text a HoneyBook contact-form inquiry whose contact arrived with the project. collection_on_hb_stage: text 'I just sent our collection' when HoneyBook shows a lead moved to Proposal Sent (the owner sent it himself). touches_file: the T-60 Finishing Touches file in HoneyBook (prices hidden until checkout) + its follow-up text. preview_lead_min (2026-10-18, plan section 4): the kinds in preview_lead_kinds (known days ahead) go no sooner than this many minutes after their preview card, inside 09:00-21:00; the card carries 'Hold this one', which pulls the text back into a normal send card for the owner's tap. 0 = no lead time. card_kinds (the owner 2026-10-20): these kinds never go by themselves - each is posted as an URGENT send card the minute it is due (the new-lead intro: 'I need an approval to text new prospects ASAP'); his tap sends it.",
   "enabled": true,
   "kinds": {
    "lead_intro": true,
@@ -168,19 +170,14 @@
    "meeting_reminder",
    "touches_followup"
   ],
-  "intro_on_honeybook_inquiry": true,
-  "collection_on_hb_stage": true,
   "touches_file": true,
   "card_kinds": [
    "lead_intro"
   ],
-  "_checkin_doc": "the owner 2026-10-24 ('remove the flower and include a real touch point scheduling link from HoneyBook'): the T-14 check-in text uses checkin_body (it overrides client_texts.json: signed the owner, no rose) with {scheduler_link} = checkin_scheduler_link, the public booking link of the Touch Point Call session in HoneyBook (Scheduler > Touch Point Call > copy link; an https link on honeybook.com or hbportal.co). Empty, or not a HoneyBook link -> the check-in is held and the operator posts ONE card instead of texting without it.",
-  "checkin_scheduler_link": "https://example.hbportal.co/schedule/4dccd85cd2847c3de5656860",
   "checkin_body": "Hi {first}! {wedding_date} is two weeks away, so exciting! Let's set up a quick check-in call to go over your timeline and details. You can pick the time that works best for you here: {scheduler_link}\n\nowner1",
   "do_not_text": [
-   "+1555-047-0647"
-  ],
-  "_checkin_link_src": "Touch Point Call session 4dccd85cd2847c3de5656860, read off HoneyBook > Tools > Scheduler on 2026-10-24 (45 min video call; the Vision Meeting is f768e93da39f351cf6a2d7d6)"
+   "+15550470647"
+  ]
  },
  "push": {
   "fold_multi": true,
@@ -220,12 +217,7 @@
   "profile": "~/.claude/pw-wv-cli-profile",
   "cdp_port": 9333,
   "offscreen": true,
-  "signin_window": {
-   "site": "honeybook",
-   "script": "scripts/honeybook/hb_signin_window.py",
-   "pid_file": "hb_signin_doer.pid.json",
-   "say": "If HoneyBook is signed out, a sign-in window will be up on the PC until you sign in."
-  },
+  "signin_window": {},
   "_doc": "assistant/doer: one on-demand browser agent per agent_run ticket. offscreen=false shows the window while it works. notes_per_job_max = how many of the turn's milestone notes (report.py note) reach the job's chat thread; continues_max = how many times a run that ended on max_turns or its time limit is continued from its notes (doer.carry_on) before the owner hears it stopped."
  },
  "phone": {
@@ -240,7 +232,6 @@
   }
  },
  "meetings": {
-  "_doc": "Standing guests on every client video call (meeting_guests.py, 2026-10-18): when a HoneyBook vision call is also on one of the owner's Google calendars, these emails are added as guests with no email sent (they get the Meet on their own calendar and join without knocking). A Meet that exists only inside HoneyBook is reported once in chat instead.",
   "enabled": true,
   "guests": [
    "owner2@example.invalid"
@@ -274,32 +265,6 @@
   "carry_over_weeks": 1,
   "say_empty": true,
   "system_to_chat": false
- },
- "honeybook_team": {
-  "_automation_doc": "2026-10-24 (example: the held Questionnaire step went out 'Hello the owner ... two months away' to a couple two weeks out): drain.automation_preflight refuses to approve a held HoneyBook automation step when the project's FIRST client member is one of our own accounts (people.json emails, any @example.invalid, own_accounts), when that check cannot run, or when the wedding is fewer than automation_min_days_out days away.",
-  "own_accounts": [
-   "p3fd559@example.invalid"
-  ],
-  "automation_min_days_out": 45,
-  "team_on_projects": {
-   "_doc": "the owner 2026-10-24 11:00: 'We need to make a system that automatically adds a team member to every new HoneyBook project' (build approved on card qafa58f2a2c18 at 11:10). assistant/scripts/team_on_projects.py (Day Spine, every 2 h after the snapshot) mints one hb_add_team_member ticket per (open project, member) still missing, under this standing rule, no card each time; the one-time backfill covers open leads and booked projects (status lead / lead_sent / client with a future date or activity in the last backfill_activity_days). enabled:false stops minting; members is the allow-list (HoneyBook user ids from the workspace member list).",
-   "enabled": true,
-   "members": [
-    {
-     "name": "staff1 example",
-     "user_id": "ce9827d493d83824f4ef5036",
-     "email": "owner2@example.invalid"
-    }
-   ],
-   "statuses": [
-    "lead",
-    "lead_sent",
-    "client"
-   ],
-   "backfill_activity_days": 60,
-   "per_run": 4,
-   "approval_ref": "standing:team-on-projects (owner1 2026-10-24 11:00: automatically add staff1 to every new HoneyBook project; build approved 11:10, card qafa58f2a2c18)"
-  }
  },
  "deadman": {
   "_doc": "The watcher of the watchers (assistant/scripts/deadman.py, its own scheduled task every 30 min, WP2 2026-10-24). email_fallback: when the chat path is down too, one email to the owner's own address through email_send.py (inside the household, inside the gate).",

@@ -6,8 +6,8 @@ write, plus the two scheduled-task states. Replaces Telegram as the place the ow
 
   dashboard.py            -> rebuild assistant/web/index.html
   dashboard.py --open     -> rebuild, then open it in the default browser
-  dashboard.py --hb-check -> accepted, does nothing (the old HoneyBook browser-login
-                             probe is retired: HoneyBook signs in through Google, so
+  dashboard.py --crm-check -> accepted, does nothing (the old CRM browser-login
+                             probe is retired: the CRM signs in through Google, so
                              the connector is the path and conn_check.py its health)
 
 Ticket titles/summaries came from email: rendered escaped, as data.
@@ -23,11 +23,12 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from alib import DATA, OUT, ROOT, VAULT, config, load_json, now_iso, secret
+import crm
 
 WEB = ROOT / "web" / "index.html"
 CARDS = DATA / "cards.jsonl"
 LOG = Path.home() / ".claude" / "assistant-operator.log"
-TASKS = ["example-org", "example-org", "example-org", "example-org",
+TASKS = ["example-org Day Spine (assistant)", "example-org Comms Probe (assistant)", "example-org", "example-org",
          "example-org"]
 _task_cache = {"ts": 0.0, "states": {}}
 LANE_ORDER = ["wedding", "personal", "home", "money", "owner6"]
@@ -112,11 +113,12 @@ def task_states():
 
 
 def machinery_rows():
-    """System rows for the things that silently broke before 2026-10-01: the HoneyBook
+    """System rows for the things that silently broke before 2026-10-01: the CRM
     snapshot's age, the refresher's last error, and every spine job that is failing."""
     rows = []
-    snap = load_json(VAULT / "dashboard" / "data" / "honeybook.json", {})
-    hs = load_json(DATA / "hb_snapshot_status.json", {})
+    snap = crm.snapshot()
+    _snap_status_file = crm._hook("SNAPSHOT_STATUS_FILE") or ""
+    hs = load_json(VAULT / _snap_status_file, {}) if _snap_status_file else {}
     ts = str(snap.get("ts", "")) if isinstance(snap, dict) else ""
     if ts:
         a = age(ts[:19] + "Z")
@@ -125,9 +127,9 @@ def machinery_rows():
         except ValueError:
             hours = 999
         err = str(hs.get("error") or "") if isinstance(hs, dict) else ""
-        rows.append(("HoneyBook snapshot", f"{a} old" + (f" · refresher: {err[:90]}" if err else ""), "ok" if hours < 14 and not err else "bad"))
+        rows.append((f"{crm.name()} snapshot", f"{a} old" + (f" · refresher: {err[:90]}" if err else ""), "ok" if hours < 14 and not err else "bad"))
     else:
-        rows.append(("HoneyBook snapshot", "missing", "bad"))
+        rows.append((f"{crm.name()} snapshot", "missing", "bad"))
     sp = load_json(DATA / "spine_state.json", {})
     jobs = [(n, s) for n, s in (sp.items() if isinstance(sp, dict) else []) if isinstance(s, dict)]
     bad = [(n, s) for n, s in jobs if not s.get("ok")]
@@ -270,7 +272,7 @@ def _esc(s: str) -> str:
     return html.escape(str(s))
 
 
-def build(hb_check=False):
+def build(crm_check=False):
     cfg = config()
     today = date.today()
     tickets = load_json(DATA / "tickets.json", {})
@@ -300,7 +302,7 @@ def build(hb_check=False):
     projects = load_json(VAULT / cfg["projects"]["state_file"], {}).get("projects", {})
     mail_status = load_json(DATA / "mail_status.json", {})
     budget = load_json(DATA / ".budget.json", {})
-    # hb_check is accepted and ignored: it used to open a Playwright profile to probe a HoneyBook
+    # crm_check is accepted and ignored: it used to open a Playwright profile to probe a CRM
     # browser login, which Google sign-in makes unscriptable and nothing uses (the connector is
     # the path; conn_check.py reports its health)
     tasks = task_states()
@@ -403,7 +405,7 @@ def build(hb_check=False):
         sys_rows.append(("calendar · " + f["name"], "secret set" if secret(f["secret"]) else "NOT_CONFIGURED", cls(bool(secret(f["secret"])))))
     for a in cfg["mail"]["accounts"]:
         sys_rows.append(("app password · " + a["name"], "set" if secret(a["secret"]) else "not set", cls(bool(secret(a["secret"])))))
-    # (the old "HoneyBook session" row probed a browser login nothing uses any more: HoneyBook
+    # (the old "CRM session" row probed a browser login nothing uses any more: the CRM
     # is read through the connector, so the snapshot's age is the real health signal)
     try:
         sys_rows += machinery_rows()
@@ -506,7 +508,7 @@ def safe_page(err):
 
 
 if __name__ == "__main__":
-    p = build(hb_check="--hb-check" in sys.argv)
+    p = build(crm_check="--crm-check" in sys.argv)
     print(f"DASHBOARD {p}")
     if "--open" in sys.argv:
         webbrowser.open(p.as_uri())

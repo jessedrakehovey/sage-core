@@ -1,7 +1,7 @@
 """phone_nudge.py - wake the iPhone the moment an approved text is ready, so nobody opens Shortcuts.
 
 Why (2026-10-06): a text approved in Google Chat lands in the phone outbox, but the iPhone only
-sends when the "the organization" Shortcut runs. the owner does not want to open Shortcuts. iOS
+sends when the "example-org Send Texts" Shortcut runs. the owner does not want to open Shortcuts. iOS
 Shortcuts can run an automation *immediately* when an SMS containing a phrase arrives, so this
 module sends one tiny SMS to the owner's own phone through his carrier's email-to-SMS gateway
 (e.g. p952108@example.invalid). The automation "Message contains example-SEND -> run example Send

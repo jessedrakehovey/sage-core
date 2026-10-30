@@ -1,74 +1,63 @@
 {
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"{{ORG_ROOT}}\\scripts\\wiki_tool.py\" hook-pending",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python \"{{ORG_ROOT}}\\scripts\\wiki_tool.py\" hook-context",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"{{ORG_ROOT}}\\scripts\\session_capture.py\"",
-            "timeout": 20
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "mcp__gmail__send_email",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ \"$WV_GATED_SEND\" = \"1\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"Card-approved gated send: owner1 tapped Send on Mission Control; the executor locks the toolset and sends the stored body verbatim.\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"Outbound email send: confirm the exact recipients, subject, body, and attachments before sending.\"}}'; fi",
-            "statusMessage": "Outbound send requires approval"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__example-mail-.*__(send_email|draft_email)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"Personal/example-org Gmail: confirm the From account, recipients, subject and body before this goes out.\"}}'",
-            "statusMessage": "Outbound mail requires approval"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__example-mail-.*__(delete_email|batch_delete_emails)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Deleting mail is never done by the assistant; owner1 deletes himself.\"}}'",
-            "statusMessage": "Mail deletion blocked"
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__.*[Hh]oney[Bb]ook__take_action$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"{{ORG_ROOT}}\\scripts\\guardrails\\honeybook_gate.py\"",
-            "timeout": 10,
-            "statusMessage": "HoneyBook: deletions require approval"
-          }
-        ]
-      }
+ "hooks": {
+  "SessionStart": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "python \"{{ORG_ROOT}}\\scripts\\wiki_tool.py\" hook-pending",
+      "timeout": 15
+     },
+     {
+      "type": "command",
+      "command": "python \"{{ORG_ROOT}}\\scripts\\wiki_tool.py\" hook-context",
+      "timeout": 15
+     }
     ]
-  }
+   }
+  ],
+  "SessionEnd": [
+   {
+    "hooks": [
+     {
+      "type": "command",
+      "command": "python \"{{ORG_ROOT}}\\scripts\\session_capture.py\"",
+      "timeout": 20
+     }
+    ]
+   }
+  ],
+  "PreToolUse": [
+   {
+    "matcher": "mcp__gmail__send_email",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "if [ \"$WV_GATED_SEND\" = \"1\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"Card-approved gated send: owner1 tapped Send on Mission Control; the executor locks the toolset and sends the stored body verbatim.\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"Outbound email send: confirm the exact recipients, subject, body, and attachments before sending.\"}}'; fi",
+      "statusMessage": "Outbound send requires approval"
+     }
+    ]
+   },
+   {
+    "matcher": "mcp__example-mail-.*__(send_email|draft_email)$",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"Personal/example-org Gmail: confirm the From account, recipients, subject and body before this goes out.\"}}'",
+      "statusMessage": "Outbound mail requires approval"
+     }
+    ]
+   },
+   {
+    "matcher": "mcp__example-mail-.*__(delete_email|batch_delete_emails)$",
+    "hooks": [
+     {
+      "type": "command",
+      "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Deleting mail is never done by the assistant; owner1 deletes himself.\"}}'",
+      "statusMessage": "Mail deletion blocked"
+     }
+    ]
+   }
+  ]
+ }
 }

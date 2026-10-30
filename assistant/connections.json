@@ -15,62 +15,6 @@
    "owner": "owner1"
   },
   {
-   "id": "honeybook",
-   "name": "HoneyBook connector",
-   "lane": "wedding",
-   "mechanism": "honeybook MCP (HTTP, OAuth); read headless through hb_snapshot.py",
-   "credential": "OAuth grant held by the connector (Google sign-in; never scripted)",
-   "check": {
-    "type": "status_file",
-    "path": "vault:dashboard/data/honeybook.json",
-    "ts_field": "ts",
-    "max_age_h": 14,
-    "error_path": "data:hb_snapshot_status.json",
-    "error_field": "error"
-   },
-   "renew": "re-authorise the honeybook connector from a session in this folder (owner1 clicks the Google consent)",
-   "owner": "owner1",
-   "setup": {
-    "kind": "mcp",
-    "label": "How to reconnect",
-    "how": "The HoneyBook connector is re-authorised from a Claude Code session in this folder: open one, say 'reconnect HoneyBook', and click the Google consent when it appears."
-   },
-   "auth_errors": "unauthori[sz]ed|\\b401\\b|\\b403\\b|forbidden|re-?auth|oauth|consent|not (logged|signed) in|needs?[- ]auth|invalid_grant|token (expired|revoked)|authenticat",
-   "fault_renew": "nothing for owner1: the refresher's code broke (not a sign-in). Fix hb_snapshot.py in a Claude session (find_action shows the current SDK names)"
-  },
-  {
-   "id": "hb-browser",
-   "name": "HoneyBook browser sign-in",
-   "lane": "wedding",
-   "mechanism": "~/.claude/wv_hb_profile, kept warm by Day Spine hb-keepalive (Google one-click re-login)",
-   "credential": "Google + HoneyBook cookies in ~/.claude/wv_hb_profile (owner1 signs in once; never a stored password)",
-   "check": {
-    "type": "status_file",
-    "path": "data:hb_browser_status.json",
-    "ts_field": "last_ok",
-    "max_age_h": 9,
-    "error_field": "error"
-   },
-   "renew": "sign in with Google as owner3@example.invalid in the HoneyBook window that opens on the PC by itself (or run scripts/honeybook/hb_signin_window.py --open hb)",
-   "owner": "owner1"
-  },
-  {
-   "id": "hb-doer",
-   "name": "HoneyBook in the doer's browser",
-   "lane": "wedding",
-   "mechanism": "~/.claude/pw-wv-cli-profile (doer + playwright-cli), checked hourly by Day Spine hb-keepalive via hb_signin_window.py --check doer",
-   "credential": "HoneyBook cookies in ~/.claude/pw-wv-cli-profile (owner1 signs in by hand; never a stored password)",
-   "check": {
-    "type": "status_file",
-    "path": "data:hb_doer_status.json",
-    "ts_field": "last_ok",
-    "max_age_h": 9,
-    "error_field": "error"
-   },
-   "renew": "sign in to HoneyBook as owner3@example.invalid in the window that opens on the PC by itself (or run scripts/honeybook/hb_signin_window.py --open doer)",
-   "owner": "owner1"
-  },
-  {
    "id": "typeform",
    "name": "Typeform (Package Finder quiz)",
    "lane": "wedding",
@@ -627,36 +571,51 @@
    "renew": "python assistant/scripts/money/plaid.py setup   (re-link; add --update <item_id> after an ITEM_LOGIN_REQUIRED error)",
    "owner": "owner1",
    "setup": {
-   "kind": "terminal",
-   "label": "Enter keys + link Relay (PC console)",
-   "argv": [
-    "python",
-    "assistant/scripts/setup_creds.py",
-    "money",
-    "plaid"
-   ],
-   "also_url": "https://dashboard.plaid.com/",
-   "how": "Easiest: tap 'Connect from this phone' (or say 'set up Plaid' in chat): a three-step page creates the Plaid account (your sign-up; skipped once keys are stored), takes the two keys straight into the PC's Credential Manager, and opens Plaid Link right there so you sign in to Relay inside Plaid's window, then again for each other bank (Connect another bank). The console button does the same from the PC.",
-   "page": "/setup/plaid",
-   "page_label": "Connect from this phone",
-   "chat": {
-    "_doc": "Chat setup (assistant/scripts/connect.py, 2026-10-16): the owner says one of ask_words and gets these steps in chat. Plaid's keys are long-lived secrets, so there is NO paste block: they are typed on the /setup/plaid page (the owner's own PC answering over the tailnet), never in chat. {mc_url} is filled in from Mission Control's address.",
-    "say": "set up plaid",
-    "ask_words": "\\b(set ?up|connect|link|hook ?up|add)\\b.{0,40}\\b(plaid|relay)\\b|\\b(plaid|relay)\\b.{0,30}\\b(set ?up|steps|how|connect)\\b",
-    "state": "money/plaid_wizard.py",
-    "steps": [
-     "On your phone, open {mc_url}/setup/plaid (the same place as your cards). Everything below is a tap on that page or in your phone's browser; nothing is opened or run on the PC.",
-     {"if": "!keys", "text": "Tap Open Plaid sign-up and make your Plaid account with your own email (free tier, a couple of screens). Then tap Open Keys page (https://dashboard.plaid.com/developers/keys) and tap the copy icon next to client_id."},
-     {"if": "!keys", "text": "Back on the page, tap Paste to paste the client id. Then on the Keys page tap the eye next to the production secret, copy it, and tap Paste by the secret box. Tap Store and verify: they go straight into the PC's Credential Manager; I never see them in chat."},
-     {"if": "keys", "text": "Your Plaid account and keys are already stored in the PC's Credential Manager, so the page opens straight at Connect."},
-     {"if": "!items", "text": "Tap Connect Relay. Plaid's own window opens right there on your phone; sign in to Relay inside it and pick Operating, Tax and Savings."},
-     {"if": "items", "text": "Already linked: {linked}."},
-     "Then tap Connect another bank for each other bank or card you want on the feed; Plaid's window opens again each time. Repeat until every bank is listed on the page.",
-     "I pull the first year of transactions for each bank and tell you here what I can see. Read-only: I cannot move money.",
-     "Every step works from your phone, nothing needs the PC. A bank that signs you in on its own site (Chase, Amex, Capital One...) sends you back to the page by itself once the page's address is allowed in Plaid: the page gives you a Copy address button and an Open API page link for that one-time tap. If a bank needs you to sign in again, tap Re-sign-in on the page."
-    ]
+    "kind": "terminal",
+    "label": "Enter keys + link Relay (PC console)",
+    "argv": [
+     "python",
+     "assistant/scripts/setup_creds.py",
+     "money",
+     "plaid"
+    ],
+    "also_url": "https://dashboard.plaid.com/",
+    "how": "Easiest: tap 'Connect from this phone' (or say 'set up Plaid' in chat): a three-step page creates the Plaid account (your sign-up; skipped once keys are stored), takes the two keys straight into the PC's Credential Manager, and opens Plaid Link right there so you sign in to Relay inside Plaid's window, then again for each other bank (Connect another bank). The console button does the same from the PC.",
+    "page": "/setup/plaid",
+    "page_label": "Connect from this phone",
+    "chat": {
+     "_doc": "Chat setup (assistant/scripts/connect.py, 2026-10-16): the owner says one of ask_words and gets these steps in chat. Plaid's keys are long-lived secrets, so there is NO paste block: they are typed on the /setup/plaid page (the owner's own PC answering over the tailnet), never in chat. {mc_url} is filled in from Mission Control's address.",
+     "say": "set up plaid",
+     "ask_words": "\\b(set ?up|connect|link|hook ?up|add)\\b.{0,40}\\b(plaid|relay)\\b|\\b(plaid|relay)\\b.{0,30}\\b(set ?up|steps|how|connect)\\b",
+     "state": "money/plaid_wizard.py",
+     "steps": [
+      "On your phone, open {mc_url}/setup/plaid (the same place as your cards). Everything below is a tap on that page or in your phone's browser; nothing is opened or run on the PC.",
+      {
+       "if": "!keys",
+       "text": "Tap Open Plaid sign-up and make your Plaid account with your own email (free tier, a couple of screens). Then tap Open Keys page (https://dashboard.plaid.com/developers/keys) and tap the copy icon next to client_id."
+      },
+      {
+       "if": "!keys",
+       "text": "Back on the page, tap Paste to paste the client id. Then on the Keys page tap the eye next to the production secret, copy it, and tap Paste by the secret box. Tap Store and verify: they go straight into the PC's Credential Manager; I never see them in chat."
+      },
+      {
+       "if": "keys",
+       "text": "Your Plaid account and keys are already stored in the PC's Credential Manager, so the page opens straight at Connect."
+      },
+      {
+       "if": "!items",
+       "text": "Tap Connect Relay. Plaid's own window opens right there on your phone; sign in to Relay inside it and pick Operating, Tax and Savings."
+      },
+      {
+       "if": "items",
+       "text": "Already linked: {linked}."
+      },
+      "Then tap Connect another bank for each other bank or card you want on the feed; Plaid's window opens again each time. Repeat until every bank is listed on the page.",
+      "I pull the first year of transactions for each bank and tell you here what I can see. Read-only: I cannot move money.",
+      "Every step works from your phone, nothing needs the PC. A bank that signs you in on its own site (Chase, Amex, Capital One...) sends you back to the page by itself once the page's address is allowed in Plaid: the page gives you a Copy address button and an Open API page link for that one-time tap. If a bank needs you to sign in again, tap Re-sign-in on the page."
+     ]
+    }
    }
-  }
   },
   {
    "id": "next-insurance",

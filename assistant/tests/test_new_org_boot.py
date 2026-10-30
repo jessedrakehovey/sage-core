@@ -18,6 +18,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 VAULT = ROOT.parent
+sys.path.insert(0, str(ROOT))
+import engine as _engine  # noqa: E402
+TEMPLATE = _engine.is_template(VAULT)                        # the exported engine: the source organization is the placeholder
 TMP = Path(tempfile.mkdtemp(prefix="wv_neworg_"))
 OUT = TMP / "acme-os"
 FAILS = []
@@ -52,15 +55,15 @@ for name in ("sop_map.json", "comms_law.json", "client_texts.json", "rulings.jso
 check("spine_jobs.json travels", (OUT / "assistant" / "spine_jobs.json").exists())
 check("the agent's skills, learnings and tests do not", not (OUT / "assistant" / "agent" / "skills").exists() and not (OUT / "assistant" / "tests").exists())
 xml = (OUT / "assistant" / "tasks" / "DaySpine.xml").read_text(encoding="utf-8")
-check("task XMLs point at the new root with the new org's task names", str(OUT) in xml and "Acme Bakery Day Spine" in xml and "example-org" not in xml)
+check("task XMLs point at the new root with the new org's task names", str(OUT) in xml and "Acme Bakery Day Spine" in xml and (TEMPLATE or "example-org" not in xml))
 ps = (OUT / "assistant" / "scripts" / "spine.ps1").read_text(encoding="utf-8")
-check("the PowerShell wrappers point at the new root", str(OUT) in ps and "example-org" not in ps)
+check("the PowerShell wrappers point at the new root", str(OUT) in ps and (TEMPLATE or "example-org" not in ps))
 
 # 2. the code reads Acme's values
 rc, out = run(["-c", "import sys; sys.path.insert(0, 'assistant/scripts'); import exec_store, phone_bridge, chat_push, sentinels; "
                      "print(exec_store.ALLOWED_FROM, exec_store.ALLOWED_PHONE_ACCOUNTS, phone_bridge.DEFAULT_ACCOUNT, chat_push.MC_URL, sentinels.WATCHED_TASKS[0])"])
 check("exec_store / phone_bridge / chat_push / sentinels resolve Acme's org.json", rc == 0 and "ana@acme.test" in out and "ana-iphone" in out
-      and "example" not in out and "Acme Bakery Day Spine" in out, out[-400:])
+      and (TEMPLATE or "example" not in out) and "Acme Bakery Day Spine" in out, out[-400:])
 
 # 3. the new tree boots
 rc, out = run(["assistant/scripts/spine.py", "--list"])
@@ -86,7 +89,7 @@ for f in (OUT / "assistant").rglob("*"):
         for i, ln in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             if rx.search(ln.replace(str(OUT), "")):
                 hits.append(f"{f.relative_to(OUT)}:{i}: {ln.strip()[:80]}")
-check("no owner, organization, host or folder name of this organization in the new tree's data / prompts / tasks / wrappers", not hits, "\n".join(hits[:12]))
+check("no owner, organization, host or folder name of this organization in the new tree's data / prompts / tasks / wrappers", TEMPLATE or not hits, "\n".join(hits[:12]))
 
 print()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}", f"({OUT})")

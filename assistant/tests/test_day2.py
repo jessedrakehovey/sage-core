@@ -58,19 +58,19 @@ row = {"id": "o-1", "kind": "imessage_send", "ref": "tk-1", "created": (datetime
 state, ev, detail = outcomes._verify_phone(row)
 ok(state == "verified" and ev.get("confirmed_by") == "handed", "a text handed to the phone 5 h ago is verified, not chased", (state, detail))
 ok(outcomes._line(row, "verified", detail) == "", "no 'Confirmed at' line for a text")
-r = outcomes.ask_owner({"id": "o-2", "kind": "task", "what": "Respond to example", "created": "2026-10-24T15:31", "checks": [{"detail": "x"}]})
+r = outcomes.ask_owner({"id": "o-2", "kind": "task", "what": "Respond to Corwin", "created": "2026-10-24T15:31", "checks": [{"detail": "x"}]})
 ok(not r.get("posted") and r.get("reason") == "quiet close", "an unverified hand-off row closes quietly, no 'Not confirmed' card", r)
 ok(not list((cards.LIVE).glob("q*.json")) if cards.LIVE.exists() else True, "...and no card was written")
 
 # ---- cards: reply cards
-q = {"header": "Reply to example", "question": "example replied: yes. Reply below.\n[TEXT PREVIEW] To example (+18055550102):\nGreat, thanks example.",
+q = {"header": "Reply to Corwin", "question": "Corwin replied: yes. Reply below.\n[TEXT PREVIEW] To Corwin (+18055550102):\nGreat, thanks Corwin.",
      "lane": "wedding", "audience": "vendor", "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}],
-     "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)", "payload": {"account": "owner1-iphone", "to": "+18055550102", "body": "Great, thanks example."}}}
+     "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)", "payload": {"account": "owner1-iphone", "to": "+18055550102", "body": "Great, thanks Corwin."}}}
 ok(cards._is_reply(q), "a 'Reply to X' card is a reply")
-ok(not cards._is_reply({"header": "Text to example", "question": "Ask example about the drone."}), "a fresh ask is not a reply")
+ok(not cards._is_reply({"header": "Text to Corwin", "question": "Ask Corwin about the drone."}), "a fresh ask is not a reply")
 # three earlier cards to the same number today, then a reply: the reply is not refused
 for i in range(3):
-    qq = json.loads(json.dumps(q)); qq["header"] = f"Text to example {i}"; qq["question"] = f"Ask {i}.\n[TEXT PREVIEW] To example (+18055550102):\nAsk number {i}."
+    qq = json.loads(json.dumps(q)); qq["header"] = f"Text to Corwin {i}"; qq["question"] = f"Ask {i}.\n[TEXT PREVIEW] To Corwin (+18055550102):\nAsk number {i}."
     qq["exec"]["payload"]["body"] = f"Ask number {i}."
     cards.post([qq], owner="operator", lane="wedding")
 rr = cards.post([q], owner="operator", lane="wedding")
@@ -88,10 +88,10 @@ ok(r2.get("posted") and live.get("urgent") and live.get("delivery") == "now", "a
 # ---- event reminders
 now = datetime.now(timezone.utc)
 rows = [
-    {"id": "e1", "title": "Costume party at Tony's", "start": (now + timedelta(minutes=40)).isoformat(), "all_day": False, "location": "248 S Example Ave, example", "owner": "owner1"},
+    {"id": "e1", "title": "Costume party at Tony's", "start": (now + timedelta(minutes=40)).isoformat(), "all_day": False, "location": "248 S Example Ave, Marrow Bay", "owner": "owner1"},
     {"id": "e2", "title": "Church", "start": (now + timedelta(hours=3)).isoformat(), "all_day": False, "owner": "owner1"},
     {"id": "e3", "title": "Soccer finals", "start": (now + timedelta(minutes=30)).strftime("%Y-%m-%d"), "all_day": True, "owner": "owner1"},
-    {"id": "e4", "title": "example Birchell's Project", "start": (now + timedelta(minutes=20)).isoformat(), "all_day": False, "owner": "owner1", "meet": "https://meet.google.com/x"},
+    {"id": "e4", "title": "Odette Birchell's Project", "start": (now + timedelta(minutes=20)).isoformat(), "all_day": False, "owner": "owner1", "meet": "https://meet.google.com/x"},
 ]
 d = er.due(rows, now, 45)
 ok([e["id"] for e in d] == ["e1"], "due: the party in 40 min, not church in 3 h, not the all-day, not the client meeting", [e["id"] for e in d])

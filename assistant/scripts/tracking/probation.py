@@ -4,7 +4,7 @@ example's probation: a class of action earns automation only after the owner app
 twenty times running. the owner kept the number and named two classes (tracking.json -> probation):
 
   record_write          internal record writes (the weekly record check, mined dates, calendar
-                        holds, HoneyBook notes / field updates)
+                        holds, CRM notes / field updates)
   routine_client_send   the post-wedding thank-you, the "footage is safe" note, the 2-day quote
                         follow-up
 

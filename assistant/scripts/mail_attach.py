@@ -1,12 +1,12 @@
 """mail_attach.py - save what an email carries onto this PC, with evidence (built 2026-10-15).
 
 the owner, 2026-10-15: "Make sure you build everything you need so you can do stuff like this in
-the future", after Sage could not pull example's fixed SFX track out of Gmail. Two shapes of
+the future", after Sage could not pull Corwin's fixed SFX track out of Gmail. Two shapes of
 "attachment" exist and both are handled:
 
   * a real Gmail attachment            -> users.messages.attachments.get (gmail.readonly)
   * a Google Drive link in the body    -> drive.readonly on the same account's Drive token
-    (Gmail turns anything big into a Drive link; example's 37 MB WAVs all arrived that way)
+    (Gmail turns anything big into a Drive link; Corwin's 37 MB WAVs all arrived that way)
 
 Nothing is ever overwritten: an existing name gets " (2)", " (3)"... Nothing is deleted.
 A folder that looks like camera media (Video/, Audio/, Card N/, DCIM) is refused: the footage

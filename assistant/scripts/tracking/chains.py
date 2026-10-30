@@ -8,7 +8,7 @@ predecessor is done or ENDING (its due date within ending_days), is "up next". U
 evidence by its ask time -> ONE card: Booked / Book it for me / Not yet / Drop. A gate still running
 (up next but not yet at its ask time) stops the walk: nothing to ask yet.
 
-Evidence is read, never written: the delivery ledger, the HoneyBook snapshot, the editor pipeline,
+Evidence is read, never written: the delivery ledger, the CRM snapshot (crm.py), the editor pipeline,
 the calendar file, follow-ups, tickets, the executor ledger, the owners' own chat lines, the
 registers (assistant/data/registers/*.json) and the owner's tap on the gate's own card. "Book it for
 me" mints a `chain_book` ticket for the operator / doer (never a send); every other tap changes only
@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import advice  # noqa: E402
 import common as C  # noqa: E402
+import crm  # noqa: E402
 
 CHAINS_CFG = C.ROOT / "chains.json"
 REGISTERS = C.DATA / "registers"
@@ -59,7 +60,7 @@ def _d(v):
 
 
 def name_words(s: str) -> set:
-    """The words that identify an entity ('Tatum Rookwood's Project' -> {Tatum, Rookwood})."""
+    """The words that identify an entity ('Tatum Rookwood's Project' -> {tatum, rookwood})."""
     s = re.sub(r"'s\b", "", str(s or "").lower())
     return {w for w in re.findall(r"[a-z]{3,}", s) if w not in _GENERIC}
 
@@ -79,13 +80,13 @@ def _has_words(text: str, needles: list) -> bool:
 class World:
     """Every record source, loaded once. Tests build one from dicts; the tick builds it from disk."""
 
-    def __init__(self, now=None, ledger=None, hb=None, editor=None, calendar=None, followups=None, tickets=None,
+    def __init__(self, now=None, ledger=None, crm_snap=None, editor=None, calendar=None, followups=None, tickets=None,
                  execs=None, chat=None, registers=None, state=None, projects_root=None):
         self.now = now or C.now_local()
         self.today = self.now.date()
         self.ledger = ledger if ledger is not None else (C.load_json(C.vault_path(_ledger_path()), {}) or {})
-        self.hb = hb if hb is not None else (C.load_json(C.vault_path("dashboard/data/honeybook.json"), {}) or {})
-        self.hb_stages = {s.get("stage_id"): s for s in self.hb.get("stages") or []}
+        self.crm = crm_snap if crm_snap is not None else crm.snapshot()
+        self.crm_stages = {s.get("stage_id"): s for s in self.crm.get("stages") or []}
         self.editor = editor if editor is not None else _editor_projects(Path(projects_root or _projects_root()))
         self.calendar = calendar if calendar is not None else ((C.load_json(C.vault_path("assistant/data/calendar.json"), {}) or {}).get("events") or [])
         self.followups = followups if followups is not None else list((C.followups_state().get("items") or {}).values())
@@ -147,7 +148,7 @@ def _load_state() -> dict:
 
 # ------------------------------------------------------------------ entities per chain
 def entities_for(name: str, ch: dict, w: World) -> list:
-    """Rows {id, title, lane, anchor (date), words, ledger_stage, hb (project), amount, extra}."""
+    """Rows {id, title, lane, anchor (date), words, ledger_stage, crm (project), amount, extra}."""
     kind = str(ch.get("entity") or "")
     ap = ch.get("applies") or {}
     out = []
@@ -158,7 +159,7 @@ def entities_for(name: str, ch: dict, w: World) -> list:
             stage = str(p.get("stage") or "")
             if stage in TERMINAL or (stages and stage not in stages):
                 continue
-            booked = str(p.get("honeybook_status") or "") == "client" or _order(stage) >= _order("booked")
+            booked = crm.status(p) == "client" or _order(stage) >= _order("booked")
             if not booked:
                 continue
             ad = _d(p.get("wedding_date"))
@@ -169,13 +170,13 @@ def entities_for(name: str, ch: dict, w: World) -> list:
                 continue
             who = str(p.get("couple") or key).replace("'s Project", "").strip()
             out.append({"id": key, "title": who, "lane": str(ch.get("lane") or "wedding"), "anchor": ad, "words": name_words(who),
-                        "ledger_stage": stage, "hb": _hb_project(w, p.get("honeybook_id"), who), "amount": p.get("amount"),
+                        "ledger_stage": stage, "crm": _crm_project(w, crm.project_id(p), who), "amount": p.get("amount"),
                         "waiting_kind": "client"})
     elif kind == "lead":
-        statuses = set(ap.get("hb_status") or ["lead", "lead_sent"])
+        statuses = set(ap.get("crm_status") or ["lead"])
         quiet = int(ap.get("max_quiet_days") or 45)
         skip = [str(s) for s in ap.get("skip_name_prefixes") or []]
-        for p in w.hb.get("projects") or []:
+        for p in w.crm.get("projects") or []:
             if str(p.get("status") or "") not in statuses:
                 continue
             nm = str(p.get("name") or "")
@@ -189,9 +190,9 @@ def entities_for(name: str, ch: dict, w: World) -> list:
                 continue
             moved = _d(p.get("stage_moved_at") or p.get("created_at")) or w.today
             who = nm.replace("'s Project", "").strip()
-            st = w.hb_stages.get(p.get("stage_id")) or {}
+            st = w.crm_stages.get(p.get("stage_id")) or {}
             out.append({"id": str(p.get("id") or nm), "title": who, "lane": str(ch.get("lane") or "wedding"), "anchor": moved,
-                        "words": name_words(who), "hb": p, "hb_order": int(st.get("order") or 0), "hb_stage": str(st.get("name") or ""),
+                        "words": name_words(who), "crm": p, "crm_order": int(st.get("order") or 0), "crm_stage_name": str(st.get("name") or ""),
                         "wedding_date": wd, "waiting_kind": "client"})
     elif kind == "obligation":
         horizon = int(ap.get("horizon_days") or 60)
@@ -209,12 +210,12 @@ def entities_for(name: str, ch: dict, w: World) -> list:
     return out
 
 
-def _hb_project(w: World, hb_id, who: str):
-    for p in w.hb.get("projects") or []:
-        if hb_id and str(p.get("id")) == str(hb_id):
+def _crm_project(w: World, crm_id, who: str):
+    for p in w.crm.get("projects") or []:
+        if crm_id and str(p.get("id")) == str(crm_id):
             return p
     ww = name_words(who)
-    for p in w.hb.get("projects") or []:
+    for p in w.crm.get("projects") or []:
         if ww and ww <= name_words(p.get("name")):
             return p
     return None
@@ -254,14 +255,14 @@ def evidence(rule: dict, ent: dict, gate: dict, w: World, due) -> str:
     if src == "ledger":
         if ent.get("ledger_stage") and _order(ent["ledger_stage"]) >= _order(str(rule.get("stage_min") or "")):
             return f"the ledger says {ent['ledger_stage']}"
-    elif src == "hb":
-        p = ent.get("hb") or {}
-        st = w.hb_stages.get(p.get("stage_id")) or {}
-        order = int(st.get("order") or ent.get("hb_order") or 0)
+    elif src == "crm":
+        p = ent.get("crm") or {}
+        st = w.crm_stages.get(p.get("stage_id")) or {}
+        order = int(st.get("order") or ent.get("crm_order") or 0)
         if "stage_min_order" in rule and p and order >= int(rule["stage_min_order"]):
-            return f"HoneyBook is at {st.get('name') or order}"
+            return f"{crm.name()} is at {st.get('name') or order}"
         if rule.get("status") and str(p.get("status") or "") in rule["status"]:
-            return f"HoneyBook status {p.get('status')}"
+            return f"{crm.name()} status {p.get('status')}"
     elif src == "editor":
         for folder, pr in w.editor.items():
             if not (words & name_words(folder.replace("_", " "))):
@@ -393,8 +394,8 @@ def walk(name: str, ch: dict, ent: dict, w: World, ask: dict) -> list:
         elif st.get("status") == "dropped":
             row.update(status="dropped", why="dropped")
         else:
-            if "hb_min_order" in g and int(ent.get("hb_order") or 0) >= int(g["hb_min_order"]):
-                row.update(status="done", why=f"HoneyBook is at {ent.get('hb_stage') or ent.get('hb_order')}")
+            if "crm_min_order" in g and int(ent.get("crm_order") or 0) >= int(g["crm_min_order"]):
+                row.update(status="done", why=f"{crm.name()} is at {ent.get('crm_stage_name') or ent.get('crm_order')}")
             else:
                 for rule in g.get("evidence") or []:
                     why = evidence(rule, ent, g, w, due)
@@ -407,10 +408,10 @@ def walk(name: str, ch: dict, ent: dict, w: World, ask: dict) -> list:
             continue
         if row["status"] == "dropped":
             # a lead the owner dropped a chase on is latched: nothing behind it is asked (no retainer
-            # card after a dropped contract) until HoneyBook shows a new stage, payment or message
+            # card after a dropped contract) until the CRM shows a new stage, payment or message
             # (2026-10-17: Arden / Erin retainer cards came back after the contract was dropped)
-            if ch.get("entity") == "lead" and not _hb_moved_since(ent, st.get("ts")):
-                row.update(why="dropped; nothing after it is asked until HoneyBook moves", latched=True)
+            if ch.get("entity") == "lead" and not _crm_moved_since(ent, st.get("ts")):
+                row.update(why=f"dropped; nothing after it is asked until {crm.name()} moves", latched=True)
                 stopped = True
             prev_state, prev_due, prev_done_at = "done", due, prev_done_at
             rows.append(row)
@@ -443,12 +444,12 @@ def walk(name: str, ch: dict, ent: dict, w: World, ask: dict) -> list:
     return rows
 
 
-def _hb_moved_since(ent: dict, ts) -> bool:
-    """True when the lead's HoneyBook project changed stage or had activity after the drop."""
+def _crm_moved_since(ent: dict, ts) -> bool:
+    """True when the lead's CRM project changed stage or had activity after the drop."""
     since = C.parse_any(ts)
     if not since:
         return False
-    p = ent.get("hb") or {}
+    p = ent.get("crm") or {}
     return any((d := C.parse_any(p.get(k))) and d > since for k in ("stage_moved_at", "last_activity_at"))
 
 
@@ -473,16 +474,16 @@ def _hold_lead_followups(rows: list, st: dict, cancel=None) -> int:
 
 def _stale_lead(ch: dict, ent: dict, due, st: dict, w: World) -> str:
     """'' or why a lead's next step is too old to card: the step was due more than stale_days ago, or
-    HoneyBook shows no activity in that time. An owner's Keep on the archive card turns it off."""
+    the CRM shows no activity in that time. An owner's Keep on the archive card turns it off."""
     if ch.get("entity") != "lead" or st.get("stale_kept"):
         return ""
     days = int((ch.get("applies") or {}).get("stale_days") or 60)
     if due is not None and (w.today - due).days > days:
         return f"the step was due {(w.today - due).days} days ago"
-    p = ent.get("hb") or {}
+    p = ent.get("crm") or {}
     last = C.parse_any(p.get("last_activity_at") or p.get("stage_moved_at") or p.get("created_at"))
     if last and (w.now - last).days > days:
-        return f"no HoneyBook activity in {(w.now - last).days} days"
+        return f"no {crm.name()} activity in {(w.now - last).days} days"
     return ""
 
 
@@ -491,7 +492,7 @@ def _archive_question(row: dict) -> dict:
     return {"header": f"Archive this lead? · {row['title'][:30]}", "lane": row["lane"],
             "question": f"{row['title']}: {row['why']}. Archive this lead?",
             "details": f"Chain {row['chain']}, gate {row['gate']} ({row['label']}). No booking card was posted for it.",
-            "options": [{"label": "Archive (Recommended)", "description": "stop asking about this lead; HoneyBook activity brings it back"},
+            "options": [{"label": "Archive (Recommended)", "description": f"stop asking about this lead; {crm.name()} activity brings it back"},
                         {"label": "Keep", "description": "the lead is still live; ask about its next step as usual"}],
             "chain_key": row["key"]}
 

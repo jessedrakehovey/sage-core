@@ -5,7 +5,7 @@ types passwords into the SAME pages from a separate process the model cannot see
 to this browser over CDP (http://127.0.0.1:<port>). The profile is the wedding `playwright-cli`
 profile (~/.claude/pw-wv-cli-profile), so every site the owner has signed into there stays signed
 in here, and vice versa. The profile lease (scripts/lib/profile_lease.py) keeps this launcher,
-the MCP and HoneyBook automation from opening the profile at the same time.
+the MCP and the CRM automation from opening the profile at the same time.
 
   python assistant/doer/browser.py --open          start it (off-screen unless --show), print the CDP url
   python assistant/doer/browser.py --show          start it ON screen for the owner to sign in to a site

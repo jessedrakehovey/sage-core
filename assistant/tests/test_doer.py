@@ -49,7 +49,7 @@ def check(name, cond, extra=""):
 
 # 1. routing: the operator never claims the doer's kind; the doer claims only it
 tickets.add_many([{"source": "t", "source_id": "a", "lane": "personal", "kind": "agent_run", "title": "Update DMV address",
-                   "summary": "update my dmv address", "payload": {"text": "Update my DMV address to the example unit", "from": "owner1"}},
+                   "summary": "update my dmv address", "payload": {"text": "Update my DMV address to the Brackwater unit", "from": "owner1"}},
                   {"source": "t", "source_id": "b", "lane": "personal", "kind": "owner1_request", "title": "draft", "summary": "", "payload": {}}], "test")
 check("operator pending count excludes agent_run", tickets.pending() == 1)
 check("doer pending count sees only agent_run", tickets.pending(kind="agent_run") == 1)
@@ -76,7 +76,7 @@ report.OUT = TMP / "out"
 (report.OUT / TID).mkdir(parents=True)
 (report.OUT / TID / "review.png").write_bytes(b"\x89PNG\r\n")
 spec = {"url": "https://www.dmv.ca.gov/portal/change-of-address/review", "step": "Click 'Submit' on the DMV change-of-address review page",
-        "values": {"New address": "123 Example Street Unit D41, example, CA 93030", "Effective": "today"},
+        "values": {"New address": "123 Example Street Unit D41, Brackwater, CA 93030", "Effective": "today"},
         "screenshot": "review.png", "ask_code": False, "resume": "Navigate back to the review page, confirm the address matches, click Submit, read the confirmation number."}
 sf = TMP / "spec.json"; sf.write_text(json.dumps(spec), encoding="utf-8")
 line = report.checkpoint(TID, str(sf))
@@ -120,7 +120,7 @@ check("drain dry-run of agent_run", ok and "DRY_RUN_OK" in res, res)
 # 6. prompt building: no leftover placeholders, task + ticket + out dir present
 t = tickets._load()[TID]
 p = doer.build_prompt(t)
-check("prompt carries the task", "Update my DMV address to the example unit" in p)
+check("prompt carries the task", "Update my DMV address to the Brackwater unit" in p)
 check("prompt carries the ticket id and out dir", TID in p and f"out/doer/{TID}" in p)
 import re
 leftover = re.findall(r"\{[a-z_]+\}", p)
@@ -319,15 +319,16 @@ check("max-turns run becomes one plain sentence", "ran out of steps" in pe and "
 _pe2 = doer.plain_error('{"is_error":true,"errors":["Tool blocked by policy"]}')
 check("an error run names the error in plain words", "stopped on an error" in _pe2 and "Tool blocked by policy" in _pe2, _pe2)
 check("a plain string passes through", doer.plain_error("the browser closed") == "the browser closed")
-say_line = doer._say("owner1", "", raw_max, {"payload": {"text": "add example to the HoneyBook project"}})
-check("the chat line for a no-result run is plain and names the job", "add example" in say_line and "{" not in say_line and "couldn't finish" in say_line, say_line)
+say_line = doer._say("owner1", "", raw_max, {"payload": {"text": "add Wren to the CRM project"}})
+check("the chat line for a no-result run is plain and names the job", "add Wren" in say_line and "{" not in say_line and "couldn't finish" in say_line, say_line)
 pm = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
 check("prompt: a blocked line ends with the DO IT YOURSELF hand-over (owner1 2026-10-20)", "DO IT YOURSELF:" in pm and "hand-over, not a loop" in pm)
-_pl = doer.portal("HoneyBook's Add host picker will not open || DO IT YOURSELF: https://app.honeybook.com/app/scheduling then open Vision Meeting, Attendees & hosts, Add host, pick staff1, Save session")
+_pl = doer.portal("The Add host picker will not open || DO IT YOURSELF: https://app.example-crm.com/scheduling then open Vision Meeting, Attendees & hosts, Add host, pick staff1, Save session")
 check("a blocked line renders as the owner's portal: reason, link, phone steps, no retry promise",
-      _pl.startswith("HoneyBook's Add host picker will not open. The quickest way to finish it yourself, from your phone: https://app.honeybook.com/app/scheduling then open Vision Meeting") and "try again" not in _pl, _pl)
+      _pl.startswith("The Add host picker will not open. The quickest way to finish it yourself, from your phone: https://app.example-crm.com/scheduling then open Vision Meeting") and "try again" not in _pl, _pl)
 check("a blocked line without a hand-over still reads plainly", doer.portal("no login saved for x") == "no login saved for x.")
-check("prompt: the doer never refuses a job as a connector job (2026-10-20)", "already checked for a connector" in pm and "connector job (HoneyBook/Google)" not in pm and "never stop with" in pm)
+import crm as _crm_doer  # noqa: E402
+check("prompt: the doer never refuses a job as a connector job (2026-10-20)", "already checked for a connector" in pm and f"connector job ({_crm_doer.name()}/Google)" not in pm and "never stop with" in pm)
 check("prompt: forced click after two stable timeouts, stop after the third", "waiting for element to be stable" in pm and "browser_evaluate" in pm and "Never loop on one control" in pm)
 check("the forced-click tool is allowed, the raw-code tool still denied",
       "mcp__playwright-doer__browser_evaluate" in doer.ALLOWED.split(",") and "mcp__playwright-doer__browser_evaluate" not in doer.DENIED.split(",")
@@ -360,9 +361,9 @@ cg_run = subprocess.run([sys.executable, str(ROOT / "doer" / "click_guard.py"), 
 check("a bad hook input lets the call through", cg_run.returncode == 0 and not cg_run.stdout.strip())
 check("prompt: the code caps the third timeout", "on the third on one control" in pm)
 check("prompt: Google Sheet tabs opened by a known gid, never by a tab click (tab elements carry no gid, 2026-10-20)",
-      "never click the tab bar" in pm and "carry NO gid" in pm and "edit#gid=<gid>" in pm and "Name Box" in pm and "555-073-2273" in pm and "export?format=csv" in pm)
+      "never click the tab bar" in pm and "carry NO gid" in pm and "edit#gid=<gid>" in pm and "Name Box" in pm and "5550732273" in pm and "export?format=csv" in pm)
 _bp = doer.build_prompt(t)
-check("built prompt keeps the gid route intact", "#gid=<gid>" in _bp and "555-028-3128" in _bp)
+check("built prompt keeps the gid route intact", "#gid=<gid>" in _bp and "5550283128" in _bp)
 
 # 11. milestone notes (notes.py, 2026-10-28): the turn's checkpoints, the status line, the few chat lines,
 #     and a run cut off by its step limit or time limit carried on from them (doer.carry_on)

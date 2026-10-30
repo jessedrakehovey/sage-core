@@ -4,7 +4,7 @@ Ported in shape from the property OS's scripts/comms/probe.py (blueprint D6: "wa
 after an inbound lands"). Before this the operator only ran on its half-hour tick, so a text
 or a lead could sit 29 minutes before anyone drafted a reply.
 
-Every minute (scheduled task "the organization", outside the harness so the
+Every minute (scheduled task "example-org Comms Probe (assistant)", outside the harness so the
 operator it starts can authenticate):
   1. rebuild the comms substrate (comms_state.py: states, SLAs, breach tickets)
   2. look for claimable tickets of the wake kinds (comms_law.json -> wake.kinds) younger than

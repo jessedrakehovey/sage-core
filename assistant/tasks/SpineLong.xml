@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <URI>\the organization</URI>
+    <URI>\example-org Day Spine - long jobs (assistant)</URI>
     <Description>The Day Spine's long jobs on their own clock (spine.py --group long: the doer tick and the executor drain), so a slow browser run never starves the sweep, the sentinels or the lead sensor. WP2 2026-10-24.</Description>
   </RegistrationInfo>
   <Triggers>

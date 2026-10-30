@@ -23,6 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import common as C  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import crm  # noqa: E402
 
 DEFAULTS = {
     "enabled": True,
@@ -58,7 +60,7 @@ def _fmt(t: tuple) -> str:
 
 
 # ------------------------------------------------------------------ tomorrow's items
-def items_for(day, cal=None, entities=None, gaps=None, fus=None, chase_state=None, hb_tasks=None, d: dict | None = None) -> list:
+def items_for(day, cal=None, entities=None, gaps=None, fus=None, chase_state=None, crm_tasks=None, d: dict | None = None) -> list:
     """Rows {time: (h,m)|None, kind: event|call|deadline|chase|followup, text, owner, counts}."""
     d = d or dcfg()
     ds = day.strftime("%Y-%m-%d")
@@ -98,10 +100,10 @@ def items_for(day, cal=None, entities=None, gaps=None, fus=None, chase_state=Non
         if it.get("status") == "snoozed" and str(it.get("snooze_until") or "")[:10] == ds:
             out.append({"time": None, "kind": "chase", "text": f"you asked to be reminded: {str(it.get('title') or '')[:60]}",
                         "owner": str(it.get("owner") or "owner1"), "counts": True})
-    tasks = hb_tasks if hb_tasks is not None else ((C.load_json(C.vault_path("dashboard/data/honeybook.json"), {}) or {}).get("tasks") or [])
+    tasks = crm_tasks if crm_tasks is not None else (crm.snapshot().get("tasks") or [])
     for t in tasks:
         if str(t.get("status") or "") == "pending" and str(t.get("due_date") or "") == ds:
-            out.append({"time": None, "kind": "deadline", "text": f"HoneyBook task: {t.get('description')} ({str(t.get('project') or '').replace(chr(39) + 's Project', '')})"[:90],
+            out.append({"time": None, "kind": "deadline", "text": f"{crm.name()} task: {t.get('description')} ({str(t.get('project') or '').replace(chr(39) + 's Project', '')})"[:90],
                         "owner": "owner1", "counts": True})
     out.sort(key=lambda x: (x["time"] is None, x["time"] or (0, 0), x["kind"]))
     return out

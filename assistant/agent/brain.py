@@ -32,8 +32,6 @@ import intents  # noqa: E402
 CLAUDE = os.path.expandvars(r"%APPDATA%\npm\claude.cmd")
 # check_gates.py parses these two shapes to freeze/verify the allow/deny lists.
 ALLOWED = ",".join(["Read", "Glob", "Grep",
-                    "mcp__honeybook__take_action_read_only", "mcp__honeybook__find_action",
-                    "mcp__honeybook__get_guidance",
                     "mcp__example-google__calendar_events", "mcp__example-google__mail_search",
                     "mcp__example-google__mail_read", "mcp__example-google__vault_search", "mcp__example-google__texts_search",
                     "mcp__example-google__who_is",       # who a number is, with the evidence (whois.py, 2026-10-23)
@@ -53,7 +51,6 @@ ALLOWED = ",".join(["Read", "Glob", "Grep",
                     "mcp__example-google__decide",      # a decision card with the recommendation first (2026-10-23; missing from this list until 10-26)
                     "mcp__example-google__project"])    # a long-running problem worked on a schedule with every try on record (projects.py, 2026-10-27)
 DENIED = ",".join(["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task", "Agent",
-                   "mcp__honeybook__take_action", "mcp__honeybook__send_feedback",
                    "mcp__gmail__send_email", "mcp__gmail__delete_email",
                    "mcp__example-mail-personal__send_email", "mcp__example-mail-films__send_email",
                    "mcp__playwright__browser_click", "mcp__playwright-cli__browser_click"])
@@ -75,19 +72,34 @@ def _business_lane() -> str:
         return _alib().business_lane()
     except Exception:  # noqa: BLE001
         return "business"
+
+
+def _apply_crm_tools(allowed: str, denied: str) -> tuple[str, str]:
+    """Inject the CRM connector's read/write tool names at runtime so the engine lists no CRM."""
+    try:
+        a = _alib()
+        read_tools = a.plugin_set("MCP_READ_TOOLS")
+        write_tools = a.plugin_set("MCP_WRITE_TOOLS")
+        if read_tools:
+            allowed = allowed + "," + ",".join(sorted(read_tools))
+        if write_tools:
+            denied = denied + "," + ",".join(sorted(write_tools))
+    except Exception:  # noqa: BLE001
+        pass
+    return allowed, denied
+
+
 # A staff member's turn (role staff, 2026-10-24): the business connector read-only, the wiki search (scoped by
 # gmcp.py to the role's paths), and the two deeds the role can use. No Read/Glob/Grep over the vault, no mail,
 # calendar, texts or who_is, no learning tools: nothing that could carry an owner's personal life.
-STAFF_ALLOWED = ",".join(["mcp__honeybook__take_action_read_only", "mcp__honeybook__find_action", "mcp__honeybook__get_guidance",
-                          f"mcp__{MCP_SERVER}__vault_search", f"mcp__{MCP_SERVER}__task", f"mcp__{MCP_SERVER}__note",
+STAFF_ALLOWED = ",".join([f"mcp__{MCP_SERVER}__vault_search", f"mcp__{MCP_SERVER}__task", f"mcp__{MCP_SERVER}__note",
                           f"mcp__{MCP_SERVER}__chat_thread"])   # the team-space thread the turn is in, nothing else (chat_thread.py, 2026-10-29)
 STAFF_DENIED = DENIED + ",Read,Glob,Grep,mcp__example-google__calendar_events,mcp__example-google__mail_search,mcp__example-google__mail_read," \
                "mcp__example-google__texts_search,mcp__example-google__who_is"
 STAFF_MEMORY_KINDS = ("business",)
 # An OWNER's turn in a team space (scope business): the staff read tools plus every deed tool; still no Read/Glob/
 # Grep over the vault, no mail, calendar, texts or who_is, because team members read the replies.
-BUSINESS_ALLOWED = ",".join(["mcp__honeybook__take_action_read_only", "mcp__honeybook__find_action", "mcp__honeybook__get_guidance",
-                             "mcp__example-google__vault_search"] +
+BUSINESS_ALLOWED = ",".join(["mcp__example-google__vault_search"] +
                             [t for t in ALLOWED.split(",") if t.startswith("mcp__example-google__") and t not in
                              ("mcp__example-google__calendar_events", "mcp__example-google__mail_search", "mcp__example-google__mail_read",
                               "mcp__example-google__vault_search", "mcp__example-google__texts_search", "mcp__example-google__who_is")])
@@ -147,12 +159,13 @@ def staff_context(person: dict, scope: str = "", space_title: str = "") -> str:
 
 def sent_block(hours: float = 30.0) -> str:
     """SENT RECENTLY: every outbound the executor completed in the last `hours` (texts handed to the phone, emails,
-    HoneyBook messages and files), zero-LLM from the exec tickets, so a turn in one thread knows what went out
-    from another (2026-10-24: Sage offered example an example handoff four hours after one had been emailed)."""
+    CRM messages and files), zero-LLM from the exec tickets, so a turn in one thread knows what went out
+    from another (2026-10-24: Sage offered Corwin an example handoff four hours after one had been emailed)."""
     sys.path.insert(0, str(core.AGENT.parent / "scripts"))
     try:
         import exec_store as es
         import alib
+        import crm as _crm_m
         sent_kinds = set(es.OUTBOUND_KINDS) | alib.plugin_set("SENT_KINDS")     # the organization's own kinds report too
         kind_words = {"imessage_send": "text", "email_send": "email", **alib.plugin_map("KIND_WORDS")}
         rows = []
@@ -168,7 +181,7 @@ def sent_block(hours: float = 30.0) -> str:
             p = t.get("payload") or {}
             what = str(p.get("subject") or p.get("body") or p.get("step_match") or "")
             what = re.sub(r"\s+", " ", what).strip()[:90]
-            to = str(p.get("to") or p.get("workspace_id") or "")
+            to = str(p.get("to") or _crm_m.thread_id(p) or "")
             kind = kind_words.get(t["kind"], t["kind"])
             rows.append((done, f"- {time.strftime('%a %I:%M %p', time.localtime(done)).replace(' 0', ' ')}: {kind} to {to}: \"{what}\""))
         rows.sort()
@@ -353,6 +366,7 @@ def _run_claude_on(prompt: str, resume: str = "", model: str = "", timeout: int 
     WORKDIR.mkdir(parents=True, exist_ok=True)
     tools = tools or _TURN["tools"]
     allowed, denied = tools or (ALLOWED, DENIED)
+    allowed, denied = _apply_crm_tools(allowed, denied)
     cmd = [CLAUDE, "-p", "--model", model or p.get("model", "sonnet"), "--output-format", "json",
            "--max-turns", str(p.get("max_turns", 30))] + ([] if tools else ["--add-dir", str(core.VAULT)]) + [
            "--allowedTools", allowed, "--disallowedTools", denied]

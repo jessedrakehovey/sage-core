@@ -109,7 +109,7 @@ def revise_card(qid: str, new_text: str, person: dict, ctx: dict) -> list:
     card = cards._read(cards.LIVE / f"{qid}.json") if re.fullmatch(r"q[0-9a-f]{12}", qid) else None
     if card and card.get("status") == "answered":
         # approved a minute ago and the ticket has not run yet (drain is on a 10-min tick): the owner's revision
-        # pulls it back (cards.undo recalls the ticket) and the revised card takes its place (example's "please ignore
+        # pulls it back (cards.undo recalls the ticket) and the revised card takes its place (Teo's "please ignore
         # the previous email", 2026-10-24 18:07, refused ALREADY_ANSWERED while the email was still queued)
         u = cards.undo(qid, by=f"agent:{person['key']} (revised in chat)")
         if not u.get("ok"):
@@ -135,7 +135,7 @@ def revise_card(qid: str, new_text: str, person: dict, ctx: dict) -> list:
     for k in ("rulings", "chat_thread"):
         q.pop(k, None)
     # asked=True (2026-10-23): an owner asked for this revision in the thread, so it is urgent there and
-    # SUPERSEDES rather than trips the same-recipient / same-subject guards (example's revised proposal card
+    # SUPERSEDES rather than trips the same-recipient / same-subject guards (Corwin's revised proposal card
     # was refused twice on 10-21/22 by the 24-hour recipient limit while Sage said it was below).
     r = cards.post([q], owner=f"agent:{person['key']}", lane=q.get("lane") or "personal", thread=str(ctx.get("thread") or card.get("chat_thread") or ""),
                    replaces=qid, space=str(ctx.get("space") or card.get("chat_space") or ""), asked=True)
@@ -166,7 +166,7 @@ def _queue_task(lane: str, text: str, person: dict, ctx: dict | None = None) -> 
 
 
 # ------------------------------------------------------------------ a draft the brain wrote -> the card, now
-_PREVIEW = {"text": "[TEXT PREVIEW]", "email": "[EMAIL PREVIEW]", "service": "[HONEYBOOK MESSAGE PREVIEW]"}   # service = this org's client-messaging connector
+_PREVIEW = {"text": "[TEXT PREVIEW]", "email": "[EMAIL PREVIEW]"}   # service preview tag is crm.preview_tag() at call time
 
 
 def _phone_account(person: dict) -> str:
@@ -191,9 +191,19 @@ def _mail_from(person: dict, lane: str, account: str = "") -> str:
     accts = google_api.accounts()
     if account in accts:
         return str(accts[account].get("address") or "")
+    if "@" in account:                                      # the draft named the address itself (exec_store still checks it)
+        return account.strip()
     mine = [(n, a) for n, a in accts.items() if a.get("person") == person.get("key")]
     if not mine:
-        return ""
+        # no Google account on record (a new organization): the person's own address that org.json allows to send
+        try:
+            sys.path.insert(0, str(core.AGENT.parent))
+            import orgcfg
+            allowed = [str(x).lower() for x in orgcfg.get("send_identities", []) or []]
+        except Exception:  # noqa: BLE001
+            allowed = []
+        own = [str(e) for e in (person.get("emails") or []) if str(e).lower() in allowed]
+        return own[0] if own else ""
     work = [a for n, a in mine if n.endswith("-films") or "work" in n or "business" in n]
     if lane not in ("personal", "home", "money") and work:
         return str(work[0].get("address") or "")
@@ -250,7 +260,7 @@ def draft_card(lane: str, text: str, draft: dict, person: dict, ctx: dict) -> di
 def draft_blocker(lane: str, text: str, draft: dict, person: dict) -> str:
     """Why cards.post would refuse this drafted card even though the owner asked for it, '' when it would post.
     Read-only: the exec check and the draft lint, the guards an owner's ask does not supersede (2026-10-22 12:49:
-    example's proposal email was refused DRAFT_LINT for its "$" price after the task tool had said "posted below")."""
+    Corwin's proposal email was refused DRAFT_LINT for its "$" price after the task tool had said "posted below")."""
     sys.path.insert(0, str(core.AGENT.parent / "scripts"))
     import cards
     import draft_lint
@@ -281,14 +291,20 @@ def _draft_question(lane: str, text: str, draft: dict, person: dict) -> dict:
         q = f"{lead}\n{_PREVIEW['email']} From: {frm} To: {to}\nSubject: {subject}\n{body}"
         header = f"Email to {name or to}"[:60]
     else:
-        pay = {"workspace_id": str(draft.get("workspace_id") or ""), "body": body}
-        if draft.get("in_reply_to_id"):
-            pay["in_reply_to_id"] = str(draft["in_reply_to_id"])
-        if draft.get("subject"):
-            pay["subject"] = str(draft["subject"])
-        ex = {"kind": "hb_message", "approve_label": "Send (Recommended)", "payload": pay}
-        q = f"{lead}\n{_PREVIEW['service']} To {name or to}:\n{body}"
-        header = f"HoneyBook message to {name or to}"[:60]
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import crm as _crm_m
+        _tid = str(draft.get("thread_id") or draft.get("workspace_id") or "")
+        _subj = str(draft.get("subject") or "")
+        _irt = str(draft.get("in_reply_to_id") or "")
+        ex = _crm_m.message_exec(_tid, body, _subj, _irt)
+        if ex is None:
+            ex = {"kind": "crm_message", "approve_label": "Send (Recommended)",
+                  "payload": {"thread_id": _tid, "body": body, "subject": _subj}}
+        else:
+            ex["approve_label"] = ex.get("approve_label") or "Send (Recommended)"
+        _ptag = _crm_m.preview_tag()
+        q = f"{lead}\n{_ptag} To {name or to}:\n{body}"
+        header = f"{_crm_m.name()} message to {name or to}"[:60]
     if core.is_owner(person):
         mark = _resend_mark(ex)
         if mark:
