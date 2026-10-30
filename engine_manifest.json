@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+c5f8970",
+  "version": "2026.10.30+a0280d5",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T16:36:52"
+  "synced": "2026-10-30T16:40:48"
  },
  "modules": {
   "money": {
@@ -110,7 +110,7 @@
   "assistant/agent/chat_thread.py": "f6279c6de47477aa5645244a0c054d6326445998c57be720bb7005aa71a0bd41",
   "assistant/agent/claims.py": "a80933e05400cd2ddd07456320b23cc72cb37e7e858e7acdadb36bd1ef3f5f0d",
   "assistant/agent/commitments.py": "4d4e901e525c07ea4552d12a7317220e2329a8327583dcf01700e5b58d4cac58",
-  "assistant/agent/core.py": "69c83552673a588adb81e3f0f42a4f24ca715de9e292475797370e03bf7d59a3",
+  "assistant/agent/core.py": "54b497e5c57788a42c3d050cd92f288baf7488406e4a0f61ae9ca15e2641cab4",
   "assistant/agent/correction.py": "b5d20c95cddd6031ade2e01172d6dfcae68e2d8c4858f92f702ec510b69eac33",
   "assistant/agent/dream.py": "1d842d11e6c02bad3b802672b1e125451e803d24e77e0fa5ca305d63e369b79f",
   "assistant/agent/event_reminders.py": "2488d0d48850fd5efce294f2148b3c9d28e9f396d0919316872b12ee5b7be910",
@@ -247,6 +247,7 @@
   "assistant/scripts/email_send.py": "f2e3df5218efe0fe27f76a5fec936f7c54dedb7e4aa01d5c91e348c47ed08f1c",
   "assistant/scripts/exec_store.py": "04c150009432e2302b532653b3a1c436308875f5ad3013541cfe351455ec922c",
   "assistant/scripts/followups.py": "2384a5d6b4f5d8b0140dadb55bbd7ef43fc2a4cdd5733d41e858fe73266ad22b",
+  "assistant/scripts/form_ingest.py": "9d70d80f8e601b1cff54ad965808d3cf5e57df74fab300611e03f1b366c93991",
   "assistant/scripts/gchat_events.py": "4b754e7e4b36b6e4ca829876a9f587b07b75c0eb96e931ccc56cb0c284cd45a8",
   "assistant/scripts/graduation.py": "cf4ce51df7a8a284121bd363b8607e4a940b951d70948cb27354b3a7afc6891d",
   "assistant/scripts/habits.py": "c4760d1c7ecbd63f3e26a844aa030e4f6e557c3703d0982c0b4c5624b6825fda",
