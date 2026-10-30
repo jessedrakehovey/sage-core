@@ -328,3 +328,13 @@ Tests: `tests/test_doer.py` section 11, `tests/test_receipts.py` section 6. Conf
   from its accessibility snapshot.
 - Native Chat buttons on checkpoint cards (cards are answered on Mission Control; the chat push
   there carries the answer buttons).
+
+### browser.py is the doer's own and is not scanned (2026-10-30)
+
+`computer_policy.classify` scans the script a command runs; `browser.py` speaks CDP over a plain socket to bring the
+browser on screen (`--front`), and the scan read `import socket` and refused it ("never: socket"), so a hand-off window
+stayed hidden off-screen while the owner asked three days running for a window he could see. `browser.py` now joins
+`report.py` and `login_fill.py` as the doer's own scripts the scan skips (its arguments are still judged; a browser.py
+from anywhere else is scanned as before). The builder had filed this as a protected-core question twice; the owner's
+"Fix the safety hook" / "do it do not fail" was the answer. Tests: test_computer 7b. Checkpoint lines say "with a
+screenshot" only when the card carries one, and point to this chat only (`doer._card_has_screenshot`).

@@ -206,7 +206,7 @@ def land(key: str) -> dict:
     if git("cat-file", "-e", sha + "^{commit}").returncode != 0:
         _set(key, status="failed", summary=f"commit {sha} is gone; rebuild")
         return {"ok": False, "status": "failed", "why": f"commit {sha} is gone"}
-    wt = fresh_worktree()
+    wt = fresh_worktree(WT_LAND, BRANCH_LAND)       # never the build's worktree: a build may be running in it
     cp = git("cherry-pick", "-x", sha, cwd=wt)
     if cp.returncode != 0:
         git("cherry-pick", "--abort", cwd=wt)
@@ -560,14 +560,22 @@ def parse_result(text: str) -> dict:
 
 
 # ------------------------------------------------------------------ worktree
-def fresh_worktree() -> Path:
+def fresh_worktree(path: Path | None = None, branch: str = "") -> Path:
+    """A clean worktree at `path` (default WT, the build's) on a fresh `branch` off HEAD. land() uses its own
+    path and branch (2026-10-29 18:08: a land cherry-pick removed WT under a running build; two builds were
+    lost and asked the owner to run them again)."""
+    wt = path or WT
     git("worktree", "prune")
-    if WT.exists():
-        git("worktree", "remove", "--force", str(WT))
-        shutil.rmtree(WT, ignore_errors=True)
-    WT.parent.mkdir(parents=True, exist_ok=True)
-    git("worktree", "add", "--force", "-B", BRANCH, str(WT), "HEAD", check=True)
-    return WT
+    if wt.exists():
+        git("worktree", "remove", "--force", str(wt))
+        shutil.rmtree(wt, ignore_errors=True)
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    git("worktree", "add", "--force", "-B", branch or BRANCH, str(wt), "HEAD", check=True)
+    return wt
+
+
+WT_LAND = WT.with_name(WT.name + "-land")
+BRANCH_LAND = BRANCH + "-land"
 
 
 def reset(wt: Path) -> None:

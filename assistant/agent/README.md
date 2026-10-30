@@ -488,6 +488,12 @@ what each one needed:
   (`intents.failed_send`: consumed, newest ticket an exception, nothing queued or done; found by itself when the thread has
   no card): the same card comes back (`cards.reopen`) and is approved on their words that turn. An UNVERIFIED failure only
   qualifies for the CRM connector's message kind, whose executor reads the CRM thread before sending.
+  **A doer card for a step of the owner's own ask is theirs too (2026-10-30).** 13:56 "Make the freaking link already"
+  in the DM, on the copy step of his own "text a dropbox link" ask, got "I can't approve that one for you. The copy card
+  was posted by the system". `intents.own_ask_card` reads the card's ticket (exec.payload.ticket): source `agent`,
+  `payload.from` this owner, `payload.convo` this conversation -> the card counts as asked for, and words at the top of
+  the conversation (no card thread) resolve to the ONE such open card (`own_ask_cards`; two or more -> name it). A card
+  from anyone else's ask, or from the machinery, still needs the tap. Tests: test_intents 16.
 - **Marlo got two texts (12:19 and 13:10).** The first card was approved on the owner's words in a Claude
   session; at 13:09 Sage drafted a fresh card off his 1 PM reminder without looking and he tapped it.
   `intents.recent_text_to()` + `_check_draft`: a text draft to a number that got one in the last 24 h is

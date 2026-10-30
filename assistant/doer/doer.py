@@ -537,6 +537,17 @@ def portal(arg: str) -> str:
     return f"{why}. The quickest way to finish it yourself, from your phone: {how}."
 
 
+def _card_has_screenshot(qid: str) -> bool:
+    """True when the checkpoint card really carries a screenshot file (report.py put its name in the exec payload)."""
+    try:
+        import cards
+        c = cards._read(cards.LIVE / f"{qid}.json") or {}
+        q = (c.get("questions") or [{}])[0]
+        return bool(((q.get("exec") or {}).get("payload") or {}).get("screenshot"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _say(who: str, kind: str, arg: str, t: dict | None = None) -> str:
     name = _agent_name()
     job = job_line(t)
@@ -560,8 +571,11 @@ def _say(who: str, kind: str, arg: str, t: dict | None = None) -> str:
             s = " ".join(str(step or arg).split()).rstrip(".")
             s = re.sub(r"^(?:Type|Enter|Give me|Paste) (?:in )?(?:the |a )?", "", s)
             return f"I need the {s[0].lower() + s[1:] if s else 'code'}. Reply with it here and I'll carry on; no code? say so and I'll sign in another way."
-        return (f"I got it to the last step and stopped: {step or arg} The card (with a screenshot) is in this chat and on "
-                "Mission Control; tap Approve and I will finish.")
+        # "with a screenshot" only when one is attached (the owner 2026-10-29: "You didn't leave a screenshot ... you just
+        # said you did"); the card is in this chat, and that is where he wants everything (2026-10-30), so no
+        # pointer to Mission Control
+        shot = " (with a screenshot)" if _card_has_screenshot(qid) else ""
+        return f"I got it to the last step and stopped: {step or arg} The card{shot} is in this chat; tap Approve and I will finish."
     if kind == "DOER_BLOCKED":
         return f"I could not finish{on}: {portal(arg)}"
     # plain words, never JSON (the owner 2026-10-18): what it was on, and why it stopped, in one line. A job that

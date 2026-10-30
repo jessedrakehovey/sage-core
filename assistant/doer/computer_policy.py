@@ -196,7 +196,11 @@ def classify(cmd: str, pol: dict | None = None) -> tuple:
             tier, why = scan_script(m.group(2), pol)
         else:
             sp = _resolve(m.group(3))
-            if sp.name in ("report.py", "login_fill.py") and _under(sp, HERE):
+            # the doer's own scripts are not scanned: report.py and login_fill.py (always), and browser.py
+            # (2026-10-30: it speaks CDP over a socket to bring the browser on screen; the scan read "import
+            # socket" and refused every `--front`, so a hand-off window stayed hidden and the owner asked
+            # three days running for a window he could see). Its arguments are still judged below.
+            if sp.name in ("report.py", "login_fill.py", "browser.py") and _under(sp, HERE):
                 continue
             if not sp.is_file():
                 return NEVER, f"script not found, refusing to guess: {m.group(3)[:60]}"

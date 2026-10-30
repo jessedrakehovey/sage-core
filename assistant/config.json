@@ -57,6 +57,13 @@
    "noreply@travel-scout",
    "mailer-daemon@"
   ],
+  "dismiss_rules": [
+   {
+    "subject": "zoom",
+    "why": "example-org does not use Zoom; every call is on Google Meet (owner1, 2026-10-30). The CRM's reconnect-Zoom notices make no ticket and are never relayed."
+   }
+  ],
+  "_dismiss_rules": "mail.py dismissed_by_rule: [{from: sender substring, subject: regex, why}] - a mail matching a rule never becomes a ticket (an owner's standing 'we don't use X' belongs here, not only in a chat rule).",
   "lane_rules": [
    {
     "lane": "wedding",

@@ -122,6 +122,28 @@ def sense():
     print(f"SENSE_RESULT mail new={total_new} " + " ".join(f"{k}=[{v}]" for k, v in status["accounts"].items()))
 
 
+def dismissed_by_rule(frm: str, subj: str, cfg: dict) -> str:
+    """config mail.dismiss_rules: [{"from": "<sender substring>", "subject": "<regex>", "why": "..."}] -> the rule's
+    `why` when the mail matches, else ''. An owner's standing "we don't use X" becomes a rule here, so the mail never
+    makes a ticket and nothing relays it (2026-10-30: a CRM's 'reconnect your Zoom' notice was relayed to chat two
+    days running after the owner said every call is on Google Meet; the rule r141 alone did not stop the sensor)."""
+    for rule in cfg.get("dismiss_rules") or []:
+        if not isinstance(rule, dict):
+            continue
+        f = str(rule.get("from") or "").lower()
+        s = str(rule.get("subject") or "")
+        if f and f not in str(frm or "").lower():
+            continue
+        try:
+            if s and not re.search(s, str(subj or ""), re.I):
+                continue
+        except re.error:
+            continue
+        if f or s:
+            return str(rule.get("why") or "dismiss rule")
+    return ""
+
+
 def _sense_one(m, uid, name, acct, cfg):
     """One unread message -> a ticket item (or None for a skipped sender). PEEK only: never marks it read."""
     typ, d = m.uid("FETCH", uid, "(BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID LIST-UNSUBSCRIBE)] BODY.PEEK[]<0.%d>)" % SNIPPET_BYTES)
@@ -132,6 +154,8 @@ def _sense_one(m, uid, name, acct, cfg):
     h = email.message_from_bytes(raw_h, policy=email.policy.default)
     frm, subj = str(h.get("From", "")), str(h.get("Subject", "(no subject)"))
     if any(s in frm.lower() for s in cfg["skip_senders"]):
+        return None
+    if dismissed_by_rule(frm, subj, cfg):
         return None
     # The snippet is the READABLE text. BODY[TEXT] of a multipart mail (nearly all real mail) is
     # MIME boundaries and base64, so lane routing and the bill / delivery date finder were

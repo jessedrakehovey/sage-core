@@ -226,6 +226,47 @@ def _place(t: dict) -> str:
     return "in this thread" if t.get("thread") else ("here in this chat" if str(t.get("convo", "")).startswith("dm:") else "here in the space")
 
 
+def _card_ticket(card: dict) -> dict:
+    """The doer ticket a checkpoint card belongs to (exec.payload.ticket), or {}."""
+    q = (card.get("questions") or [{}])[0] if isinstance(card, dict) else {}
+    tid = _s(((q.get("exec") or {}).get("payload") or {}).get("ticket"))
+    if not re.fullmatch(r"[0-9a-f]{16}", tid):
+        return {}
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import tickets
+        return tickets._load().get(tid) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def own_ask_card(card: dict, person: dict, convo: str = "") -> bool:
+    """A card the doer posted for a step of THIS owner's own chat ask is theirs to approve in words, like a card
+    they asked for outright (the owner 2026-10-30 13:56, "Make the freaking link already" on the copy step of his own
+    "text a dropbox link" ask, answered with "I can't approve that one for you, the system posted it"). The ticket
+    records who asked (payload.from) and where (payload.convo); a card from anyone else's ask, or from the
+    machinery, still needs the tap."""
+    t = _card_ticket(card)
+    p = t.get("payload") or {}
+    if t.get("source") != "agent" or not _s(p.get("from")) or _s(p.get("from")).lower() != _s(person.get("key")).lower():
+        return False
+    return not convo or _s(p.get("convo")) == convo
+
+
+def own_ask_cards(person: dict, convo: str, hours: float = 48.0) -> list:
+    """Open cards (newest first) in this conversation that belong to the owner's own asks, within `hours`."""
+    sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+    import cards
+    out = []
+    for c in cards._live():
+        if c.get("status") != "open" or time.time() - float(c.get("ts") or 0) > hours * 3600:
+            continue
+        if own_ask_card(c, person, convo):          # a card asked for in a thread resolves through that thread
+            out.append(c)
+    out.sort(key=lambda c: -float(c.get("ts") or 0))
+    return [str(c.get("id")) for c in out]
+
+
 def validate(kind: str, payload, person: dict, t: dict) -> tuple:
     """-> (ok, line for the model, cleaned payload). Reads only; the one place a refusal is phrased."""
     if not isinstance(payload, dict):
@@ -462,6 +503,14 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         skip = payload.get("skip") is True or _s(payload.get("skip")).lower() == "true"
         if not re.fullmatch(r"q[0-9a-f]{12}", qid) and not skip:
             qid, _ = failed_send()
+        if not re.fullmatch(r"q[0-9a-f]{12}", qid) and not skip:
+            # words at the top of the conversation, not in a card's thread ("Make the freaking link already" in the
+            # DM, 2026-10-30): the one open card of the owner's own asks here is the card they mean
+            mine = own_ask_cards(person, _s(t.get("convo")))
+            if len(mine) == 1:
+                qid = mine[0]
+            elif len(mine) > 1:
+                return False, f"refused: {len(mine)} cards from their own asks are open here; name the one (its header) or the card id.", payload
         if not re.fullmatch(r"q[0-9a-f]{12}", qid):
             return False, "refused: there is no open card in this thread to approve; post it first with `task`, or name the card id.", payload
         sys.path.insert(0, str(core.AGENT.parent / "scripts"))
@@ -492,7 +541,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
                           "clause; never say they have to tap."), {"qid": qid, "skip": True, "option": label, "words": _s(payload.get("words"))[:200]}
         if not ex:
             return False, "refused: that card has no action to approve (a decision card): their answer comes back to you as a tap.", payload
-        if not (card.get("asked") or _s(q.get("freshness_ack"))):
+        if not (card.get("asked") or _s(q.get("freshness_ack")) or own_ask_card(card, person)):
             return False, "refused: that card was posted by the system, not asked for in chat, so it needs their tap on the card itself. Say so in one line.", payload
         at = _s(payload.get("at"))
         if at:

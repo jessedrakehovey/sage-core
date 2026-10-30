@@ -44,6 +44,19 @@
    "_what": "the comms substrate (thread states + SLAs + breach tickets); the 1-min probe task rebuilds it too, this is the safety net"
   },
   {
+   "name": "questionnaire-ingest",
+   "cmd": [
+    "python",
+    "assistant/scripts/questionnaire_ingest.py"
+   ],
+   "every_min": 120,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 150
+  },
+  {
    "name": "team-on-projects",
    "cmd": [
     "python",

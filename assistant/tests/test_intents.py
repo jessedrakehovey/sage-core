@@ -459,4 +459,40 @@ r = gmcp.call("task", {"text": "Revised proposal to Corwin Castellan IV", "lane"
                                  "text": "Hi Corwin, the revised proposal is attached. Let me know what you think."}})
 ok(r.startswith("accepted"), "the same card without the price is accepted" + " " + repr(r))
 
+# ---------------------------------------------------------------- 16. a doer card for a step of the owner's OWN ask is theirs to approve in words (2026-10-30)
+# 13:56 "Make the freaking link already" in the DM, on the copy step of his own "text a dropbox link" ask: "I can't
+# approve that one for you. The copy card was posted by the system". The ticket says who asked and where.
+import tickets  # noqa: E402
+tickets.add_many([{"source": "agent", "source_id": "do|computer|1|loop", "lane": "wedding", "kind": "agent_run",
+                   "title": "owner1: the loop video to Dropbox", "summary": "copy the loop, make the link",
+                   "payload": {"text": "copy the loop", "via": "sage", "from": "owner1", "where": "computer", "convo": "dm:owner1", "thread": "", "space": "spaces/AAQAtest"}},
+                  {"source": "agent", "source_id": "do|computer|2|other", "lane": "personal", "kind": "agent_run",
+                   "title": "owner6: her own job", "summary": "x",
+                   "payload": {"text": "x", "via": "sage", "from": "owner6", "where": "computer", "convo": "dm:owner6", "thread": "", "space": ""}}], "test")
+_tj = tickets.make_id("agent", "do|computer|1|loop")
+_to = tickets.make_id("agent", "do|computer|2|other")
+_cpq = {"question": "[ACTION PREVIEW]\nCopy the loop video into the Dropbox folder\nRuns exactly: cp a b\nTap Approve and the doer performs exactly this step.",
+        "header": "Doer: owner1: the loop video to Dropbox", "lane": "wedding", "audience": "owner",
+        "options": [{"label": "Approve"}, {"label": "Cancel"}],
+        "exec": {"kind": "agent_run", "approve_label": "Approve", "payload": {"ticket": _tj, "step": "Copy the loop", "resume": "make the link", "command": "cp a b"}}}
+_rj = cards.post([_cpq], owner="doer", lane="wedding")
+_oq = json.loads(json.dumps(_cpq)); _oq["header"] = "Doer: owner6: her own job"; _oq["exec"]["payload"]["ticket"] = _to
+_ro = cards.post([_oq], owner="doer", lane="personal")
+ok(_rj.get("posted") and _ro.get("posted"), "two system-posted doer checkpoint cards are up (one from owner1's ask, one from owner6's)")
+_cj = json.loads((cards.LIVE / f"{_rj['qid']}.json").read_text(encoding="utf-8"))
+ok(not _cj.get("asked") and intents.own_ask_card(_cj, owner1, "dm:owner1") and not intents.own_ask_card(_cj, owner1, "dm:other"),
+   "own_ask_card: the ticket's asker and conversation make the card the owner's own")
+_co = json.loads((cards.LIVE / f"{_ro['qid']}.json").read_text(encoding="utf-8"))
+ok(not intents.own_ask_card(_co, owner1), "own_ask_card: another person's ask is not his")
+# words at the top of the DM, no card thread: the one open card of his own asks here is the one he means
+os.environ["AGENT_TURN"] = str(intents.begin(owner1, "dm:owner1", ""))
+r = gmcp.call("approve", {"words": "Make the freaking link already"})
+ok(r.startswith("accepted") and "tap" in r, "approve: his words in the DM approve the doer card of his own ask" + " " + repr(r))
+got = intents.collect(os.environ["AGENT_TURN"])
+ok(got.get("approve") and got["approve"][0]["qid"] == _rj["qid"], "the approve intent carries that card's id")
+# in the other card's thread, owner's card is still a tap for the owner
+os.environ["AGENT_TURN"] = str(intents.begin(owner1, "dm:owner6", "", card={"id": _ro["qid"]}))
+r = gmcp.call("approve", {"words": "go ahead"})
+ok(r.startswith("refused") and "tap" in r, "approve: a doer card from someone else's ask still needs the tap" + " " + repr(r))
+
 print(f"\nall {N} checks passed")

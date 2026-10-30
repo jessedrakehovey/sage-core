@@ -99,6 +99,17 @@ def _couples() -> dict:
     return out
 
 
+AUTOMATED_SENDER = re.compile(r"^(?:no-?reply|do-?not-?reply|donotreply|notifications?|notify|concierge|mailer-daemon|postmaster|alerts?|newsletter|marketing|bounce)[@.+-]", re.I)
+
+
+def is_automated(handle: str) -> bool:
+    """A sender nobody answers (a CRM's concierge mail, no-reply notices): never a vendor on an SLA (2026-10-30:
+    'Unanswered vendor email: the CRM Concierge (1440 min)' chased the owner about a Zoom notice he had already
+    said to drop). Addresses only; a phone number is always a person."""
+    h = str(handle or "").lower()
+    return "@" in h and bool(AUTOMATED_SENDER.match(h))
+
+
 def classify(handle: str, lane: str, leads: dict, couples: dict) -> tuple:
     h = handle.lower()
     key = h if "@" in h else _digits(h)
@@ -106,6 +117,8 @@ def classify(handle: str, lane: str, leads: dict, couples: dict) -> tuple:
         return "lead", leads[key]
     if key in couples:
         return "couple", couples[key]
+    if is_automated(h):
+        return "notification", ""
     if lane == "owner6":
         return "owner6", ""
     if lane == "wedding":
