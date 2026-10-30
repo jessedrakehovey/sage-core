@@ -23,6 +23,17 @@
       "args": {"couple": "the couple as the Resolve project names them", "drp": "full path of the .drp he sent back"},
       "options": {"media": ["--media", "{media}"], "editor": ["--editor", "{editor}"]},
       "aliases": ["handoff return", "corwin sent the project back", "bring corwin's edit in", "import corwin's drp", "editor return"]
+    },
+    {
+      "key": "vault_purge_banks",
+      "name": "Bank login purge",
+      "lane": "money",
+      "what": "delete every bank or credit union login from the doer's login vault (Recycle Bin too), keep the ones in `keep`, then say in chat what went, how many are left and where plain copies still sit (paths only); no model, nothing sent",
+      "cmd": ["python", "assistant/doer/vault_purge.py"],
+      "args": {},
+      "match": ["bank", "chase", "wells fargo", "wellsfargo", "relay", "relayfi", "citi", "citibank", "bofa", "bank of america", "bankofamerica", "capital one", "capitalone", "credit union", "usbank", "us bank", "simplefin", "american express", "amex", "schwab"],
+      "keep": ["plaid", "venmo", "paypal"],
+      "aliases": ["purge bank logins", "remove bank logins", "delete bank logins", "purge bank passwords", "bank login purge", "remove bank passwords"]
     }
   ]
 }

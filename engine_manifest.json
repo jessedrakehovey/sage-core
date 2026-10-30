@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+c775cba",
+  "version": "2026.10.30+b6d6d57",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T15:51:16"
+  "synced": "2026-10-30T15:52:11"
  },
  "modules": {
   "money": {
@@ -198,13 +198,14 @@
   "assistant/doer/tools/meta.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   "assistant/doer/tools/tools.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   "assistant/doer/vault.py": "4e2bb5f15a7e8f5c68f538866aaba73be495bf63122321dfccb9e26ebcaa09d7",
+  "assistant/doer/vault_purge.py": "6f5c9fc7845b597a1709316b2c7680ae44cc5ef607d0775abc73eaa66192064a",
   "assistant/engine.py": "ba5352bed89c46b1dc6b6c2495eedad9164d0edf9a82b8aac9bc97312044119e",
   "assistant/installer/README.md": "17ed1609fb424186ba2177345124c849ffc790247af85879db926db24f8f560c",
   "assistant/installer/windows/SageSetup.iss": "ab835be27de51d36d9bd28cb239e60ca7c8c19c4a612b2879dd917c8d65ffc0e",
   "assistant/installer/windows/build.ps1": "3155e7cf64f0029c5bd276bc82851cddfb37f071e4017e9176632ed60c43a776",
   "assistant/installer/windows/install.ps1": "b1433ef98574c65f910f50c6c62d9d906977ed037e2ab5b73cbb700674855863",
   "assistant/installer/windows/release.ps1": "544f990a888a1888161d3a41ebce97b13879baf2bc4d5997e8e8f7005e04074b",
-  "assistant/jobs.json": "0c6fe9394e4a97e15102a4aec85a70715512be794cd68d6767288ec920f48583",
+  "assistant/jobs.json": "cdd9c916e5d4107a25c80c1e66d84cdc7bcfa8d5a84e732b2af97a13960c3448",
   "assistant/mining.json": "bc9c3ced2f775ff1994e395712fb77742f1df30fc9a2750447aab8d8e2672924",
   "assistant/money.json": "6b0bf594f29bf0f17da774c9a871d1f032ec92268ab88ff6aad8c95702d2d22a",
   "assistant/money_rules.json": "188daef0ff9c7628e49e0540e8a64e9fd335129203d5a7f64f64c4d0c1195cfe",
