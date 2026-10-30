@@ -302,6 +302,9 @@ around the same read-only brain:
 - **A picture or a link is a `do` (gap g-53f9ec, same day).** "Can you send me a picture or a link?" (of a car title) got
   "I can't pull up a picture from here". The prompt's "cannot browse the web" line now sends any picture, link, example or
   page to find to the doer, whose `DOER_ANSWER` carries the page URL and the image URL. `test_capability.py` section 15.
+- **Whether a bill or fee is paid is looked up (2026-10-30, gap g-c0da13).** "I probably paid the fee by now. So now
+  what do I do with it" got "a quick search of your email or bank would settle it". Both prompts now say: `mail_search`
+  for the receipt first, then a `do` that signs in to the account and reads the payment and the next step. Section 22.
 
 Generic by construction: `capability.py` names no organization, person or service (the test checks); the
 regexes are English, the names come from `profile.json` / `people.json`; `new_org.py` copies it with the rest of
@@ -489,7 +492,8 @@ what each one needed:
   session; at 13:09 Sage drafted a fresh card off his 1 PM reminder without looking and he tapped it.
   `intents.recent_text_to()` + `_check_draft`: a text draft to a number that got one in the last 24 h is
   REFUSED with the earlier text quoted, unless the ask says resend / again / follow-up. The prompt says to
-  tell the owner the earlier one went.
+  tell the owner the earlier one went. 2026-10-29: a reply to a text they sent after ours passes by itself
+  (`intents.wrote_since`), and a wanted second text sets `draft.resend`; a marker word in the body no longer counts.
 - **CRM replies never sent (Delia x2 on 10-24, Emery x3 on 10-18).** The connector pauses every
   client message for an approval card only a live Claude window can show, so headless `createCommunication`
   is always "the member did not approve this change". The CRM connector's exec script now falls through to

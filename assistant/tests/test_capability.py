@@ -734,4 +734,32 @@ sysc = cards.post([{"header": "Email to Sam", "lane": "wedding",
 es.set_status(es.enqueue("email_send", SB, es.APPROVER, "card:rs-seed2")["id"], "done", "SENT=1")
 sa_ = cards.answer(sysc.get("qid") or sysc.get("id"), "Send", by="gchat:owner1")
 ok("RESEND" in str(sa_.get("mint_error")) and not sa_.get("ticket"), f"a system-raised second email to the same thread is still refused ({sa_})")
+# ---------------------------------------------------------------- 22. "did I pay the fee" is looked up, never sent back to the owner
+# the owner, 2026-10-29 20:40 (gap g-c0da13): "I probably paid the fee by now. So now what do I do with it" was answered
+# "I couldn't check the account to confirm the fee, so a quick search of your email or bank for a Cox charge would settle it".
+FEE_ASK = "I probably paid the fee by now. So now what do I do with it"
+
+
+def fake_run_fee(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["do"] = gmcp.call("do", {"lane": "personal", "text": "Sign in to the Cox account, check whether the fee was paid (date and "
+                                  "amount), and read what the next step is now that it is paid; report both back here."})
+    return {"ok": True, "session": "S9", "text": "Nothing in the mail settled it, so I've sent off to check the Cox account for the payment and the next step."}
+
+
+brain._run_claude = fake_run_fee
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": FEE_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/fee", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "Cox account" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen["do"]).startswith("accepted") and tix and tix[-1]["payload"].get("thread") == "spaces/AAQAtest/threads/fee",
+   "'I probably paid the fee by now' becomes a doer job to read the account, in its own thread")
+ok("couldn't check the account" not in out and "search of your email" not in out and len(NOTES) == n0
+   and len(cap._load()["gaps"]) == g0, "no 'search your email or bank' line, no build filed")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("Whether a bill, a fee or a charge is paid" in t and "Never \"I couldn't check the account\"" in t,
+       f"{f}: a paid-or-not question is a `mail_search`, then a `do`")
 print(f"\nall {N} checks passed")

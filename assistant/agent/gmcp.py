@@ -100,6 +100,7 @@ WRITE_TOOLS = [
              "in_reply_to_id": {"type": "string", "description": "service message only: the 24-hex id of their last message, when replying"},
              "account": {"type": "string", "description": "email only: which mailbox sends it (an account name from CONNECTIONS)"},
              "send_at": {"type": "string", "description": "YYYY-MM-DD HH:MM, local time: when the message should go out, ONLY when the owner named a time ('text her tomorrow at 9'). The card is posted now; the send waits for that minute after their tap. Between 07:00 and 21:00; leave it out for 'now'."},
+             "resend": {"type": "boolean", "description": "text only: true when the owner wants a second text to someone who already got one today. Never put a marker word like 'resend' in `text`; a reply to a text they sent after ours needs no flag."},
              "hold_if_reply": {"type": "boolean", "description": "with send_at, when the owner's ask is conditional ('text him at 4 if they haven't replied'): just before the send minute code checks their texts, both inboxes and the client service (a message, a form filled in, a meeting booked) for anything from them since the card was made, and holds the send if something came in (one line in the card's thread says what). The tap is still needed."}}}}}},
     {"name": "job",
      "description": "Run one of the system's registered local jobs (see JOBS YOU CAN RUN) now or at a time: code posts ONE card with the job and its values, "

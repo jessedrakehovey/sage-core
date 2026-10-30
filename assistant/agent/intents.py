@@ -742,6 +742,19 @@ def recent_text_to(to: str, hours: float = 24.0) -> dict:
 _RESEND = re.compile(r"\b(resend|second text|again|follow[- ]?up|one more)\b", re.I)
 
 
+def wrote_since(to: str, ts: str) -> bool:
+    """True when `to` texted us after `ts` (our last text to them): a reply to their new message is a new turn,
+    not a repeat (2026-10-29: a team member's new question needed 'resend' at the top of the draft to pass the same-day
+    guard, and the card's preview began with it)."""
+    sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+    try:
+        import phone_bridge
+        msgs = phone_bridge.thread(to, 40)["messages"]
+    except Exception:  # noqa: BLE001
+        return False
+    return any(m.get("dir") == "in" and str(m.get("ts") or "")[:19] > str(ts or "")[:19] for m in msgs)
+
+
 def _check_draft(d: dict, ask_text: str = "") -> str:
     """A draft the brain wrote itself: enough to post a card (cards.py validates the rest)."""
     ch = _s(d.get("channel")).lower()
@@ -752,16 +765,18 @@ def _check_draft(d: dict, ask_text: str = "") -> str:
         _aliases = set()
     if ch in _aliases:
         ch = d["channel"] = "service"
-    if ch == "text" and _s(d.get("to")) and not _RESEND.search(ask_text + " " + _s(d.get("text"))):
+    # a second text is allowed on the owner's words, the separate `resend` flag (never a word in the body), or
+    # when the person wrote to us after our last text
+    if ch == "text" and _s(d.get("to")) and not d.get("resend") and not _RESEND.search(ask_text):
         prev = recent_text_to(_s(d.get("to")))
-        if prev:
+        if prev and not wrote_since(_s(d.get("to")), str(prev.get("ts_done") or "")):
             import time as _t
             try:
                 when = _t.strftime("%I:%M %p", _t.strptime(str(prev["ts_done"])[:19], "%Y-%m-%dT%H:%M:%S")).lstrip("0")
             except Exception:  # noqa: BLE001
                 when = str(prev.get("ts_done"))[:16]
             return (f"a text already went to {d.get('to')} today at {when}: \"{prev['body'][:90]}\". Tell the owner that one went "
-                    "and what it said; draft another only if they want a second text (then put 'resend' in `text`).")
+                    "and what it said; draft another only if they want a second text (then set draft.resend true; never a marker word in `text`).")
     if ch not in CHANNELS:
         return "draft.channel must be text, email or service."
     if len(_s(d.get("text"))) < 2:

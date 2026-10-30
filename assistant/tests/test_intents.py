@@ -210,7 +210,7 @@ pm = (ROOT / "agent" / "prompt.md").read_text(encoding="utf-8")
 ok(not re.search(r"\b(?:" + "|".join(map(re.escape, _org_words(ROOT) + ["the CRM"])) + r")\b", gen), "the generic prompt names no organization, service or person")
 ok("SUGGEST {" not in pm and "`task`" in pm and "`draft`" in pm, "prompt.md teaches the deed tools, not a SUGGEST line")
 ok("prompt.local.md" in brain.__file__ or "ORGANIZATION NOTES" in brain.context_block(), "the org notes ride into the context")
-ok(len(pm) < 20600, f"prompt.md is lean ({len(pm)} chars)")   # 20100 until 2026-10-29 (the thread is read from Chat itself, chat_thread tool); 19900 until 2026-10-28 late (hold_if_reply, send_hold.py); 19750 until 2026-10-28 night (fix it and send = approve, gap g-b436c2); 19600 until 2026-10-28 eve (skip a card in words, gap g-bdccf4); 19500 until 2026-10-28 (a code change is never a task; "results?" files the unfiled build); 19000 until 2026-10-27 night (the correction line, correction.py); 18000 until 2026-10-27 eve (the project deed, projects.py); 17800 until 2026-10-27 pm (the no-ids voice sentence, voice.py); 17500 until 2026-10-27 (the REFLEX line, reflex.py); 16600 until 2026-10-25 pm (approve-in-words, the no-guess resolution order over THIS THREAD / cards / JUST BEFORE THIS); 14000 until 2026-10-23 (the "who is texting" paragraph, whois.py); 16000 until 2026-10-25 (rung 5 builds the missing piece and compound asks, capability.py)
+ok(len(pm) < 21000, f"prompt.md is lean ({len(pm)} chars)")   # 20900 until 2026-10-30 (draft.resend flag, a reply to their newer text passes); 20600 until 2026-10-30 (a bill or fee paid is looked up, gap g-c0da13); 20100 until 2026-10-29 (the thread is read from Chat itself, chat_thread tool); 19900 until 2026-10-28 late (hold_if_reply, send_hold.py); 19750 until 2026-10-28 night (fix it and send = approve, gap g-b436c2); 19600 until 2026-10-28 eve (skip a card in words, gap g-bdccf4); 19500 until 2026-10-28 (a code change is never a task; "results?" files the unfiled build); 19000 until 2026-10-27 night (the correction line, correction.py); 18000 until 2026-10-27 eve (the project deed, projects.py); 17800 until 2026-10-27 pm (the no-ids voice sentence, voice.py); 17500 until 2026-10-27 (the REFLEX line, reflex.py); 16600 until 2026-10-25 pm (approve-in-words, the no-guess resolution order over THIS THREAD / cards / JUST BEFORE THIS); 14000 until 2026-10-23 (the "who is texting" paragraph, whois.py); 16000 until 2026-10-25 (rung 5 builds the missing piece and compound asks, capability.py)
 
 # ---------------------------------------------------------------- 8. build now: a chat-filed build request kicks the builder at once (2026-10-23)
 import builder  # noqa: E402
@@ -393,6 +393,39 @@ ok(r.startswith("refused") and "already went" in r and "Hey Marlo" in r, "a seco
 r = gmcp.call("task", {"lane": "wedding", "text": "Resend: text Marlo again, he did not answer",
                        "draft": {"channel": "text", "to": "+13525550101", "text": "Hey Marlo, just checking you saw my text about Nov 7."}})
 ok(r.startswith("accepted"), "the owner's 'resend' / 'again' lifts the guard" + " " + repr(r))
+# 2026-10-29 (a team member's new question): a reply to a text they sent after ours needs no marker word, and a wanted second
+# text carries `resend` as a flag, never as a word in the body or the card's preview
+import phone_bridge as _pb
+import time
+_prev = intents.recent_text_to("+13525550101")
+_th = json.loads(_pb.THREADS.read_text(encoding="utf-8")) if _pb.THREADS.exists() else {}
+_th.setdefault("+13525550101", {"name": "Marlo", "messages": []})["messages"].append(
+    {"ts": "2000-01-01T00:00:00", "dir": "in", "text": "older message, before our text", "ref": ""})
+_pb.THREADS.write_text(json.dumps(_th), encoding="utf-8")
+os.environ["AGENT_TURN"] = str(intents.begin(owner1, "spaces/AAQAtest", THREAD))
+_args = {"lane": "wedding", "text": "Reply to the text Marlo sent about the call time",
+         "draft": {"channel": "text", "to": "+13525550101", "text": "Hey Marlo, the call time is 2 pm."}}
+r = gmcp.call("task", _args)
+ok(r.startswith("refused") and "already went" in r, "a message they sent BEFORE our text does not lift the guard" + " " + repr(r))
+_after = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.mktime(time.strptime(_prev["ts_done"][:19], "%Y-%m-%dT%H:%M:%S")) + 5))
+_th["+13525550101"]["messages"].append({"ts": _after, "dir": "in", "text": "What time is the call?", "ref": ""})
+_pb.THREADS.write_text(json.dumps(_th), encoding="utf-8")
+os.environ["AGENT_TURN"] = str(intents.begin(owner1, "spaces/AAQAtest", THREAD))
+r = gmcp.call("task", _args)
+ok(r.startswith("accepted"), "a reply to a text they sent after our last text today posts its card with no marker word" + " " + repr(r))
+_th["+13525550101"]["messages"] = [m for m in _th["+13525550101"]["messages"] if m["ts"] != _after]
+_pb.THREADS.write_text(json.dumps(_th), encoding="utf-8")
+os.environ["AGENT_TURN"] = str(intents.begin(owner1, "spaces/AAQAtest", THREAD))
+r = gmcp.call("task", {"lane": "wedding", "text": "Text Marlo the parking details",
+                       "draft": {"channel": "text", "to": "+13525550101", "text": "Hey Marlo, parking is behind the barn.", "resend": True}})
+ok(r.startswith("accepted"), "the separate resend flag lifts the guard without a word in the body" + " " + repr(r))
+_q = actions._draft_question("wedding", "Text Marlo the parking details",
+                             {"channel": "text", "to": "+13525550101", "text": "Hey Marlo, parking is behind the barn.", "resend": True}, owner1)
+ok(_q["exec"]["payload"]["body"] == "Hey Marlo, parking is behind the barn." and "resend" not in _q["exec"]["payload"]["body"].lower(),
+   "the flag never reaches the message body" + " " + repr(_q["exec"]["payload"]["body"]))
+r = gmcp.call("task", {"lane": "wedding", "text": "Text Marlo the parking details",
+                       "draft": {"channel": "text", "to": "+13525550101", "text": "resend Hey Marlo, parking is behind the barn."}})
+ok(r.startswith("refused") and "already went" in r, "a marker word in the body no longer lifts the guard" + " " + repr(r))
 
 # ---------------------------------------------------------------- 14. no local in validate shadows a module function (2026-10-24)
 # a half-made edit bound `lanes = ...` inside validate, so every `lanes()` there raised UnboundLocalError: two text
