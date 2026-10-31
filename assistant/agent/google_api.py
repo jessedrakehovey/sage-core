@@ -396,6 +396,16 @@ def mail_read(name: str, message_id: str, max_chars: int = 6000) -> dict:
                            "attachments and the Drive-linked files to this PC)") if atts or drive_links(body) else ""}
 
 
+def mail_thread(name: str, thread_id: str, max_chars: int = 2500) -> dict:
+    """Every message of one mail thread, oldest first, sent ones included (gap g-754648, 2026-10-31: "read the
+    email thread that we just sent him and make a logical follow up" was drafted from notes instead)."""
+    t = _api(name, f"{GM}/threads/{urllib.parse.quote(thread_id, safe='')}?format=full")
+    msgs = [{"id": m.get("id"), "from": _hdr(m, "from"), "to": _hdr(m, "to"), "date": _hdr(m, "date"),
+             "sent": "SENT" in (m.get("labelIds") or []),
+             "body": _text(m.get("payload") or {}).strip()[:max_chars]} for m in (t.get("messages") or [])]
+    return {"account": name, "thread": thread_id, "subject": _hdr((t.get("messages") or [{}])[0], "subject"), "messages": msgs}
+
+
 # ------------------------------------------------------------------ sheets (cells, card-gated writes)
 _A1 = re.compile(r"^(?:'(?P<qtab>[^']+)'!|(?P<tab>[^'!:]+)!)?(?P<cell>[A-Z]{1,3}[1-9][0-9]{0,6})$")
 

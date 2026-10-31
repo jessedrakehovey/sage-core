@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.31+b555872",
+  "version": "2026.10.31+b85bf2c",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-31T10:28:57"
+  "synced": "2026-10-31T11:11:29"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "da7876e32a1500c67e5fa4de594b9336884b8cb1ba006d97376f3a253b6e3ef9",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
-  "assistant/agent/README.md": "36e8899b43610f383ee914c17f4873f5f7b59cf3a901feb332bcf7a72cb2b231",
+  "assistant/agent/README.md": "bf426d6e47b4e9cc1fe562d808fc8b22927e36a5777fc93877f1701bc8ae9529",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "7f3118ad2776b62656593f99ab44faf7478493e09464cceed75a9b43b0ce9069",
@@ -124,8 +124,8 @@
   "assistant/agent/gchat_relay/Code.oneline.gs": "e3c95de18c7834320950736ee4f01177a26811b1720d5e5df875fa3269e6b4ee",
   "assistant/agent/gchat_relay/README.md": "1a58dae1867e7f0a98258f16c5bf10bb30e800df9792f64e3f4a7b6fa7e5ccda",
   "assistant/agent/gchat_relay/appsscript.json": "05c637ef0648c6819cb89bcf855a4eaa63749e33b8e3755b1c05fc5266a809d2",
-  "assistant/agent/gmcp.py": "491d60b9be6eb3018207fea7d5d5c988b7ce80ecbc4dc9abf1c317c6b8a5f205",
-  "assistant/agent/google_api.py": "a07b57ab89db3dd041ec266ec3493eebc6212bf3cad3f2a58429d80f856e341c",
+  "assistant/agent/gmcp.py": "10770ca777bb4ebf69bd60a5e7dbd445c9baf895d0c5d3d0e63d436a155ae840",
+  "assistant/agent/google_api.py": "f5ad9cdf996fc9a5b4e93aee6d27242d6b78c8ff1b36b5b671cb026ee28005ad",
   "assistant/agent/held.py": "8f69b94dd58503fd43cfe424f87a5a128286933df9d2a0b1a23f7c7d86e8ac01",
   "assistant/agent/intents.py": "af19915f87e6bc1ab0c2a42818a437bf8d3acd36dbf52880c2e00f7d93c067a3",
   "assistant/agent/meeting_reminder.py": "67bf0b809e65be1fee095358598a3d6ee051e90c775380eeaffda631f95ff92d",
@@ -135,7 +135,7 @@
   "assistant/agent/place.py": "1a15e9619a29ac0256518795a80600e28f6c4df1e07ae46633df702d281b8290",
   "assistant/agent/profile.json": "5c56e8dbb35252fdf4c90fc2bb9feb4838f17a3e8db6f72394ae1329f7e6061e",
   "assistant/agent/projects.py": "7da12a7e83c2965d1193427eb91d5486131490766c62c5db2f5df943ffef0e19",
-  "assistant/agent/prompt.md": "e0f01c325942be48e7259c14d7ff1f49e58e727c7262b18a1dca6be5d099b0c2",
+  "assistant/agent/prompt.md": "97da7e0989e51a5da8e9cd5358e8ebbb93f19442aef5845a972abfc41893209d",
   "assistant/agent/receipts.py": "5a3755eb6e0ca1287b0597fbfc09fa623157519a4fe5c32d0d8a06e7add3930c",
   "assistant/agent/reflex.py": "da65bbd94ece78868d8ff1ea7d7e11977021ad823877b426e139aa18a22c7d0b",
   "assistant/agent/resources.py": "5cfeff4120c3a18d2a9c656adf7ed242eb43e3dcb8b45f31ef8134f06a7e34e4",
@@ -145,7 +145,7 @@
   "assistant/agent/space_reader.py": "579fb933a9018fca591a5e5b8c556389279c7216ac66b19e82ed59dfdad7f437",
   "assistant/agent/switches.json": "c23c02f0ddb924ed0f886c688138b5d583585499215daf761fbba116396a11f4",
   "assistant/agent/switches.py": "656943a1f359cb2639e4f797bc1225435637dce5dfa19fcf993e400bc65c67a4",
-  "assistant/agent/templates/prompt.generic.md": "e2c2f51721d8c33966bd996ce269a3223ad27d56bcae2c78d5d085c3cf9fa4f7",
+  "assistant/agent/templates/prompt.generic.md": "388a42f60b47611bd19c0b08cc272ee9c857268401d417772b475a7ead0936d4",
   "assistant/agent/templates/prompt.staff.md": "888fd437b3a82960a625a295f4a23667f67e9508b41ec053816ddf7fd8e26f31",
   "assistant/agent/templates/prompt.team.md": "99b295b4f46d273a6c3f4daac9f172f8e99d3d215824b4439d57be77fae7dcd4",
   "assistant/agent/voice.py": "d75229291fa80ea77d715dc4746c5a1623458bd19776eb71cb9989343803d237",
@@ -380,7 +380,7 @@
   "assistant/tests/test_form_ingest.py": "b02b252f0ba1582775d9a3873a16dd7dce8b6cf9dd559bad157312e262afbba5",
   "assistant/tests/test_held.py": "828ea2a7d2da5df688e32ae1a0ce8214cab0a6cd7e7ff66e4a862515eaf0a22f",
   "assistant/tests/test_installer.py": "b7ab409bb3db31ed452b83b45e870bc7cf1ab48d8690e606caf58c862308b6ac",
-  "assistant/tests/test_intents.py": "7fb0b15608883004842d7df47714a5f1b993f5c3f08d053309d8dd46dfcd76a0",
+  "assistant/tests/test_intents.py": "05976b63f8418b0592f30b6edfeb5e6e93f28b1f9d34a326151da5156d1690ba",
   "assistant/tests/test_learn.py": "fbf67061a3a42235957a1e3ef4182eb86e8d3cc7ec5298ad18fbd14cd563825b",
   "assistant/tests/test_lifecycle.py": "0624b8bdb7908fe70e1502ca63ffba58aafd25ec6d33b0545a9c3e52c0aef37b",
   "assistant/tests/test_mail_arm.py": "841cfdbfc79032d35242c43781bcbefdf4765d9edb60d6724426212a7825f5d5",

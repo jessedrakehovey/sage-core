@@ -364,6 +364,10 @@ around the same read-only brain:
 - **Whether a bill or fee is paid is looked up (2026-10-30, gap g-c0da13).** "I probably paid the fee by now. So now
   what do I do with it" got "a quick search of your email or bank would settle it". Both prompts now say: `mail_search`
   for the receipt first, then a `do` that signs in to the account and reads the payment and the next step. Section 22.
+- **An email follow-up reads the thread first (2026-10-31, gap g-754648).** "Read the email thread that we just sent him and
+  make a logical follow up" was redrafted from notes with "I couldn't open the actual email thread". `mail_read` now takes
+  `thread` (`google_api.mail_thread`: every message oldest first, sent ones flagged), and both prompts say an email
+  follow-up is `mail_search` + `mail_read` of the thread before the draft. Section 26.
 
 Generic by construction: `capability.py` names no organization, person or service (the test checks); the
 regexes are English, the names come from `profile.json` / `people.json`; `new_org.py` copies it with the rest of
