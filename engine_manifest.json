@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+860042d",
+  "version": "2026.10.30+1b9bb19",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T19:51:19"
+  "synced": "2026-10-30T20:01:31"
  },
  "modules": {
   "money": {
@@ -94,7 +94,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "867850e4f5a73deec127e23224ae142bce6ed65284acdaf590e38d24619bd7b6",
+  "assistant/README.md": "4379bc793d711268aab91078e9ec6729357de9da54ed3dca5e44ab8a009f3e83",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
   "assistant/agent/README.md": "2fd3d9c5983433d762d67f5fe66239967cd4d0f2e108ffd5dda0af28230a4fde",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",

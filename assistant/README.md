@@ -1188,6 +1188,10 @@ CRM kind card whose kind the self-test found dead (`CRM_PATH_DEAD`), the connect
   (a team member) on every upcoming client video call that is also on the owner's Google calendar, by Calendar API with
   `sendUpdates=none` (they get the Meet on their calendar and join without knocking). A Meet that exists only
   inside the CRM is said once in chat: co-hosting there needs a CRM team seat, the owner's call.
+  Since 2026-10-30 it also puts EVERY upcoming CRM meeting / call with no Google event onto the first owner's
+  Google calendar by itself (nobody notified), moves it when the CRM moves it, takes it back when cancelled;
+  `lead_meetings.py` no longer posts its "Add to calendar" card (`meetings.calendar_sync`, default on;
+  the Arden call never reached the calendar). Tests: test_meeting_calendar.
 - The doer: `prompt.md` says the CRM and Google are connector-first (it stops and asks to be re-routed),
   a click that times out twice on "waiting for element to be stable" is forced once through `browser_evaluate`
   and then given up with the page state; `doer.py plain_error()` turns a max-turns / crash result into one
