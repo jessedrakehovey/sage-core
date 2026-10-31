@@ -319,9 +319,9 @@ def card_for(e: dict) -> dict | None:
     if e["kind"] == "patch":
         return {**base, "header": "System change needs your OK",
                 "question": f"A fix my review found{again}: {_short(e['title'], 160).rstrip('.')}. It touches how messages get sent, "
-                            "so it waits for your OK. Want the builder to fix it?",
-                "advice": "💡 Build it: the builder makes the change with your OK, tested, with an undo.",
-                "options": [{"label": BUILD, "description": "the builder makes it, tested, with an undo"}, {"label": DROP, "description": "never proposed again"}]}
+                            "so it waits for your OK. Want me to fix it?",
+                "advice": "💡 Build it: I make the change with your OK, tested, with an undo.",
+                "options": [{"label": BUILD, "description": "I make it, tested, with an undo"}, {"label": DROP, "description": "never proposed again"}]}
     if e["kind"] == "ask":
         return {**base, "header": "Needs your OK",
                 "question": f"From my nightly review{again}: {_short(e['text'], 300)} Want me to take care of it?",
@@ -397,7 +397,7 @@ def answer(key: str, option: str, text: str = "", by: str = "owner") -> dict:
     elif e["kind"] == "patch" and opt.startswith("build"):
         k = _file_build(e, by)
         close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; filed for the builder as {k}.", applied)
-        said = "Got it, the builder has it with your OK. You'll hear from me here when it lands, with an undo."
+        said = "Got it, building it with your OK. You'll hear from me here when it lands, with an undo."
     elif e["kind"] in ("ask", "build") and opt.startswith("have sage"):
         tid = _queue(e, text, by)
         close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; handed to {'the doer' if _to_doer(e['text']) else 'the operator'} ({tid or 'already queued'}).", applied)

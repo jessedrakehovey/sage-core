@@ -202,8 +202,16 @@ urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": T
   else about the machinery reaches an owner.
 - **The prompt** carries the same rule for Sage's own replies: never an id, a code, a path, a module or job name, a
   raw error unless they need it to open something; people by name.
+- **One agent, never its parts** (the owner, 2026-10-31: "make the illusion that it is one agent not multiple agents so
+  any references to operators or builders should be eliminated"). `voice.one_voice` runs inside `polish`, so the
+  model's own reply (bridge and desk), every code line through the gate, and a card's head and ask (`chat_push._names`;
+  never the draft) all speak as "I": "the operator drafts it" -> "I draft it", "handed it to the builder" -> "started
+  on it", "the doer's tools" -> "my tools", a bare "Doer ..." build title -> "Browser job ...". Ordinary words stay:
+  "a drone operator", "the operator of the shuttle", and "the builder" outside a sentence about the agent's own work
+  (a house builder). The prompts (`prompt.md`, `templates/prompt.generic.md`, `desk_prompt.md`) and the tool replies
+  (`gmcp.py`, `intents.py`) no longer name the parts either, so the model has nothing to parrot.
 
-Tests: `test_voice.py` (59). The two build requests this closes by hand are marked (`builder.py mark`): "Handed-to-phone
+Tests: `test_voice.py` (59; 80 with the one-agent checks). The two build requests this closes by hand are marked (`builder.py mark`): "Handed-to-phone
 lines name the person" and "How about instead of making me confirm everything you just check".
 
 ## "Stop sending me messages like this": switched off by code, in the thread, model or no model (2026-10-27, evening)

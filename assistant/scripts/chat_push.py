@@ -676,7 +676,7 @@ def _names(text: str) -> str:
     try:
         _agent_path()
         import voice
-        return voice.names(text)
+        return voice.one_voice(voice.names(text))    # a card's head and ask speak as one agent too (2026-10-31)
     except Exception:  # noqa: BLE001
         return str(text or "")
 

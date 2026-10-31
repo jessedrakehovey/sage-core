@@ -253,7 +253,7 @@ def outcome(it: dict, now: datetime | None = None) -> tuple:
             return "waiting", str(s.get("summary") or "")
         if st == "waiting":
             return "waiting", str(s.get("summary") or "")
-        return "slipped", "the builder has not picked it up"
+        return "slipped", "not started yet"
     return "waiting", ""
 
 

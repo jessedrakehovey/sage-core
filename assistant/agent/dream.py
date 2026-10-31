@@ -247,7 +247,7 @@ def apply(out: dict, packet: dict, dry: bool = False) -> list:
         # a request that touches the protected core is FILED like any other (until 2026-10-18 it was parked
         # under ## Pending as "not filed" and nothing ever read it); the builder's card in chat is the gate
         body = ("## Build request\n\n" + what + ("\n\n**Why:** " + why if why else "")
-                + ("\n\n**Touches the protected core:** the builder asks the owner on a card before changing any of it." if protected else "")
+                + ("\n\n**Touches the protected core:** I ask the owner on a card before changing any of it." if protected else "")
                 + f"\n\n**Evidence:** transcript {b.get('evidence')} ({packet.get('generated', '')[:10]}, nightly review)")
         x = wiki_writer.write({"title": ("Build request " + title)[:90] if not title.lower().startswith("build request") else title,
                                "type": "workflow", "lane": b.get("lane") or "personal", "body": body}, by=by)

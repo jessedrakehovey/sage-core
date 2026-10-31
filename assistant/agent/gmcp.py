@@ -90,7 +90,7 @@ WRITE_TOOLS = [
     {"name": "task",
      "description": "Hand a message or a change on: a text, an email, a message or a change inside a service they use, anything that needs the owner's tap. "
                     "When you have the facts, include `draft` with the complete wording: the card is then posted right under your reply, in this "
-                    "thread, for their tap. Without `draft`, an operator drafts it and the card arrives in a few minutes.",
+                    "thread, for their tap. Without `draft`, the draft is written after your reply and the card arrives in a few minutes; say 'I'll have the card here in a few minutes'.",
      "inputSchema": {"type": "object", "required": ["text"], "properties": {
          "lane": _LANE,
          "text": {"type": "string", "description": "what to do, in the owner's words plus the facts you looked up (names, numbers, dates, ids)"},
@@ -115,7 +115,7 @@ WRITE_TOOLS = [
          "at": {"type": "string", "description": "YYYY-MM-DD HH:MM local: run it then; leave it out to run right after the tap"},
          "lane": _LANE}}},
     {"name": "do",
-     "description": "Hand a job to your hands (the doer): something to be DONE on a website or in an account (browser), or on the PC itself "
+     "description": "Do a job with your own hands: something to be DONE on a website or in an account (browser), or on the PC itself "
                     "(computer: files, footage checks, scripts, Resolve). It reports back here. Put every value it needs in `text`.",
      "inputSchema": {"type": "object", "required": ["text"], "properties": {
          "lane": _LANE, "where": {"type": "string", "enum": ["browser", "computer"]},

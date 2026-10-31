@@ -122,6 +122,93 @@ _CODES = (
     (re.compile(r"\b[\w./\\-]+\.py\b( \w+)*"), lambda m: ""),
 )
 
+# One agent (the owner 2026-10-31: "make the illusion that it is one agent not multiple agents so any references to
+# operators or builders should be eliminated"). The parts behind the agent - the operator that drafts, the doer
+# that acts in a browser, the builder that changes code - are never named to a person; each becomes "I".
+# "doer" is never an ordinary word; "operator" only right after an article (a drone or tour operator stays);
+# "builder" only in a sentence about the agent's own work (a house builder stays).
+_BUILD_CTX = re.compile(r"\b(?:build request|builds|requests?|queue|a fix|code|commit|cards?|doer|operator|undo|your OK|"
+                        r"pick(?:ed|s|ing)? (?:it|this|that) up)\b", re.I)
+_ADV = (r"now|still|also|just|then|already|only|never|always|first|usually|probably|will|won't|can|can't|could|"
+        r"couldn't|would|wouldn't|should|shouldn't|may|might|must")
+_MODAL = set("will won't can can't could couldn't would wouldn't should shouldn't may might must".split())
+_IRREG = {"is": "am", "isn't": "am not", "has": "have", "hasn't": "haven't", "does": "do", "doesn't": "don't",
+          "goes": "go", "was": "was", "wasn't": "wasn't"}
+_HANDOFF = {"handed": "started on", "passed": "started on", "sent": "started on", "gave": "started on",
+            "handing": "starting on", "passing": "starting on", "sending": "starting on", "giving": "starting on",
+            "hand": "start on", "pass": "start on", "send": "start on", "give": "start on",
+            "hands": "starts on", "passes": "starts on", "sends": "starts on", "gives": "starts on"}
+_PREP = r"to|by|from|for|with|on|at|through|via|about|tells?|told|telling|asks?|asked|asking|lets?|letting"
+
+
+def _np(parts: str) -> str:
+    return rf"\b(?:[Tt]he|[Aa]n|[Aa]) (?:{parts})\b(?! of\b)"
+
+
+def _conj(verb: str) -> str:
+    """'reads' -> 'read' for an 'I' subject; a word that is not a present-tense verb comes back unchanged."""
+    v = verb.lower()
+    if v in _IRREG:
+        out = _IRREG[v]
+    elif re.fullmatch(r"[a-z]+[^aeiou]ies", v):
+        out = v[:-3] + "y"
+    elif re.fullmatch(r"[a-z]+(?:ch|sh|ss|x|z)es", v):
+        out = v[:-2]
+    elif re.fullmatch(r"[a-z]{2,}[^su']s", v):
+        out = v[:-1]
+    else:
+        return verb
+    return out
+
+
+def _cap(src: str, rep: str) -> str:
+    return rep[:1].upper() + rep[1:] if src[:1].isupper() else rep
+
+
+def _one_sentence(s: str) -> str:
+    parts = "operator|doer" + ("|builder" if _BUILD_CTX.search(re.sub(r"\bbuilder\b", "", s, flags=re.I)) else "")
+    np = _np(parts)
+    s = re.sub(rf"\s*\((?:the )?(?:{parts})\)", "", s, flags=re.I)                       # "your hands (the doer)"
+    s = re.sub(rf"{np}(?:,? and|,? or|/) ?(?:(?:the|an|a) )?(?:{parts})\b", "the doer", s)  # "the builder and the doer"
+    # "I'll have the operator draft it" -> "I'll draft it"
+    s = re.sub(rf"\b(I'?ll|I will|I'd|I would|I can|I'm going to|let me)\s+(?:have|get|ask|tell|let)\s+{np}\s+(?:to\s+)?",
+               lambda m: m.group(1) + " ", s)
+    # "handed the build request to the operator" -> "started on the build request"
+    s = re.sub(rf"\b(hand(?:ed|ing|s)?|pass(?:ed|ing|es)?|sen(?:t|d|ding|ds)|gave|give[sn]?|giving)\b"
+               rf"(\s+(?:it|this|that|them|the [^.,;!?\n]{{1,50}}?))?\s+(?:on |over |off |along )?to {np}",
+               lambda m: _cap(m.group(1), _HANDOFF.get(m.group(1).lower(), "started on")) + (m.group(2) or " it"), s)
+    # "sending the builder a request" -> "starting on a request"
+    s = re.sub(rf"\b(hand(?:ed|ing|s)?|sen(?:t|d|ding|ds)|gave|give|giving)\s+{np}\s+",
+               lambda m: _cap(m.group(1), _HANDOFF.get(m.group(1).lower(), "started on")) + " ", s)
+    # "the doer's been" -> "I've been"; "the doer's waiting" -> "I'm waiting"; "the doer's tools" -> "my tools"
+    s = re.sub(rf"{np}['’]s(\s+)(been|got)\b", lambda m: "I've" + m.group(1) + m.group(2), s)
+    s = re.sub(rf"{np}['’]s(\s+)(going|done|on|still|now|working|running|waiting|not|about|busy|stuck)\b",
+               lambda m: "I'm" + m.group(1) + m.group(2), s)
+    s = re.sub(rf"{np}['’]s\b", lambda m: _cap(m.group(0), "my"), s)
+    s = re.sub(rf"\b({_PREP})\s+{np}", lambda m: m.group(1) + " me", s, flags=0)
+    s = re.sub(rf"\b(have|has|had|having|get|got|let)\s+{np}\s+", lambda m: "", s)          # "have the doer do it"
+
+    def subj(m):
+        advs, verb = m.group(1) or "", m.group(2)
+        words = advs.split()
+        if any(w.lower() in _MODAL for w in words):
+            return "I" + advs + " " + verb
+        return "I" + advs + " " + _conj(verb)
+    s = re.sub(rf"{np}((?:\s+(?:{_ADV}))*)\s+([A-Za-z']+)", subj, s)
+    s = re.sub(np, "me", s)                                                               # anything left
+    s = re.sub(r"\b([Dd])oer(s?)\b", lambda m: _cap(m.group(1), "browser job") + m.group(2), s)   # a build title
+    if "builder" in parts:
+        s = re.sub(r"\b([Bb])uilder\b", lambda m: _cap(m.group(1), "build"), s)
+    return s
+
+
+def one_voice(text: str) -> str:
+    """The agent speaks as one: no operator, doer or builder in a line meant for a person."""
+    t = str(text or "")
+    if not re.search(r"\b(?:operator|doer|builder)\b", t, re.I):
+        return t
+    return "".join(_one_sentence(p) for p in re.split(r"(?<=[.!?\n])", t))
+
 
 # ------------------------------------------------------------------ config
 def _cfg() -> dict:
@@ -220,8 +307,8 @@ def names(text: str) -> str:
 
 
 def polish(text: str) -> str:
-    """Ids, ticket codes, preview markers and Message-IDs out of a line meant for a person."""
-    t = str(text or "")
+    """Ids, ticket codes, preview markers and Message-IDs out of a line meant for a person; the agent's parts unnamed."""
+    t = one_voice(text)
     for rx, rep in _IDS:
         t = rx.sub(rep, t)
     return t.strip()

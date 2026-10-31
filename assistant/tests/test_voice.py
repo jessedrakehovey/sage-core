@@ -127,7 +127,7 @@ t = voice.gate('I built a fix for this one: "A card handed on after a draft-lint
 ok(t == 'Done, that\'s built: "A card handed on after a draft-lint refusal posts in the thread where it was asked". Say if anything feels off and I\'ll undo it.',
    f"...a receipt whose 'what changed' is the truncated title falls back to the title: {t!r}")
 t = voice.gate('I built a fix for this one: "Doer falls back". What changed: 5a778a2 2026-10-26 20:11: the builder and the doer switch to the fallback account on a usage limit. If anything feels off, say so and I\'ll undo it.')
-ok(t.startswith("Done: The builder and the doer switch to the fallback account"), f"...no commit id, no date: {t!r}")
+ok(t.startswith("Done: I switch to the fallback account"), f"...no commit id, no date, no parts named: {t!r}")
 t = voice.gate("I am waiting for a verification code: Type the 6-digit MyDMV code just texted to the phone ending 737 (it expires in 10 minutes). It was sent to your phone or email. Open the card on Mission Control (https://x), type the code in the note box and tap Approve; I will carry on. No code? Tap 'No code came'.")
 ok(t == "I need the 6-digit MyDMV code just texted to the phone ending 737 (it expires in 10 minutes). Reply with it here and I'll carry on.", f"a code ask, as a person asks: {t!r}")
 t = voice.gate('One step needs you on "Upload owner1\'s 2022 back-tax packet from C:/Users/owner1/Documents/Taxes/2022 into Google Drive on ownernam…": the site wants a verification code only your phone gets.')
@@ -271,5 +271,30 @@ if _ac is not None:
     line = doer._say("owner1", "DOER_CHECKPOINT", "qabc Type the 6-digit MyDMV code just texted to the phone ending 737 (it expires in 10 minutes).", {"id": "t1", "payload": {"text": "x"}})
     doer._asks_code = _ac
     ok(line.startswith("I need the 6-digit MyDMV code just texted to the phone ending 737") and "Mission Control" not in line, f"the doer asks for a code like a person: {line!r}")
+
+# ------------------------------------------------------------------ 8. one agent, never its parts (2026-10-31)
+# the owner: "make the illusion that it is one agent not multiple agents so any references to operators or builders
+# should be eliminated". Lines Sage and code said to him on 10-20..10-30.
+for said, want in [
+    ("About 30 minutes ago I handed the build request to the operator.", "About 30 minutes ago I started on the build request."),
+    ("I can't see what the operator is doing.", "I can't see what I am doing."),
+    ("Heads up: the builder hasn't picked this up yet.", "Heads up: I haven't picked this up yet."),
+    ("When a tab is named, the doer now reads each tab's name.", "When a tab is named, I now read each tab's name."),
+    ("the builder and the doer switch to the fallback account.", "I switch to the fallback account."),
+    ("It also tells the operator to answer in this thread.", "It also tells me to answer in this thread."),
+    ("If it's still missing I'll have the operator draft one.", "If it's still missing I'll draft one."),
+    ("Without the draft, an operator drafts it.", "Without the draft, I draft it."),
+    ("The doer's tools are on the PC. The doer's waiting on a code.", "My tools are on the PC. I'm waiting on a code."),
+    ("The self-test failed on the undo window; the builder has it.", "The self-test failed on the undo window; I have it."),
+    ("Want me to have the doer do it?", "Want me to do it?"),
+    ("Still not built: Doer evidence file fails on paths with spaces.", "Still not built: Browser job evidence file fails on paths with spaces."),
+    # ordinary words stay: another business's operator, the operator of something, a house builder
+    ("Hire a drone operator, or skip aerials.", "Hire a drone operator, or skip aerials."),
+    ("Ask the operator of the shuttle.", "Ask the operator of the shuttle."),
+    ("The builder said the framing inspection is Tuesday.", "The builder said the framing inspection is Tuesday."),
+]:
+    got = voice.polish(said)
+    ok(got == want, f"one voice: {said!r} -> {got!r}, wanted {want!r}")
+ok(voice.gate("Got it, the builder has it with your OK.") == "Got it, I have it with your OK.", "code lines pass the same door")
 
 print(f"\nALL OK ({N} checks)")

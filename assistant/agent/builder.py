@@ -1033,10 +1033,10 @@ def ask_owner(req: dict, s: dict, hits: list, question: str, stuck: bool = False
         q = (f"To build \"{title}\" I'd have to change {', '.join(hits)}, which only you may approve. "
              + ("I can't change " + ", ".join(hard) + " even with your OK (the gates and the harness are hand-only), so another way is the real option there. " if hard else ""))
     else:
-        q = f"The builder stopped on \"{title}\" with a question for you: {short_q or 'it needs your go-ahead'} "
+        q = f"I stopped on \"{title}\" with a question for you: {short_q or 'it needs your go-ahead'} "
     q += "What do you want?"
-    options = [{"label": BUILD_OK, "description": "the builder may change exactly those files for this request"},
-               {"label": BUILD_OTHER, "description": "the builder tries again without touching them"},
+    options = [{"label": BUILD_OK, "description": "I may change exactly those files for this request"},
+               {"label": BUILD_OTHER, "description": "I try again without touching them"},
                {"label": BUILD_DROP, "description": "forget this request"}]
     if (hard and set(hard) == set(hits)) or stuck:
         options = options[1:]

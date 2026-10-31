@@ -335,7 +335,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         if core.is_protected(_s(payload.get("body"))):
             return False, ("refused: that how-to touches the protected core (footage handling, sending, pricing, the gates); a skill "
                            "cannot change it. If the owner wants a tool or a program built, it is a `note` with a '## Build request' "
-                           "heading (the builder makes it, tested); say it is being built, not that a skill failed."), payload
+                           "heading (it is built and tested); say you are building it, not that a skill failed."), payload
         return True, "accepted: the skill is written after this reply.", payload
     if kind == "blocked":
         # the agent names its own blocker (capability.py, 2026-10-25): code files the build or records the portal
@@ -424,7 +424,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
             return False, "refused: say what the draft or change is, with the facts you found.", payload
         draft = payload.get("draft")
         if not (isinstance(draft, dict) and draft) and _CODE_CHANGE.search(text):
-            return False, ("refused: an operator drafts messages, it never changes code, so this would get no answer. A change to the "
+            return False, ("refused: a `task` is a message for the owner's tap, never a code change, so this would get no answer. A change to the "
                            "system itself (a script, a hook, a safety rule) is a `note` with a '## Build request' heading: file that "
                            "now in this turn and say it is being built."), payload
         if payload.get("lane") not in lanes():
@@ -453,7 +453,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
                               "that the card is below and when it will go out; never repeat the message text in chat."), payload
             return True, (f"accepted: a {ch} card with exactly this wording is posted {_place(t)} right under your reply, for their tap. "
                           "In your reply say in one clause that the card is below, and never repeat the message text in chat."), payload
-        return True, ("accepted: an operator drafts it after this reply and the card lands " + _place(t) + " in a few minutes. "
+        return True, ("accepted: the draft is written after this reply and the card lands " + _place(t) + " in a few minutes. "
                       "Say that in one clause ('you'll get the card here in a few minutes'). Prefer `draft` when you have the "
                       "facts: then the card is posted at once."), payload
     if kind == "job":
