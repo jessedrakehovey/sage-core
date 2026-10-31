@@ -469,7 +469,10 @@ class SageEngine:
         return pats
 
     def prose_scrub(self, s: str, rel: str = "x.md") -> str:
-        return self.e.scrub(self.e.to_template(s, self.vault), "x.md")
+        """A commit subject / relay note: the same prose rules as a shipped .md line (pseudonyms, connector words, ids),
+        not the bare scrub, which let 'booked in <the CRM's name>' into a template commit message (2026-10-30; the
+        pre-push history gate caught it)."""
+        return self.e.export_text("assistant/COMMIT_MSG.md", s, self.vault)
 
     def export_text(self, rel: str, txt: str) -> str:
         """engine.export_text: every prose line scrubbed readably, every working line with the code-safe tokens, so

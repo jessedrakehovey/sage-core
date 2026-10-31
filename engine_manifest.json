@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+1b9bb19",
+  "version": "2026.10.30+ea5c60d",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T20:01:31"
+  "synced": "2026-10-30T20:09:09"
  },
  "modules": {
   "money": {
@@ -179,7 +179,7 @@
   "assistant/channels/slack.py": "7ba8119e996e8a4c859e071f275349f8f3b6dc13306eb68d2ed10f8c912cc123",
   "assistant/config.json": "9baa5ce76eb824679e1f0fd70fca0201a7df0367f08fd9e64c3e7b30bab50aa8",
   "assistant/connections.json": "19f3b14789f88ae1599e37a1985cb127469bf7d0e230da01974c7c413f596491",
-  "assistant/core_sync.py": "4010e7f9cffd2614419f7dea9dc26e416665441be7699dd00ab4709d32f4a74e",
+  "assistant/core_sync.py": "0d6c05002341614b96074861e456699c1274e1cba212235e100830df9d14e464",
   "assistant/doer/README.md": "ecdad511dfa470b7ca7ac8b8a7fe267533b73c1e1861ba9a0c079850f8c8ce45",
   "assistant/doer/browser.py": "370886c24c3a32cdc0910e914649999215b937c2e775e629b5e0fcae4624b3c6",
   "assistant/doer/click_guard.py": "4cede7780eba915901f0fbb0142cfc7a91373e369821af151bae945cc87d52fe",
@@ -236,7 +236,7 @@
   "assistant/scripts/conn_check.py": "6695920563ec959054552d3821c41d26f5862796495f5771b432749417b3c766",
   "assistant/scripts/connect.py": "db4e3d97e467f2c221dd87ba70c7938d0cd35dfae39e411ba036cc0719987ed3",
   "assistant/scripts/contacts.py": "ca4c1a8b2f35fdc4666efe2728266890957f165cd99ad9aec288730db97a7ee6",
-  "assistant/scripts/core_release.py": "4cfef525ae494ea13c897545323c73b17fcd8be7474ead592990393335c21c4f",
+  "assistant/scripts/core_release.py": "0c5385c44faad3ddd38aea239c38a2e637c9439f546288bd09624282bb3f1000",
   "assistant/scripts/crm.py": "7f726aa0fa305698476f6ec848e11aa4522d45cdf2da0563ca292604b16768c9",
   "assistant/scripts/dashboard.py": "347c93f958c2eb59b6e9001f9bef250c0647453002942b852b11ce20ea2ac7ad",
   "assistant/scripts/deadman.ps1": "32f6b22bc9d3a3be95bb1a0187c86de327bfe34503d211f130624153f0a63ea5",
@@ -358,7 +358,7 @@
   "assistant/tests/test_connect.py": "1fca8360bd270e336579ad29d5563d7b3a6e6e5ee195f6ea6490f94f555af0cf",
   "assistant/tests/test_contacts.py": "c1e1f904a759891e27ffd30c2002d54e264ddaff30aa5b21f1f857de6a336f12",
   "assistant/tests/test_context_resolution.py": "108ee4998a74d17e1ead7a5ec23fd93f8d1d9ed16c3347923925d55e31382785",
-  "assistant/tests/test_core_release.py": "18b50769c6dd42df974ad2e851d9c71eee911cb87d524992d00196e175163352",
+  "assistant/tests/test_core_release.py": "c2b7d939b3e60e3be6a22c4758e9dca07ceb65128c7665cf908fa56eac79fd1c",
   "assistant/tests/test_core_sync.py": "f3941f05d47afbc444d2d85ef0c0f8b9e2c8f63955f1bab9f821d8c18b4e0459",
   "assistant/tests/test_core_sync_relay.py": "7e1c4f9759eb7976fc3910561e819886dc2a41eb866c1d1dc7c2d9c98ce304bc",
   "assistant/tests/test_core_sync_template.py": "9b3b94fb4bc88c1dc4f7788ba9e7c025bfc18799d9fc4cb71ec3f02f632f1416",

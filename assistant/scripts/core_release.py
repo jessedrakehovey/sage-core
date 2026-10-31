@@ -12,6 +12,8 @@ was not clean, and a leak was public for 40 minutes):
   publish  (the tap) every gate again on the checkout as it is NOW, then push the branch and cut a release
            (assistant/installer/windows/release.ps1 in the checkout). Its last line is said in chat.
   status   what is waiting, the last card, the last publish.
+  prepush  git's pre-push hook in the checkout (`install-hook` writes it, and `check` keeps it in place): every push,
+           this job's or one made by hand, passes `audit` + `history` over exactly the commits it sends, or stops.
 
 Gates: the checkout is clean; `core_sync.py audit` (every file, the organization's identity), `core_sync.py people`
 (every person in the organization's records), `core_sync.py history` (every line and message the push would add, so a
@@ -96,7 +98,7 @@ def gates(core: Path, c: dict) -> list:
     out = []
     dirty = git(core, "status", "--porcelain", "--untracked-files=no")
     out.append(("the checkout is clean", not dirty.strip(), dirty.splitlines()[0][:120] if dirty.strip() else "clean"))
-    sync = [sys.executable, str(ASSISTANT / "core_sync.py")]
+    sync = [sys.executable, str(ASSISTANT / "core_sync.py"), "--core", str(core)]
     for name, args in (("audit", ["audit", "--quiet"]), ("people", ["people"]), ("history", ["history", "--quiet"])):
         rc, txt = run(sync + args, VAULT, 600)
         last = next((ln for ln in reversed(txt.splitlines()) if "CORE_SYNC" in ln), txt.splitlines()[-1] if txt else "")
@@ -127,6 +129,8 @@ def check(dry: bool = False) -> int:
         return 0
     core = Path(c["core_root"])
     st = state()
+    if not dry and not (core / ".git" / "hooks" / "pre-push").exists():
+        install_hook()
     w = waiting(core, c)
     if w.get("error"):
         print(f"CORE_RELEASE {w['error']}")
@@ -154,12 +158,12 @@ def check(dry: bool = False) -> int:
     st["last_fail"] = []
     top = list(dict.fromkeys(w["subjects"]))[:6]
     more = len(w["subjects"]) - len(top)
-    q = (f"The public template is {w['count']} commit(s) behind this agent. New since the last publish:\n"
-         + "\n".join(f"- {s[:140]}" for s in top) + (f"\n- and {more} more" if more > 0 else "")
-         + "\nEvery privacy check passed (no organization names, no people, nothing in the commit history) and its tests pass. "
-           "The checks run again at your tap, on whatever has synced by then, before anything is pushed.")
+    q = (f"Publish the public template? It is {w['count']} commit(s) behind this agent. Every privacy check (no organization "
+         f"names, no people, nothing in the history) and its tests passed; they run again at your tap before anything is pushed.")
+    changes = "\n".join(f"- {s[:140]}" for s in top) + (f"\n- and {more} more" if more > 0 else "")
     question = {"question": q, "header": "Publish the template update", "lane": lane(c), "audience": "personal",
-                "details": "\n".join(f"{g}: {last}" for g, _, last in res),
+                "details": f"New since the last publish:\n{changes or '- maintenance'}\n\nChecks:\n"
+                           + "\n".join(f"{g}: {last}" for g, _, last in res),
                 "options": [{"label": "Publish (Recommended)", "description": "push to the public repository and cut a release"},
                             {"label": "Not this week"}],
                 "exec": {"kind": "local", "payload": {"op": JOB, "args": {}}, "approve_label": "Publish (Recommended)"}}
@@ -220,6 +224,63 @@ def publish(dry: bool = False) -> int:
     return 0
 
 
+ZERO = "0" * 40
+
+
+def prepush(lines: list) -> int:
+    """git's pre-push hook in the template checkout (`install-hook` writes it): EVERY push, from this job or by hand
+    from any session (2026-10-30 19:19: a session pushed with no gate at all), must pass `core_sync audit` and
+    `core_sync history` over exactly the commits it sends. A tag whose commit the remote already has is not rescanned.
+    Exit 1 stops the push."""
+    c = cfg()
+    if not c["core_root"]:
+        return 0
+    core = Path(c["core_root"])
+    sync = [sys.executable, str(ASSISTANT / "core_sync.py"), "--core", str(core)]
+    ranges = []
+    for ln in lines:
+        parts = ln.split()
+        if len(parts) < 4 or parts[1] == ZERO:          # a delete: nothing published
+            continue
+        local_ref, local, _, remote = parts[:4]
+        if remote != ZERO:
+            ranges.append(f"{remote}..{local}")
+            continue
+        known = [b for b in git(core, "branch", "-r", "--format=%(refname:short)").splitlines() if b.strip()]
+        if any(run(["git", "merge-base", "--is-ancestor", local, b], core, 60)[0] == 0 for b in known):
+            continue                                    # a tag on a commit already published
+        ranges.append(local if not known else f"{known[0]}..{local}")
+    if not ranges:
+        return 0
+    bad = []
+    rc, txt = run(sync + ["audit", "--quiet"], VAULT, 600)
+    if rc != 0:
+        bad.append(txt.splitlines()[-1] if txt else "audit failed")
+    for rng in ranges:
+        rc, txt = run(sync + ["history", "--range", rng], VAULT, 600)
+        if rc != 0:
+            bad.append(txt[-800:])
+    if bad:
+        print("PUSH STOPPED by the template's privacy gate (core_release.py prepush):\n" + "\n".join(bad), file=sys.stderr)
+        return 1
+    print(f"privacy gate passed for {', '.join(ranges)}", file=sys.stderr)
+    return 0
+
+
+def install_hook() -> int:
+    c = cfg()
+    if not c["core_root"]:
+        print("no template checkout configured")
+        return 1
+    hook = Path(c["core_root"]) / ".git" / "hooks" / "pre-push"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    py, me = Path(sys.executable).as_posix(), Path(__file__).resolve().as_posix()
+    hook.write_text("#!/bin/sh\n# written by core_release.py install-hook: every push passes the privacy gate first\n"
+                    f'exec "{py}" "{me}" prepush\n', encoding="utf-8", newline="\n")
+    print(f"pre-push hook written: {hook}")
+    return 0
+
+
 def status() -> int:
     c = cfg()
     st = state()
@@ -236,9 +297,14 @@ def status() -> int:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("check", "publish", "status"))
+    ap.add_argument("cmd", choices=("check", "publish", "status", "prepush", "install-hook"))
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("rest", nargs="*")                  # git passes the remote's name and url to a pre-push hook
     a = ap.parse_args()
+    if a.cmd == "prepush":
+        return prepush([ln for ln in sys.stdin.read().splitlines() if ln.strip()])
+    if a.cmd == "install-hook":
+        return install_hook()
     if a.cmd == "check":
         return check(a.dry_run)
     if a.cmd == "publish":

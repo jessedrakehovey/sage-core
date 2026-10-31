@@ -55,6 +55,8 @@ g(CORE, "push", "-q", "-u", "origin", "master")
 
 C = {"enabled": True, "core_root": str(CORE), "lane": "personal", "tests": [], "skip_subjects": ["agent: wiki note"]}
 cr.cfg = lambda: dict(C)
+REAL_INSTALL = cr.install_hook
+cr.install_hook = lambda: 0       # the real hook would call the live config; its own test is below
 GATES = {"ok": True}
 cr.gates = lambda core, c: [("core_sync audit", GATES["ok"], "CORE_SYNC audit: 0 line(s)" if GATES["ok"] else "CORE_SYNC audit: 2 line(s)")]
 POSTED, NOTES = [], []
@@ -96,8 +98,8 @@ GATES["ok"] = True
 rc = cr.check()
 q = POSTED[0] if POSTED else {}
 check("clean gates: one card, the readable change listed, the noise left out", rc == 0 and len(POSTED) == 1
-      and "a lone word never matches" in q.get("question", "") and "wiki note" not in q.get("question", "")
-      and "2 commit(s)" in q.get("question", ""), q.get("question", ""))
+      and "a lone word never matches" in q.get("details", "") and "wiki note" not in q.get("details", "")
+      and "2 commit(s)" in q.get("question", "") and len(q.get("question", "")) <= 350, q.get("question", ""))
 check("the card's tap runs the registered core_publish job, recommended first", q.get("exec", {}).get("kind") == "local"
       and q["exec"]["payload"] == {"op": "core_publish", "args": {}} and q["options"][0]["label"] == q["exec"]["approve_label"]
       and "(Recommended)" in q["options"][0]["label"], json.dumps(q.get("exec")))
@@ -120,6 +122,30 @@ check("clean at the tap: the branch is pushed and the release tag recorded", rc 
       and cr.state().get("tag") == "v2026.10.30-abc1234" and not cr.state().get("qid"), json.dumps(cr.state()))
 rc = cr.publish()
 check("publishing again with nothing new is a no-op", rc == 0)
+
+# ---------------------------------------------------------------- the pre-push gate (any push, by hand too)
+commit("a hand-made change")
+local, remote_head = g(CORE, "rev-parse", "HEAD"), g(REMOTE, "rev-parse", "master")
+CALLS, VERDICT = [], {"history": 0}
+cr.run = lambda argv, cwd, timeout=900: ((CALLS.append(argv) or (VERDICT["history"] if "history" in argv else 0), "CORE_SYNC x")
+                                         if "core_sync.py" in " ".join(map(str, argv)) else real_run(argv, cwd, timeout))
+rc = cr.prepush([f"refs/heads/master {local} refs/heads/master {remote_head}"])
+hist = [a for a in CALLS if "history" in a]
+check("a branch push is scanned over exactly the commits it sends (and audited)", rc == 0 and hist and hist[0][hist[0].index("--range") + 1] == f"{remote_head}..{local}"
+      and any("audit" in a for a in CALLS) and all("--core" in a for a in CALLS), str(CALLS))
+VERDICT["history"] = 1
+rc = cr.prepush([f"refs/heads/master {local} refs/heads/master {remote_head}"])
+check("a history hit stops the push", rc == 1)
+CALLS.clear()
+rc = cr.prepush([f"refs/tags/v1 {remote_head} refs/tags/v1 {cr.ZERO}"])
+check("a tag on a commit the remote already has is not rescanned", rc == 0 and not CALLS, str(CALLS))
+rc = cr.prepush([f"(delete) {cr.ZERO} refs/heads/old {remote_head}"])
+check("a delete publishes nothing and passes", rc == 0)
+REAL_INSTALL()
+hook = CORE / ".git" / "hooks" / "pre-push"
+check("install-hook writes a sh hook that runs prepush", hook.exists() and "prepush" in hook.read_text(encoding="utf-8")
+      and hook.read_text(encoding="utf-8").startswith("#!/bin/sh"))
+cr.run = real_run
 
 # ---------------------------------------------------------------- the job
 j = jobs.find("core_publish")
