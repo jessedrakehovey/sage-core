@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+0ed285d",
+  "version": "2026.10.30+3105bfb",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T20:25:07"
+  "synced": "2026-10-30T20:43:06"
  },
  "modules": {
   "money": {
@@ -372,6 +372,7 @@
   "assistant/tests/test_couple_notes.py": "963c3d939db7520df6476df9d8cecf21f0a7c46eb49d26401acc762d55dea71b",
   "assistant/tests/test_crm.py": "3ddbebc2f262153ee8fe0c48f66a48b8970331cbef9a6477392c223905698221",
   "assistant/tests/test_day2.py": "64ddad4adfccee88f79d8a45dc0bf592737d421b88f21d0665122ec2068454ca",
+  "assistant/tests/test_desk.py": "f7a51371c436e6084ec71f807544415960b9b9758fe19904541ef44c690ff386",
   "assistant/tests/test_doer.py": "0b4ec53f80250fa60bdb4d95157023fb86d51aac51fad103d2de31b22c283991",
   "assistant/tests/test_draft_lint.py": "71362426275164fe9b20e423b29721dc35f85f4a09153356f6ed1d32b27dc993",
   "assistant/tests/test_email_send.py": "b5295375f137cec770ea86108600090cc3b4011234889929439b86b56aced9a1",
