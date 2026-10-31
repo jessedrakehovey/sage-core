@@ -63,7 +63,7 @@ check("GENERIC hits still raise the score of a matched ruling",
       rulings.find("electrical close, panel photos", D)[0]["score"] == 2)
 check("lane: a lane ruling matches its own lane and no lane", "inbox-choice" in ids("which email do I reply from?", lane="personal")
       and "inbox-choice" in ids("which email do I reply from?"))
-check("lane: a lane ruling stays out of another lane", "inbox-choice" not in ids("which email do I reply from?", lane="wedding"))
+check("lane: a lane ruling stays out of another lane", "inbox-choice" not in ids("which email do I reply from?", lane="money"))
 check("a retired ruling never matches", not ids("retired phrase here"))
 
 # ---------------------------------------------------------------- the top false firers

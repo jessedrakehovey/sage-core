@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+fcec939",
+  "version": "2026.10.30+acb4410",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T19:17:59"
+  "synced": "2026-10-30T19:50:23"
  },
  "modules": {
   "money": {
@@ -278,7 +278,7 @@
   "assistant/scripts/regression_packets.py": "ff9d9b66e89cb0fee0c3b26ea1f2e093ebb08b8aa2e1b2e66f4cb3a3e43bd0e4",
   "assistant/scripts/relay_poll.py": "a4fd1e188fc9b5945b7d02cc009d6fcde5f41ab2668c504668109cc0d9af4467",
   "assistant/scripts/rescue.ps1": "5192ef950ded73b984fac125c1ab7c93486cca09d88d04aefd1103026feb3dac",
-  "assistant/scripts/rulings.py": "0cf8a5696c86eb04af4755dc4398d57e3f1bd06bbd9e2f6c108775f7c85c554b",
+  "assistant/scripts/rulings.py": "0a802740336c4047b84ce91c0f0f49e1df403e98e29ecd307911c515e03987f8",
   "assistant/scripts/scorecard.py": "ac6fea1b896eb2eee9953632ab4917b49925d9bde7f63521552e9681f11c9e27",
   "assistant/scripts/send_hold.py": "cef18f1accf7fbc70ea988fc003b7f67e0fce6dd72e5d34aea70a7ae73e89eed",
   "assistant/scripts/sense_local.py": "68f679f77be5f955e71c564479e2ff7700aefb84694ef5868310466a810a42d0",
@@ -377,7 +377,7 @@
   "assistant/tests/test_mail_arm.py": "841cfdbfc79032d35242c43781bcbefdf4765d9edb60d6724426212a7825f5d5",
   "assistant/tests/test_mail_attach.py": "96051f8dbd6ae16310700660f69bdfcdb9d29ad98bba42dac01c2208a825dc95",
   "assistant/tests/test_mail_rules.py": "0faca9fab327112e1755dbd4ff2812a26f1c79d8b9f3c71c6b2aed461adbdbaa",
-  "assistant/tests/test_memory_cap.py": "83da9c043177931da5ff8fdf227f96b9e99c5bbda4c008050d91a7623793afa6",
+  "assistant/tests/test_memory_cap.py": "01cf49646a4c66f965d12133573c968b1195a5038851de63b48dc8282fe51023",
   "assistant/tests/test_mining.py": "895ac1b4dcc8a39fd06e941075037e3efb55d1d1bfe19f0c94cb4136231cc30a",
   "assistant/tests/test_money.py": "d43b4dd3b320a5273d7a87b0406fcea57974847a01eac09b89d1844aa7ef64ee",
   "assistant/tests/test_money_plaid.py": "8ea48427413e79f611f0f2a9a164711a36cac9487ad7090db095839312f7d3ae",
@@ -393,7 +393,7 @@
   "assistant/tests/test_reflex.py": "570c71d4507c15063e4d8738cd23763fb925654ad26fef699c7c98b7b3bcbf85",
   "assistant/tests/test_relay.py": "9747362db03eaecd7467fa199f56050c3edf12390bae1ae567727d153678ea03",
   "assistant/tests/test_repeat_asks.py": "eef650a5ab60164cbb5a6c1f1cfa321edeb3a67b356add88b9424ffe811fbb65",
-  "assistant/tests/test_rulings.py": "7ec8793bcf7dfc75ad88412fe4f1b0ee90d66984a6501b71f38056d94c406a18",
+  "assistant/tests/test_rulings.py": "06e18cf07d20a0c273293de7a4c0a42361bb859ab0fe730fa3492e56ee774a61",
   "assistant/tests/test_sage_core.py": "d817b90bca1bbe10a9aeb1d3975985e859f3bd99e8de8d7c2e0f302fe8b95e80",
   "assistant/tests/test_sagefix.py": "cabf3edab5c70e3ccb5dd212ef9a924e844b6efe176cbabf31114fdf7ad2a346",
   "assistant/tests/test_scheduling.py": "da83fe1ec202e0d74abcae343f549c488b4ea9d15db99d8086d4ebfc95c430f5",
