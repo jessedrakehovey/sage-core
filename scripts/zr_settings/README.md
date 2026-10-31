@@ -4,7 +4,7 @@ the owner's ZR menu settings, kept as Nikon's own `NCSET***.BIN` file so every r
 
 ```bash
 python scripts/zr_settings/zr_settings.py status   # what is plugged in, is a profile saved
-python scripts/zr_settings/zr_settings.py pull     # copy NCSET*.BIN off the owner's ZR (USB) or its card into profile/
+python scripts/zr_settings/zr_settings.py pull     # copy NCSET*.BIN off the owner's ZR card (in a reader; USB hides the file) into profile/
 python scripts/zr_settings/zr_settings.py push     # copy the profile onto a rental's card root (reader; USB is read-only on Nikon bodies)
 ```
 
