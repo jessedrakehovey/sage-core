@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.31+da141d8",
+  "version": "2026.10.31+6a979d6",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-31T12:18:56"
+  "synced": "2026-10-31T12:54:42"
  },
  "modules": {
   "money": {
@@ -397,6 +397,7 @@
   "assistant/tests/test_pending.py": "4aeeaf4cfaaf64910576db0cf08b7df487e48842ce719e12913b78b617afe6e2",
   "assistant/tests/test_phone_bridge.py": "c8b010626fd9d834525ebc272cc083092de13c4fe15bbcbb271e83c42162ba82",
   "assistant/tests/test_plaid_wizard.py": "a9ccc7e12eafbf35bf5096ba6ef4833e7327cab8fd1116a7469f84950a5d695c",
+  "assistant/tests/test_ports.py": "1aea65040e38276f63141ee8dde69e007232b3770f7621a29487159ced094075",
   "assistant/tests/test_probation.py": "ab1e1fa3e6b904ba8aafc4de17f53ab275984941feb912476c24b98437370462",
   "assistant/tests/test_projects.py": "8bfb9731b9127f866d87a87d24fbcccf0e8129fc9d3613ccfbd8dd1a5bbb4e2a",
   "assistant/tests/test_receipts.py": "a2207a7e08d8b50efa5c670d25f67bdb8851d883028f28914b634f18cd98588f",
