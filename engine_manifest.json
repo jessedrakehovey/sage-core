@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.31+30d3cc8",
+  "version": "2026.10.31+b555872",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-31T10:03:38"
+  "synced": "2026-10-31T10:28:57"
  },
  "modules": {
   "money": {
@@ -184,7 +184,7 @@
   "assistant/coexist.py": "5591c8e9110d6ef38b628b6ae9d9b6671719bb4cabc6f4deb354400b816e2c38",
   "assistant/config.json": "9baa5ce76eb824679e1f0fd70fca0201a7df0367f08fd9e64c3e7b30bab50aa8",
   "assistant/connections.json": "19f3b14789f88ae1599e37a1985cb127469bf7d0e230da01974c7c413f596491",
-  "assistant/core_sync.py": "0d6c05002341614b96074861e456699c1274e1cba212235e100830df9d14e464",
+  "assistant/core_sync.py": "bdaba32990cb825ad75425796142be5d6d7d46b14bd0f8f2efd4dd15bc83d81d",
   "assistant/doer/README.md": "ecdad511dfa470b7ca7ac8b8a7fe267533b73c1e1861ba9a0c079850f8c8ce45",
   "assistant/doer/browser.py": "370886c24c3a32cdc0910e914649999215b937c2e775e629b5e0fcae4624b3c6",
   "assistant/doer/click_guard.py": "4cede7780eba915901f0fbb0142cfc7a91373e369821af151bae945cc87d52fe",

@@ -269,7 +269,9 @@ def vault_people(vault: Path, cfg: dict) -> dict:
     for t in cfg.get("private_tokens") or []:
         tokens.add(str(t))
     # people named only in prose (the agent's memory, people notes): "First Last" where First is a known contact's first name
-    not_first = {str(w).lower() for w in (cfg.get("not_first_names") or [])}
+    # an article or a determiner is never a first name: a vendor named "The Knot" must not make every "The Google" a person
+    not_first = {"the", "a", "an", "our", "my", "your", "this", "that", "these", "those"}
+    not_first |= {str(w).lower() for w in (cfg.get("not_first_names") or [])}
     firsts = {n.split()[0] for n in raw if _NAME_SHAPE.match(n.strip()) and len(n.split()[0]) >= 3 and n.split()[0].lower() not in not_first}
     pair = re.compile(r"\b([A-Z][a-z]{2,})\s+([A-Z][a-zA-Z'\-]{2,})\b")
     for src in cfg.get("people_text_sources") or []:
