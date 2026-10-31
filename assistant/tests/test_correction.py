@@ -26,6 +26,7 @@ os.environ["AGENT_STATE"] = str(TMP / "agent_state")
 os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 os.environ["CHAT_PUSH"] = "off"
+os.environ["AGENT_DESK"] = "off"           # these are the chat brain's own nets; the desk (desk.py) has test_desk.py
 os.environ["CRM_SNAPSHOT_FILE"] = str(TMP / "no_snapshot.json")
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "agent"))

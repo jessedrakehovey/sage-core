@@ -93,6 +93,12 @@ TARGETS = {
     # No skip-permissions, no send/UI/mail/CRM-write tool; its PROTECTED_PATHS keep this file,
     # the baseline, .claude/ and the send path out of its diffs.
     "agent-builder": ("assistant/agent/builder.py", "py"),
+    # the desk (assistant/agent/desk.py, 2026-10-30): a WORK ask typed in chat runs as a full Claude Code
+    # turn in the vault with write tools, so it carries --dangerously-skip-permissions like dream_cron
+    # (exempt from check C). Its belt: DENIED here + the CRM's write tools + CRITICAL_NEVER_ALLOW at runtime,
+    # and desk_policy.py as a PreToolUse hook on every Bash/Write/Edit (no send path, no executor, no card
+    # answering, no credentials, no push, no browser, no nested agent, no owner's path). No allow-list.
+    "agent-desk": ("assistant/agent/desk.py", "py"),
 }
 # an organization's own gated scripts (its CRM connector's read and write transports, 2026-10-29) are not listed
 # here: once frozen into the baseline they are checked like the rest (the engine ships no connector)
@@ -105,7 +111,7 @@ except (OSError, ValueError):
 
 # dream_cron is checked for allow/deny but SKIPPED for the skip-permissions test
 # because it deliberately carries --dangerously-skip-permissions.
-SKIP_PERMS_EXEMPT = {"dream-cron", "travel-scout", "lot-scout"}
+SKIP_PERMS_EXEMPT = {"dream-cron", "travel-scout", "lot-scout", "agent-desk"}
 
 # Tools that must NEVER appear in any allowlist above. Drafting (draft_email) is
 # intentionally allowed and is NOT on this list - drafts don't send.

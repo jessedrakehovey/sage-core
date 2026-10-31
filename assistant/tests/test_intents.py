@@ -25,6 +25,7 @@ os.environ["DOER_DATA"] = str(TMP / "doer")
 os.environ["AGENT_STATE"] = str(TMP / "agent_state")
 os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
+os.environ["AGENT_DESK"] = "off"           # these are the chat brain's own nets; the desk (desk.py) has test_desk.py
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "agent"))
 import core  # noqa: E402

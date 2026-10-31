@@ -50,6 +50,7 @@ import claims  # noqa: E402
 import commitments  # noqa: E402
 import core  # noqa: E402
 import correction  # noqa: E402
+import desk  # noqa: E402
 import followups  # noqa: E402
 import held  # noqa: E402
 import meeting_reminder  # noqa: E402
@@ -1152,10 +1153,38 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     ack = pre_ack or (_ack(msg) if direct and not weak else "")
     if not ack and msg.get("_ack"):
         _drop_ack(str(msg["_ack"]))                   # posted early, but the line turned out not to be for the agent
+    tcard = card_for_thread(thread) if thread else None
+    # the desk (desk.py, 2026-10-30, the owner: "[she] acts; [this one] overpromises and under delivers"): WORK goes to the full desk,
+    # a detached Claude Code turn with write tools that does the ask now and replies in this thread; the chat brain
+    # keeps questions, standing instructions, card threads and team spaces. The owner hears one receipt here.
+    try:
+        why_desk = desk.wants(text, msg, person, tcard, correction_kind=corr_kind, card_here=bool(corr_here),
+                              scope=core.scope_of(convo, str(msg.get("space") or "")))
+    except Exception as e:  # noqa: BLE001
+        why_desk = ""
+        log(f"desk check crashed: {type(e).__name__}: {str(e)[:120]}")
+    if why_desk:
+        root = thread or (_thread_of(ack) if ack else "")
+        job = desk.start(msg, person, text, {"convo": convo, "thread": root, "space": str(msg.get("space") or ""),
+                                             "channel": msg["channel"], "why": why_desk,
+                                             "correction": corr_kind if (corr_kind and not corr_here) else "", "ask": corr_ask or {}})
+        if job.get("status") == "running":
+            out = desk.RECEIPT
+            core.say(convo, name, out, channel=msg["channel"], meta={"thread": root, "desk": job["id"]})
+            reply(msg, out, ack)
+            log(f"desk {job['id']} took {person['key']}'s ask ({why_desk}): {text[:80]!r}")
+            return
+        log(f"desk could not start ({job.get('error')}); the brain takes {person['key']}'s ask")
     # the addressed field drives answer-vs-NO_REPLY (example's bridge): DMs, @mentions and the agent's
     # name are direct; anything else the space reader saw is AMBIENT
     extra = (f"[addressed: {'direct' if direct else 'AMBIENT'} ({msg.get('why', 'DM')})]\n"
              + place.block({**msg, "convo": convo, "thread": thread, "text": text}, person) + "\n" + followups.hint())
+    try:                                              # what the desk did or is doing on this conversation (desk.block)
+        dblk = desk.block(convo)
+        if dblk:
+            extra += "\n" + dblk
+    except Exception as e:  # noqa: BLE001
+        log(f"desk block crashed: {type(e).__name__}: {str(e)[:120]}")
     if mute_note:
         extra = mute_note + "\n" + extra
     if corr_here:
@@ -1172,7 +1201,6 @@ def handle(msg: dict, pre_ack: str = "") -> None:
         # a step of a long-running project ended with nothing on record for what comes next (projects.py): one planning turn
         import projects
         extra = projects.plan_note(str(msg["_project_plan"])) + "\n" + extra
-    tcard = card_for_thread(thread) if thread else None
     if tcard:
         extra += "\n" + card_context(tcard)
     elif thread:

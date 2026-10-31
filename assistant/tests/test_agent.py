@@ -19,6 +19,7 @@ os.environ["AGENT_SUGGESTIONS"] = str(TMP / "skill-suggestions.md")
 os.environ["ASSISTANT_DATA"] = str(TMP / "adata")
 os.environ["ASSISTANT_CARDS"] = str(TMP / "cards")          # dream asks post cards: never the live store
 os.environ["AGENT_HOME_SPACE"] = ""                         # per-owner DMs in tests; the home space is tested explicitly
+os.environ["AGENT_DESK"] = "off"                            # these are the chat brain's own nets; the desk (desk.py) has test_desk.py
 os.environ.setdefault("RULINGS_FILE", str(Path(__file__).resolve().parents[1] / "data" / "rulings.json"))
 
 ROOT = Path(__file__).resolve().parents[1]

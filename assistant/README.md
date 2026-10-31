@@ -5,7 +5,10 @@ the owner's personal assistant. Wedding videography (the organization) is one la
 
 > **Talking to it (2026-10-05):** the conversational agent the owner and owner chat with is **Sage**, in
 > [agent/](agent/README.md): a read-only brain whose proposals (rules, memory, wiki notes, schedules, calendar
-> events) are applied by code, with outward work handed to the operator below as a `task`.
+> events) are applied by code, with outward work handed to the operator below as a `task`. **Since 2026-10-30 a
+> WORK ask ("fix", "text him back", "upload", "try again") goes to the desk instead** (`agent/desk.py`): a detached
+> Claude Code turn with write tools and a code-enforced belt that does the work now and replies in the thread;
+> sends still leave only on a card tap. README section "The desk".
 
 ## Design: no standing lanes
 

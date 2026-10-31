@@ -10,6 +10,14 @@
  "dream_model": "opus",
  "max_turns": 30,
  "turn_timeout_s": 600,
+ "desk": {
+  "_doc": "The full desk (assistant/agent/desk.py, 2026-10-30): a WORK ask typed in chat is done in the turn by a detached Claude Code session with write tools, not relayed. enabled:false sends every line to the chat brain as before; model/max_turns/timeout_s bound one desk turn; notes_cap is how many milestone lines one job may post in the thread.",
+  "enabled": true,
+  "model": "opus",
+  "max_turns": 80,
+  "timeout_s": 1800,
+  "notes_cap": 6
+ },
  "asks_per_day_max": 150,
  "quiet_hours": [
   21,
