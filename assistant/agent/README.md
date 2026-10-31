@@ -8,6 +8,65 @@ to open Claude Code for it to improve.
 
 Both owners are equal (`people.json`). Nobody else is ever answered.
 
+## The desk: work is done in the turn, not relayed (2026-10-30)
+
+the owner, comparing Sage with example (the property OS's front door): "When I tell example to do something example
+follows through ... Sage promises approval cards; I never get them. Sage says it will build it, it gets
+built 15 minutes later. example acts. Sage overpromises and under delivers. What is going on here"
+
+What was going on, from the records of 10-30: the brain is a read-only turn that can only record deed
+intents; code hands each to a slower clock (operator every 30 min, doer and drain every 10, builder hourly
+with a daily cap, cards held for Monday's digest), and `prompt.md` scripts the words "the card is below"
+and "that's in to be built", so the model said them whether or not the plumbing delivered. 111 open cards,
+71 never in Chat; 42 of 95 build promises unkept; 22 of 57 doer jobs failed; 17 of 251 of the owner's lines
+since 10-24 were "try again / do it / you promised a card". example's desk is a full Claude Code session
+("you own it, take the first look yourself, scripts first, do it yourself now, card him with the exact
+content"); example had the same disease on 2026-09-08 and manager mode fixed it the next day.
+
+**`desk.py` is that desk, around the unchanged brain:**
+- `desk.wants()` sorts an owner's line by rules in milliseconds, in `bridge.handle` right after the
+  placeholder: an imperative ("fix the hook", "text a team member back", "upload", "add a team member to the team", "try
+  again", a correction of kind card/redo/fix) goes to the desk; a question, a "remember / from now on /
+  remind me", a lone link, a card's thread (approvals), a team space and a staff member stay with the brain.
+  `python assistant/agent/desk.py classify "<line>"` shows the sort.
+- `desk.start()` posts ONE receipt in the thread ("On it. I'll put what I did here when it's done.") and
+  launches the desk DETACHED (`desk.py run <job>`; it survives the bridge restarting when the desk edits
+  agent code). The turn: `claude -p` in the vault (the vault's own hooks apply: the send gate, the CRM gate,
+  the boundary guard), `--dangerously-skip-permissions` (so Edit/Write/Bash run headless), NO allow-list,
+  the belt `--disallowedTools` = `DENIED` + the CRM's write tools + the gate's `CRITICAL_NEVER_ALLOW`, and
+  **`desk_policy.py` as a PreToolUse hook on every Bash/PowerShell/Write/Edit call** (fail closed): no send
+  path or executor (`email_send`, `exec_store`, `drain`, `phone_bridge`, `client_texts`, the CRM composer script),
+  no `cards.py answer/undo/reopen`, no credentials or vault, no `git push/reset/stash/add -A`, no scheduled
+  tasks or registry, no wiping, no browser (`playwright`, CDP), no nested `claude`, no writes to the owner's
+  paths (`builder.TAP_PATHS + HARD_PATHS`: the send scripts, `cards.py`, `config/org/people/profile`,
+  `Memory/`, `Schema/`, `Raw/`, `.claude/`, the gates, live data) nor to its own three files. Patterns in
+  `desk_policy.json`; `python assistant/agent/desk_policy.py classify "<cmd>"` / `path <file>`.
+- The private deed server (`gmcp.py`) rides along bound to the job's turn, so `task` (with `draft`: the
+  card posts itself, `--asked`, urgent, in the thread), `do`, `decide`, `learn`, `note`, `skill`,
+  `schedule`, `project`, `blocked` work exactly as in chat and are applied by code after the turn
+  (`actions.apply` + `commitments.register_applied`). From Bash the desk posts a card with
+  `cards.py post --owner "desk:<job>" --asked --thread ... --space ...` and a milestone line with
+  `desk.py note <job> "<line>"` (the voice gate drops progress chatter: never "still working", never "that
+  didn't work"; `notes_cap` per job).
+- The reply is checked against the record before it posts: "the card is below / posted" with no card
+  from this job (`cards.LIVE` owner `desk:<job>` or a `card` deed) gets "Correction: no card has actually
+  gone up from this" appended; `reflex.fix_reply` and `voice.polish` run as for the brain; a timed-out or
+  failed turn says so once, plainly, with the last milestone. Transcript row channel `desk`, outbox row,
+  Chat post in the thread (the receipt's thread when the ask was top-level).
+- `desk.block(convo)` puts the last day's desk jobs (running with their milestones / done with the reply /
+  failed with the error) into the brain's context, so "is it done?" is answered from the record and the
+  brain never redoes, claims or re-promises the desk's work.
+- Switch: `profile.json -> desk {enabled, model (opus), max_turns 80, timeout_s 1800, notes_cap 6}`; env
+  `AGENT_DESK=off` (the brain's own test suites set it: they test the brain's nets). Jobs:
+  `assistant/data/agent/desk/<job>.json`; log `~/.claude/desk-wv.log` (the hook logs every decision there);
+  `python assistant/agent/desk.py status`. Gate target `agent-desk` in `check_gates.py` (exempt from the
+  skip-permissions check like dream_cron; its `DENIED` is frozen in the baseline).
+
+Tests: `tests/test_desk.py` (the owner's real lines sorted, the belt's refusals and allowances, the command
+and the frozen belt, the prompt filled and org-free, the reply checked against the record, notes, the
+bridge routing with the desk on and off). Not built yet: a desk job that itself needs a second desk
+(it reads the running job's notes instead), and a `/desk` command listing jobs in chat.
+
 ## Projects: long-running problems worked on a schedule, with every try on record (2026-10-27, evening)
 
 the owner, 2026-10-27: "example has long term problem solving capabilities under projects. I want Sage to manage long term issues

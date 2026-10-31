@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+d095cde",
+  "version": "2026.10.30+0ed285d",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T20:24:13"
+  "synced": "2026-10-30T20:25:07"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "da7876e32a1500c67e5fa4de594b9336884b8cb1ba006d97376f3a253b6e3ef9",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
-  "assistant/agent/README.md": "2fd3d9c5983433d762d67f5fe66239967cd4d0f2e108ffd5dda0af28230a4fde",
+  "assistant/agent/README.md": "36e8899b43610f383ee914c17f4873f5f7b59cf3a901feb332bcf7a72cb2b231",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "7f3118ad2776b62656593f99ab44faf7478493e09464cceed75a9b43b0ce9069",
@@ -113,7 +113,9 @@
   "assistant/agent/core.py": "54b497e5c57788a42c3d050cd92f288baf7488406e4a0f61ae9ca15e2641cab4",
   "assistant/agent/correction.py": "b5d20c95cddd6031ade2e01172d6dfcae68e2d8c4858f92f702ec510b69eac33",
   "assistant/agent/desk.py": "445bd8d206006455fd900d393cbe3a9b8c068835592012d0cbe380d6ae97813c",
+  "assistant/agent/desk_policy.json": "ffec791298c05bcdfa5b3c4613acab58425ed07803137d1c1378fb6846aa992d",
   "assistant/agent/desk_policy.py": "e411655668a4df7470e9497cce17dbf7b91487e2761529a83f8dc836093e1086",
+  "assistant/agent/desk_prompt.md": "fff22155dd4a9432a20ec5bdbfb991219d3260030685d9066359d5cfef294ab6",
   "assistant/agent/dream.py": "1d842d11e6c02bad3b802672b1e125451e803d24e77e0fa5ca305d63e369b79f",
   "assistant/agent/event_reminders.py": "2488d0d48850fd5efce294f2148b3c9d28e9f396d0919316872b12ee5b7be910",
   "assistant/agent/followups.py": "a852e73320d06839fc2e55c2176929ae9898c1328d1b8950b4b384f5dbc2d60f",
