@@ -473,7 +473,7 @@ def _dreaming_health():
     """Dreaming is launched through a fire-and-forget wrapper, so its scheduled task always
     reports exit 0: read its own log instead. It sat disabled for three months (2026-06-23 to
     09-30) with nothing saying so."""
-    log = Path.home() / ".claude" / "dreaming-wv.log"
+    log = Path(os.environ.get("WV_DREAM_LOG") or (Path.home() / ".claude" / "dreaming-wv.log"))
     try:
         lines = log.read_text(encoding="utf-8", errors="replace").splitlines()[-400:]
     except OSError:

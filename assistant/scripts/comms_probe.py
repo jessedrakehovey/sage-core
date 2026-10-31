@@ -33,7 +33,7 @@ sys.path.insert(0, str(HERE))
 from alib import DATA, VAULT, load_json, now_iso, save_json  # noqa: E402
 
 STATE = DATA / "comms_probe_state.json"
-LOG = Path.home() / ".claude" / "comms-probe-wv.log"
+LOG = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude")) / "comms-probe-wv.log"
 RUNNING = DATA / ".operator_running"          # written by operator_cron.ps1 while a run is in flight
 RUNNING_STALE_MIN = 25
 

@@ -127,7 +127,19 @@ def child_env() -> dict:
     if c:
         env.setdefault("ASSISTANT_CLAUDE", c)
     env.setdefault("PYTHONIOENCODING", "utf-8")
+    for k, v in orgcfg.state_env().items():          # a second agent's logs, locks and accounts stay its own (coexist.py)
+        env.setdefault(k, v)
     return env
+
+
+def refuse_collisions(what: str) -> bool:
+    """True (and says why) when this pack would share a port, browser, logs or name with another agent on this PC."""
+    import coexist
+    bad = coexist.collisions(ROOT)
+    for r in bad:
+        print(f"NOT starting {what}: {r['detail']}\n  -> {r['fix']}")
+        _log(f"{what} refused: {r['detail']}")
+    return bool(bad)
 
 
 def _http_ok(url: str, timeout: float = 3.0) -> bool:
@@ -460,6 +472,11 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
         "buttons on" if push.get("buttons", True) else "answered by words in the thread until the relay is checked",
         "`sage relay check` turns buttons on once taps can reach Mission Control")
     try:
+        import coexist
+        rows.extend(coexist.check(ROOT))
+    except Exception as e:  # noqa: BLE001
+        add("shares with another agent", "warn", f"could not check: {e}"[:160], "python assistant/coexist.py check")
+    try:
         free = shutil.disk_usage(str(ROOT)).free / 1e9
         add("disk", "ok" if free > 5 else "fail", f"{free:.1f} GB free on {ROOT.anchor or ROOT}", "free space; the deadman alarms under 5 GB")
     except OSError:
@@ -726,6 +743,20 @@ def token_cmd(api_key: bool = False) -> int:
     import getpass
     name = "ANTHROPIC_API_KEY" if api_key else "CLAUDE_CODE_OAUTH_TOKEN"
     print(f"\n== Sage: your Claude {'API key' if api_key else 'token'} ==\nThe agent's model turns run on YOUR account; nothing here is sent anywhere, it is stored in your own user environment.\n")
+    # the User environment is shared by EVERY program of this Windows account, other agents and scheduled jobs included
+    # (coexist.py, 2026-10-30): never replace a stored token, or switch them all to metered billing, without a typed yes
+    if api_key:
+        print("WARNING: an ANTHROPIC_API_KEY in your user environment makes EVERY Claude run on this Windows account bill per token,\n"
+              "not only this agent's: other agents and scheduled jobs on this PC switch to metered billing too.")
+        if input("Type METERED to go ahead, anything else to stop: ").strip() != "METERED":
+            print("nothing stored")
+            return 1
+    elif _user_env(name):
+        print(f"A {name} is already stored for this Windows account, and other programs on this PC may run on it.\n"
+              "This agent will use that one; you need no new token. Replacing it changes it for all of them.")
+        if input("Type REPLACE to store a new one, or press Enter to keep the current token: ").strip() != "REPLACE":
+            print("kept the stored token; tap Check on the page")
+            return 0
     if not api_key:
         c = claude_cli()
         if not c:
@@ -819,6 +850,8 @@ def main() -> int:
             print_rows(rows)
         return 1 if any(r["status"] == "fail" for r in rows) else 0
     if a.cmd == "serve":
+        if not a.dry_run and refuse_collisions("serve"):
+            return 1
         s = Serve(dry=a.dry_run)
         if a.once:
             ran = s.pass_once(block=True)
@@ -858,6 +891,8 @@ def main() -> int:
         print(f"stop requested{' (pid ' + str(pid) + ' exits within ' + str(TICK_S) + ' s)' if pid else ' (serve was not running)'}")
         return 0
     if a.cmd == "install-startup":
+        if refuse_collisions("install-startup"):
+            return 1
         return install_startup()
     if a.cmd == "uninstall-startup":
         return uninstall_startup()

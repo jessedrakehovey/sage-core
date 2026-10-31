@@ -171,6 +171,15 @@ def main() -> int:
         sys.exit("the new organization must live in its own folder, outside this one")
     if out.exists() and any(out.iterdir()):
         sys.exit(f"{out} is not empty")
+    # one machine, several agents (coexist.py, 2026-10-30): never inside another pack, never its name, ports or browser
+    import coexist
+    for c in coexist.packs():
+        if c["root"] == coexist._norm(out) or c["root"] in [coexist._norm(p) for p in out.resolve().parents]:
+            sys.exit(f"{out} is inside {c['name']}'s folder ({c['root']}); the new organization needs a folder of its own")
+    try:
+        alloc = coexist.allocate(a.org, out)
+    except ValueError as e:
+        sys.exit(str(e))
     owners = []
     for o in a.owner:
         name, _, email = o.partition(":")
@@ -261,7 +270,7 @@ def main() -> int:
         "default_phone_account": f"{owners[0]['key']}-iphone",
         "mission_control_url": "https://<this-pc>.<tailnet>.ts.net:9443",
         "watched_tasks": [f"{org_name} Day Spine (assistant)", f"{org_name} Day Spine - long jobs (assistant)", f"{org_name} Deadman (assistant)",
-                          f"{org_name} Comms Probe (assistant)", "example-org", "example-org"],
+                          f"{org_name} Comms Probe (assistant)", f"{org_name} Operator (tick)", f"{org_name} Operator (morning brief)"],
         "internal_emails": [o["email"] for o in owners if o["email"]],
         "alert_from": owners[0]["email"], "alert_to": [o["email"] for o in owners if o["email"]],
         "phone_send_shortcut": f"{org_name} Send Texts",
@@ -270,8 +279,10 @@ def main() -> int:
         "phone_nudge_mark": f"{_slug(a.org).upper()}-SEND", "phone_token_header": f"X-{_slug(a.org).title().replace('-', '')}-Token",
         "chat_reader": owners[0]["email"],
         # sage-core (2026-10-27): the machine values the code used to hard-wire to this PC
-        "keyring_service": f"{_slug(a.org)}-assistant", "python": "", "semantic_python": "", "mission_control_port": 9019,
+        "keyring_service": alloc["keyring_service"], "python": "", "semantic_python": "", "mission_control_port": alloc["mission_control_port"],
         "secrets_dir": f"~/.sage/{_slug(a.org)}", "google_home": f"~/.sage/{_slug(a.org)}/google",
+        # its own logs, locks, account store and builder worktree (orgcfg.state_home), never another agent's ~/.claude files
+        "state_home": alloc["state_home"],
         "modules": list(a.module), "lifecycle": a.lifecycle, "lanes": lanes, "engine": "sage-core",
         # the auto-updater (assistant/updater.py): where release.json lives. SAGE_RELEASE_URL (the installer bakes it in), else
         # the GitHub Releases of the clone this engine is (its git origin), else empty = updates by hand (`sage update --engine`)
@@ -432,7 +443,7 @@ def main() -> int:
         "1. `python assistant/sage.py doctor` says what this machine still needs (Python packages, Playwright, the Claude CLI and its token, gcloud). "
         "The token: `claude setup-token` once, stored as the User env var `CLAUDE_CODE_OAUTH_TOKEN`; the agent's model turns run on it.",
         "2. `python assistant/sage.py serve` runs everything (the spine, the probe, the operator, the deadman, Mission Control) in one process; "
-        "`python assistant/sage.py install-startup` makes it start at logon. Mission Control is http://127.0.0.1:9019 on this PC.",
+        f"`python assistant/sage.py install-startup` makes it start at logon. Mission Control is http://127.0.0.1:{alloc['mission_control_port']} on this PC.",
         "3. Open **/setup** and work down **Needs attention**: one button per connection. Google (calendar + mail) per owner, mail app passwords, the agent's browser signed in to each site.",
         "4. Google Chat for the agent: follow `assistant/agent/GOOGLE_SETUP.md` (needs Google Workspace). Until then the phone chat page (/chat) is the conversation.",
         "5. Discovery and Training: `python assistant/onboarding.py discover`, then `train` until coverage is 100%, then the shadow week; `golive` switches each standing exception on by name.",
@@ -443,8 +454,21 @@ def main() -> int:
         "`assistant/agent/state/org.json` what the owners taught about the business · `assistant/connections.json` the connection registry · `Wiki/` compiled knowledge · `Raw/Uploads/` files handed over in chat · `assistant/agent/prompt.md` the agent's instructions (generic template).",
     ]
     (out / "README.md").write_text("\n".join(checklist) + "\n", encoding="utf-8")
+    # the doer's own browser: its own CDP port and profile folder, never another agent's signed-in one (coexist.py)
+    cfg_path = out / "assistant" / "config.json"
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+        cfg.setdefault("doer", {}).update({"profile": alloc["profile"], "cdp_port": alloc["cdp_port"]})
+        cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+    (alloc["home"] / "logs").mkdir(parents=True, exist_ok=True)
+    coexist.register(out)
+    clash = coexist.collisions(out)
     print(f"copied {n} files\n\n" + "\n".join(checklist))
-    return 0
+    print(f"\nOn this PC: Mission Control :{alloc['mission_control_port']}, browser :{alloc['cdp_port']}, logs and locks in {alloc['state_home']}"
+          + ("" if not clash else "\nCOLLISION: " + "; ".join(r["detail"] for r in clash)))
+    return 1 if clash else 0
 
 
 if __name__ == "__main__":

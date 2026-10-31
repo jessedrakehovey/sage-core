@@ -42,6 +42,14 @@ VENV="$HOME/.venvs/$SLUG-sage"; PY="$VENV/bin/python"
 "$PY" -m pip install --quiet -r "$ENGINE_DIR/assistant/requirements.txt"
 "$PY" -m playwright install chromium >/dev/null
 
+# a folder holding another organization's agent is never touched (coexist.py): only this org's own pack is re-used
+if [[ -f "$OUT/assistant/org.json" ]]; then
+  "$PY" - "$OUT/assistant/org.json" "$ORG" <<'PYEOF' || { echo "$OUT already holds another organization's agent; pick an empty folder with --out"; exit 1; }
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8-sig"))
+sys.exit(0 if d.get("name") == sys.argv[2] and d.get("state_home") else 1)
+PYEOF
+fi
 if [[ ! -f "$OUT/assistant/org.json" ]]; then
   ARGS=("$ENGINE_DIR/assistant/new_org.py" "$ORG" --agent "$AGENT" --out "$OUT")
   for o in "${OWNERS[@]}"; do ARGS+=(--owner "$o"); done

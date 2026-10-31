@@ -20,7 +20,7 @@ $vault  = "{{ORG_ROOT}}"
 $asst   = Join-Path $vault 'assistant'
 $claude = "C:\Users\owner1\AppData\Roaming\npm\claude.cmd"
 $py     = "C:\Users\owner1\.venvs\wedding-web\Scripts\python.exe"
-$log    = Join-Path $env:USERPROFILE ".claude\assistant-operator.log"
+$log    = Join-Path $(if ($env:WV_LOG_DIR) { $env:WV_LOG_DIR } else { Join-Path $env:USERPROFILE ".claude" }) "assistant-operator.log"
 if ($env:ASSISTANT_CLAUDE) { $claude = $env:ASSISTANT_CLAUDE }   # test hook
 
 function Log($m) {

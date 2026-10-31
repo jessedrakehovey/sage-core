@@ -27,7 +27,7 @@ import crm
 
 WEB = ROOT / "web" / "index.html"
 CARDS = DATA / "cards.jsonl"
-LOG = Path.home() / ".claude" / "assistant-operator.log"
+LOG = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude")) / "assistant-operator.log"
 TASKS = ["example-org Day Spine (assistant)", "example-org Comms Probe (assistant)", "example-org", "example-org",
          "example-org"]
 _task_cache = {"ts": 0.0, "states": {}}

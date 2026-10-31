@@ -48,6 +48,19 @@ cd "<folder>" && python assistant/sage.py doctor && python assistant/sage.py ser
 
 `assistant/setup_skill/sage-setup/`: `/sage-setup` in a Claude Code session installs what is missing, creates the pack and walks the owner through the Google clicks; `bootstrap.ps1` / `bootstrap.sh` do the installs. This is the support path: it ends in the same pack, the same supervisor.
 
+## Several agents on one computer (`assistant/coexist.py`, 2026-10-30)
+
+A second organization on a PC that already runs one never shares what the first one uses. `new_org.py` asks `coexist.allocate`
+for free values and writes them into the new pack: its own Mission Control port (9020 up; 9019 is the first one's, 9018 the
+setup page), its own doer browser port (9334 up) and profile folder, and `org.json state_home` = `~/.sage/<slug>`, where its
+logs, Chat-bridge lock, Claude account store, builder worktree and run-budget counter live (`orgcfg.state_env`; a pack
+without `state_home` keeps `~/.claude` exactly as before). The new pack's watched tasks carry its own name, it refuses a
+name or a folder another pack already has, and it is listed in `~/.sage/packs.json`. `sage.py serve` and `install-startup`
+refuse to start while `python assistant/coexist.py check` finds a collision, and `sage doctor` shows it as a FAIL with the
+fix. The token window keeps a `CLAUDE_CODE_OAUTH_TOKEN` already stored (every program of the Windows account runs on it)
+unless the owner types REPLACE, and an API key (which bills every Claude run on the account per token) only after METERED.
+`bootstrap.ps1` / `.sh` never re-use a folder that holds another organization's agent.
+
 ## Updates: one command, three installs
 
 ```bash

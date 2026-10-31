@@ -10,7 +10,7 @@
 $ErrorActionPreference = 'Stop'
 $vault  = Split-Path -Parent $PSScriptRoot          # this script lives in <vault>\scripts
 $claude = $env:ASSISTANT_CLAUDE                     # else resolved below the way assistant/sage.py claude_cli() does
-$log    = Join-Path $env:USERPROFILE ".claude\dreaming-wv.log"
+$log    = if ($env:WV_DREAM_LOG) { $env:WV_DREAM_LOG } else { Join-Path $env:USERPROFILE ".claude\dreaming-wv.log" }
 
 function Log($m) {
     # Shared-write append with sidecar fallback — an orphaned `tail -F` on the

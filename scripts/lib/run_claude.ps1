@@ -58,7 +58,7 @@ function Test-TransientClaudeError {
 # so it NEVER shares state with the property vault (blp_claude_budget.json).
 # Opt-in via -DailyMax parameter or WV_CLAUDE_DAILY_MAX env var.
 function Get-ClaudeBudgetPath {
-    $dir = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
+    $dir = if ($env:SAGE_STATE_HOME) { $env:SAGE_STATE_HOME } elseif ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
     return (Join-Path $dir 'wv_claude_budget.json')
 }
 function Get-ClaudeDailyCount {

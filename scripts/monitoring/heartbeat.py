@@ -15,6 +15,7 @@ To suppress repeat alerts for the same problem set, it remembers the last alert 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -25,8 +26,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
 STATE = CACHE / "heartbeat_state.json"
-LOG = Path.home() / ".claude" / "heartbeat-wv.log"
-CLAUDE = Path.home() / ".claude"
+CLAUDE = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude"))     # a second agent on this PC: its own logs (coexist.py)
+LOG = CLAUDE / "heartbeat-wv.log"
 _WV = HERE.parents[1]
 NOTIFY = _WV / "assistant" / "scripts" / "notify.py"
 

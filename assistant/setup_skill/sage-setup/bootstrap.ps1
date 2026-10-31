@@ -53,7 +53,14 @@ Say "installing Python packages"
 Say "installing the Playwright Chromium browser (one-time download)"
 & $py -m playwright install chromium | Out-Null
 
-# the pack
+# the pack. A folder that already holds an organization is only re-used when it is THIS organization's pack made by
+# new_org.py (its org.json names -Org and carries state_home); anything else is another agent's and is never touched
+# (coexist.py, 2026-10-30: a re-run pointed at a live vault re-pointed that vault's jobs at this venv)
+$existing = Join-Path $Out 'assistant\org.json'
+if (Test-Path $existing) {
+    $o = Get-Content $existing -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($o.name -ne $Org -or -not $o.state_home) { throw "$Out already holds another organization's agent ($($o.name)); pick an empty folder with -Out" }
+}
 if (-not (Test-Path (Join-Path $Out 'assistant\org.json'))) {
     $args = @((Join-Path $engineDir 'assistant\new_org.py'), $Org, '--agent', $Agent, '--out', $Out)
     foreach ($o in $Owner) { $args += @('--owner', $o) }
