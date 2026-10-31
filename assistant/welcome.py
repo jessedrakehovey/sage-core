@@ -40,6 +40,8 @@ IS_WIN = os.name == "nt"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 PORT = 9018
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ports  # noqa: E402  (port guard: the wizard moves off a taken 9018; the agent's page is dialled where it is)
 ENV_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN"
 ENV_KEY = "ANTHROPIC_API_KEY"
 _SERVER = {"stop_at": 0.0}
@@ -156,9 +158,7 @@ def _http_ok(url: str, timeout: float = 2.0) -> bool:
 
 
 def mc_url(pack: Path | None) -> str:
-    port = 9019
-    if pack:
-        port = int((_load(pack / "assistant" / "org.json", {}) or {}).get("mission_control_port") or 9019)
+    port = ports.current_for(pack, "mission_control") if pack else 9019
     return f"http://127.0.0.1:{port}"
 
 
@@ -385,6 +385,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = PORT, open_browser: bool = True, idle_s: int = 7200) -> int:
+    port, _how = ports.claim("setup", port)
     srv = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{port}/welcome"

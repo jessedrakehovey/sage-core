@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 import orgcfg  # noqa: E402
+import ports  # noqa: E402
 
 CFG = Path(os.environ.get("AGENT_GCHAT_CONFIG") or (ROOT / "agent" / "gchat.local.json"))
 LOG = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude")) / "relay-poll.log"
@@ -58,7 +59,7 @@ def configured() -> bool:
 
 
 def mc_events_url() -> str:
-    port = int(os.environ.get("MC_PORT") or orgcfg.get("mission_control_port", 9019) or 9019)
+    port = ports.current("mission_control")
     return f"http://127.0.0.1:{port}/gchat/events"
 
 

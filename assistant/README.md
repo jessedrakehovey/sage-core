@@ -1457,6 +1457,27 @@ every command below, update, modules):
   report in Sage's own voice (today `sage health` prints it and `--post` puts it on Mission Control); cutting this
   organization over from its scheduled tasks to `serve`; a 7-day unattended run of the fixture on a clean VM.
 
+### Port guards: a taken port moves the server, every reader follows (2026-10-31)
+
+the owner: "make port guards standard in public release so it switches over if one is being used." `assistant/ports.py`,
+engine, on every machine. Three kinds: `mission_control` (org.json `mission_control_port`, 9019), `cdp` (config.json
+`doer.cdp_port`, 9333: the doer's own browser), `setup` (9018, the welcome page).
+
+- **The process that binds calls `ports.claim(kind)`.** Free: the wanted port. Held by this pack's own live server: state
+  `ours` (Mission Control leaves quietly: "already up"). Held by anything else: the next free port that no other pack on
+  this machine claims (`coexist.packs`), state `moved`, the holder named. The outcome is written to
+  `<state_home>/ports.json` (`SAGE_PORTS` overrides; tests use a scratch one).
+- **Every reader calls `ports.current(kind)`**: the ledger's port when a live server *of ours* answers there, else the
+  wanted one. Mission Control's `/api/health` now carries `pack` (the org slug), `pid` and `port`, so a reader can tell
+  ours from another agent's; the doer's browser is ours when `browser.json` names the port and its pid is alive. The
+  setup page is never "ours": it just moves.
+- **Wired in:** `mc_server.py` (claim, wait up to 8 s for its own previous instance to let go on a restart), `sage.py`
+  (`_mc_url()` for the keepalive, the doctor rows `port guard: ...`), `welcome.py` (claims 9018; dials the pack's live
+  Mission Control via `ports.current_for(pack)`), `doer/browser.py` (dials where its browser lives; a foreign browser on
+  its port moves it, it never attaches to one it did not start), `relay_poll.py`, and the pack's `mc_server.ps1`
+  keepalive (asks `python assistant/ports.py current mission_control`).
+- `python assistant/ports.py status` shows wanted / now / holder per kind. Tests: `assistant/tests/test_ports.py`.
+
 ## Not built yet
 
 - The doer's first live run (the nested CLI cannot authenticate inside a session; everything but the model

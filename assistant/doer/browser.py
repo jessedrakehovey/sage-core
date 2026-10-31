@@ -32,10 +32,12 @@ VAULT = ROOT.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(VAULT / "scripts" / "lib"))
 from alib import load_json  # noqa: E402
+sys.path.insert(0, str(ROOT))
+import ports  # noqa: E402  (port guard: dial our own browser where it really is; never attach to another program's)
 
 CFG = (load_json(ROOT / "config.json", {}) or {}).get("doer") or {}
 PROFILE = Path(os.path.expanduser(os.environ.get("DOER_PROFILE") or CFG.get("profile") or "~/.claude/pw-wv-cli-profile"))
-PORT = int(os.environ.get("DOER_CDP_PORT") or CFG.get("cdp_port") or 9333)
+PORT = ports.current("cdp", int(os.environ.get("DOER_CDP_PORT") or CFG.get("cdp_port") or 9333))
 STATE = Path(os.environ["DOER_DATA"]) / "browser.json" if os.environ.get("DOER_DATA") else ROOT / "data" / "doer" / "browser.json"
 CHROME_CANDIDATES = [
     Path(os.path.expandvars(r"%LOCALAPPDATA%\ms-playwright")),
@@ -181,6 +183,10 @@ def _lease():
 
 def open_browser(show: bool = False, wait_s: float = 25.0) -> str:
     """Start the browser if it is not up; return the CDP url. Idempotent."""
+    global PORT
+    if alive() and not ports.ours("cdp", PORT):
+        # another program's browser (another agent's doer, a stray Chrome) answers on our port: move, never attach to it
+        PORT, _how = ports.claim("cdp", PORT)
     if alive():
         st = _state()
         if show and st.get("offscreen"):
@@ -195,6 +201,7 @@ def open_browser(show: bool = False, wait_s: float = 25.0) -> str:
     PROFILE.mkdir(parents=True, exist_ok=True)
     lease = _lease()
     _keep_session_cookies()
+    PORT, _how = ports.claim("cdp", PORT)                 # a non-browser program on the port moves us too
     args = [str(exe), f"--remote-debugging-port={PORT}", f"--user-data-dir={PROFILE}"] + LAUNCH_ARGS
     offscreen = not show and bool(CFG.get("offscreen", True))
     if offscreen:

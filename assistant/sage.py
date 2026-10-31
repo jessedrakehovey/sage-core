@@ -51,7 +51,15 @@ PAUSED = DATA / ".sage_paused"
 STOP = DATA / ".sage_stop"
 RESTART = DATA / ".sage_restart"          # the updater asks for a restart; the loop re-execs itself on the new code
 LOG = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude")) / "sage-serve.log"
-MC_URL = f"http://127.0.0.1:{int(os.environ.get('MC_PORT') or orgcfg.get('mission_control_port', 9019) or 9019)}"
+import ports  # noqa: E402  (port guard, 2026-10-31)
+
+
+def _mc_url() -> str:
+    """Mission Control where it answers NOW: the ledger's port when ours moved off a taken one, else the configured one."""
+    return ports.url("mission_control")
+
+
+MC_URL = _mc_url()
 GCHAT_LOCAL = HERE / "agent" / "gchat.local.json"
 TICK_S = 20
 IS_WIN = os.name == "nt"
@@ -192,7 +200,7 @@ def _cmd(job: dict) -> list:
 
 
 def _mc_keepalive(dry: bool) -> tuple:
-    if _http_ok(MC_URL + "/api/health"):
+    if _http_ok(_mc_url() + "/api/health"):
         return True, "mission control up"
     if dry:
         return True, "DRY would start mc_server.py"
@@ -436,8 +444,10 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
         else:
             out = _ver([c, "-p", "Reply with exactly: OK", "--max-turns", "1"], timeout=120)
             add("headless probe", "ok" if "OK" in out else "fail", out[:120] or "no output", "fix the token / key above, then run the probe again")
-    add("mission control", "ok" if _http_ok(MC_URL + "/api/health") else "warn", MC_URL + (" up" if _http_ok(MC_URL + "/api/health") else " not running"),
+    add("mission control", "ok" if _http_ok(_mc_url() + "/api/health") else "warn", _mc_url() + (" up" if _http_ok(_mc_url() + "/api/health") else " not running"),
         "python assistant/sage.py serve  (its keepalive starts it)")
+    for r in ports.rows():
+        add(r["check"], r["status"], r["detail"], r["fix"])
     pid = serve_pid()
     add("serve", "ok" if pid else "warn", f"running (pid {pid})" if pid else "not running", "python assistant/sage.py serve, then install-startup")
     sd = Path(os.path.expanduser(str(org.get("secrets_dir") or "")))
@@ -860,7 +870,7 @@ def main() -> int:
         return s.loop()
     if a.cmd == "status":
         pid = serve_pid()
-        print(f"serve: {'running pid ' + str(pid) if pid else 'not running'}{' (PAUSED)' if PAUSED.exists() else ''}; mission control {'up' if _http_ok(MC_URL + '/api/health') else 'down'}")
+        print(f"serve: {'running pid ' + str(pid) if pid else 'not running'}{' (PAUSED)' if PAUSED.exists() else ''}; mission control {'up' if _http_ok(_mc_url() + '/api/health') else 'down'}")
         for name, st in sorted((_load(STATE, {}) or {}).items()):
             print(f"  {name:18} last {str(st.get('last', '-'))[:16]}  {'ok ' if st.get('ok') else 'BAD'}  {str(st.get('result', ''))[:80]}")
         return 0

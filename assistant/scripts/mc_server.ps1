@@ -9,13 +9,17 @@ $vault = "{{ORG_ROOT}}"
 $py    = "C:\Users\owner1\.venvs\wedding-web\Scripts\pythonw.exe"
 if (-not (Test-Path $py)) { $py = "C:\Users\owner1\.venvs\wedding-web\Scripts\python.exe" }
 if (-not (Test-Path $py)) { $py = "python" }
+# the port guard (assistant/ports.py): Mission Control may have moved off :9019 when another program held it
+$pyc = $py -replace 'pythonw\.exe$', 'python.exe'
+$port = 9019
+try { $p = & $pyc "$vault\assistant\ports.py" current mission_control 2>$null; if ("$p" -match '^\d+$') { $port = [int]$p } } catch {}
 if ($Restart) {
-    Get-NetTCPConnection -LocalPort 9019 -State Listen -ErrorAction SilentlyContinue |
+    Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
         ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Seconds 1
 } else {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:9019/api/health" -UseBasicParsing -TimeoutSec 3
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/health" -UseBasicParsing -TimeoutSec 3
         if ($r.StatusCode -eq 200) { exit 0 }
     } catch {}
 }

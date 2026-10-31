@@ -1,4 +1,4 @@
-# sage-core 2026.10.31+a1c4f69
+# sage-core 2026.10.31+da141d8
 
 The engine of a Sage agent: the code, generic prompts, generic skills and templates, with nothing of any
 organization in it. An organization is a separate folder (its *pack*) made from this engine by
@@ -31,4 +31,4 @@ Optional modules (their jobs start off; `sage module on <name>`):
 - `money`: personal-finance lane: read-only bank feeds (Plaid / SimpleFIN), categorising, forecasts; never pays
 - `typeform`: Typeform lead sensor
 
-Files: 392. Manifest: `engine_manifest.json`.
+Files: 393. Manifest: `engine_manifest.json`.

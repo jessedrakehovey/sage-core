@@ -56,6 +56,7 @@ import chat_page  # noqa: E402  (the agent's chat page; runs no model, only queu
 
 sys.path.insert(0, str(ROOT))
 import orgcfg  # noqa: E402
+import ports  # noqa: E402  (port guard: a taken port moves this server; readers find it in <state_home>/ports.json)
 
 PORT = int(os.environ.get("MC_PORT") or orgcfg.get("mission_control_port", 9019) or 9019)   # per organization (sage-core): two packs on one PC
 MAX_BODY = 64 * 1024
@@ -367,7 +368,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/exec":
             return self._send(200, json.dumps({"counts": es.counts(), "queued": es.pending()}, ensure_ascii=False))
         if p == "/api/health":
-            return self._send(200, json.dumps({"ok": True, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            return self._send(200, json.dumps({"ok": True, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "pack": ports.slug(), "pid": os.getpid(), "port": PORT,
                                                "open_cards": len(cards.pending()), "queue": tickets.pending()}))
         return self._send(404, '{"error":"not found"}')
 
@@ -582,6 +583,17 @@ def _respawn():
 
 
 def main():
+    global PORT
+    # the port guard (ports.py, 2026-10-31): our own previous instance still letting go -> wait for it; still ours after
+    # that -> already up, leave quietly; anything else on the port -> the next free one, written to the ledger for every reader
+    port, how = ports.claim("mission_control", PORT, wait_s=8.0)
+    if how == "ours":
+        _log(f"mission control is already up on 127.0.0.1:{PORT}; this start is not needed")
+        print(f"mission control already on http://127.0.0.1:{PORT}")
+        return
+    if how == "moved":
+        _log(f"port {PORT} is held by {ports.holder(PORT)}; mission control moves to {port}")
+    PORT = port
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     _log(f"=== mission control up on 127.0.0.1:{PORT} ===")
     print(f"mission control on http://127.0.0.1:{PORT}")
