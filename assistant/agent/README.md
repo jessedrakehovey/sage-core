@@ -1183,3 +1183,20 @@ evidence of completion report back". What changed, all in code around the same r
 ## Blocked work becomes the owner's portal (the owner, 2026-10-20)
 
 "Anything that could not be done should not be put on an infinite loop; it should be modified so Google Chat acts as a portal for the user to do it themself as easily as possible." Held in four places: rule r67 in `state/rules.json` and rung 6 of `prompt.md` (and the generic template); the doer's `DOER_BLOCKED ... || DO IT YOURSELF: <url> then <phone steps>` hand-over rendered by `doer.portal`; `commitments.line_for`, which says a slipped build or job ONCE (`MAX_REPORTS = 1`) and offers the link-and-steps instead of "pushing it through again"; and `cards.sweep`, which dismisses a doer-blocked ticket instead of flipping it back to `new` for the doer to refuse again.
+
+## Learn, build, adapt: the owner's ask is the approval, and silence until it works (2026-10-30)
+
+The owner, 2026-10-30: "The point isn't to have to tell you to fix it all for Sage. Sage should be able to do anything I
+ask it, even if it needs to stop, immediately build something, and not update me at all until it works. Sage should
+LEARN! BUILD! ADAPT!" Three code changes:
+- **The owner's own ask approves the protected core** (`builder.owner_asked`, `auto_ok`, `TAP_PATHS`): a build request
+  that came from an owner's chat ask (the note's capability footer or its "**Ask (Name, ...)**" line) no longer stops
+  on a card when the model answers needs_owner for a protected file; the hits are approved on their ask and the request
+  is built again in the same run. Still a tap, whoever asked: the send paths, the executor, the phone, the credentials,
+  the identity files, Memory and Schema (`TAP_PATHS`); never: the hard paths. (The doer's browser fix had waited three
+  days on "May I edit computer_policy.py?")
+- **One acknowledgement, then nothing until it works** (`capability.ACK_LINE`, bridge): a reply that could not do the
+  ask and filed its build is replaced by "On it."; a replay that fails again says nothing and is refiled. The doer does
+  the same for a block that is not the owner's step (doer README). `voice.BLOCKED["progress"]` holds "Still on it",
+  "still working", "I couldn't finish", "That still didn't take" back from Chat whoever posts them.
+- The build lands, the capability loop replays the ask (`capability.tick`), and that reply is the update.

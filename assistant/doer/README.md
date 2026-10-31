@@ -338,3 +338,15 @@ stayed hidden off-screen while the owner asked three days running for a window h
 from anywhere else is scanned as before). The builder had filed this as a protected-core question twice; the owner's
 "Fix the safety hook" / "do it do not fail" was the answer. Tests: test_computer 7b. Checkpoint lines say "with a
 screenshot" only when the card carries one, and point to this chat only (`doer._card_has_screenshot`).
+
+### A block that is not the owner's step is built, not reported (2026-10-30)
+
+The owner: "Sage should be able to do anything I ask it even if it needs to stop, immediately build something, and not
+update me at all until it works. I hate seeing 'Still working', 'That didn't work'." A `DOER_BLOCKED` whose reason is
+not an owner-only step (`doer._owner_only`: a password or saved login, a verification code, a tap, a payment, identity)
+and a run that ends with no result now say nothing in chat: `doer._gap_for` opens the capability gap for the ticket's
+own ask and files its build (capability.file_build, builder kicked at once); the record goes to Mission Control
+(`_mc_note`); when the build lands the ask is replayed by the capability loop and the owner hears the result. An
+owner-only block is said once as "One step needs you on "<job>": <why>" (the portal line), never "I could not finish".
+Tests: test_doer (blocked, no result, `_owner_only`), test_voice (the `progress` class holds "Still on it",
+"I couldn't finish", "That still didn't take" back from Chat).

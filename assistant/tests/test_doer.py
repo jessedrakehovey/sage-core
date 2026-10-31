@@ -162,7 +162,29 @@ check("session remembered for the approved step", doer._session_get(TID) == "ses
 tickets._transition(TID, "claimed", "test", "", None)
 doer.run_turn = fake_turn("DOER_BLOCKED", "no login saved for dmv.ca.gov")
 doer.run_ticket(t)
-check("blocked -> staged + told", tickets._load()[TID]["status"] == "staged" and "could not finish" in delivered[-1])
+check("blocked on the owner's own step (a login) -> staged + one line naming the step, never 'could not finish'",
+      tickets._load()[TID]["status"] == "staged" and delivered[-1].startswith("One step needs you") and "could not finish" not in delivered[-1])
+# a block that is NOT the owner's step: the build is filed by code and nothing is said in chat (2026-10-30: "stop,
+# immediately build something, and not update me at all until it works")
+_gaps = []
+_real_gap_for = doer._gap_for
+doer._gap_for = lambda t, why: _gaps.append(why) or "Wiki/Personal/Build request test.md"
+_n_before = len(delivered)
+tickets._transition(TID, "claimed", "test", "", None)
+doer.run_turn = fake_turn("DOER_BLOCKED", "the Save button sits behind a menu the tool never opens")
+doer.run_ticket(t)
+check("blocked on a missing ability -> staged, the build filed, nothing said in chat",
+      tickets._load()[TID]["status"] == "staged" and len(_gaps) == 1 and "Save button" in _gaps[0] and len(delivered) == _n_before,
+      repr((len(_gaps), len(delivered) - _n_before)))
+tickets._transition(TID, "claimed", "test", "", None)
+doer.run_turn = fake_turn("", "")
+doer.run_turn = lambda prompt, out_dir, resume="", timeout=0: {"ok": False, "text": "", "session": "sess-1", "error": "the turn ended without a final line", "marker": None, "arg": ""}
+doer.run_ticket(t)
+check("no result at all -> the build filed, nothing said in chat", len(_gaps) == 2 and len(delivered) == _n_before, repr((len(_gaps), len(delivered) - _n_before)))
+doer._gap_for = _real_gap_for
+check("owner-only blocks are a credential, a code, a tap or money; a missing ability is not",
+      doer._owner_only("no login saved for dmv.ca.gov") and doer._owner_only("the site wants a verification code") and doer._owner_only("payment needs your card details")
+      and not doer._owner_only("the Save button sits behind a menu the tool never opens") and not doer._owner_only("the export file never appeared"))
 tickets._transition(TID, "claimed", "test", "", None)
 doer.run_turn = fake_turn("DOER_DONE", "Address updated, confirmation 8842")
 doer.run_ticket(t)
@@ -436,11 +458,15 @@ check("the status said it was carrying on", True)
 CALLS.clear(); POSTED.clear(); delivered.clear()
 doer.run_turn = turns([CUT])
 tickets._transition(TID, "claimed", "test", "", None)
+_gaps2 = []
+_real_gap_for2 = doer._gap_for
+doer._gap_for = lambda t, why: _gaps2.append(why) or "Wiki/Personal/Build request test.md"
 doer.run_ticket(tickets._load()[TID])
+doer._gap_for = _real_gap_for2
 check("out of tries: 1 + continues_max turns, then staged", len(CALLS) == 4 and tickets._load()[TID]["status"] == "staged")
-check("the owner's line: how many times, and how far it got", "4 times over" in delivered[-1] and "It got as far as: the cart page will not take a click" in delivered[-1]
-      and "Nothing was changed" not in delivered[-1], delivered[-1])
-check("the ticket note says the same", "4 times over" in tickets._load()[TID]["history"][-1]["note"])
+check("out of tries: nothing said in chat; the build for what kept stopping it is filed (2026-10-30)",
+      delivered == [] and len(_gaps2) == 1 and "4 times over" in _gaps2[0], repr((delivered, _gaps2)))
+check("the ticket note says how many times", "4 times over" in tickets._load()[TID]["history"][-1]["note"])
 
 # a time limit leaves no session: the next try is a FRESH prompt with the notes in its resume block
 CALLS.clear(); POSTED.clear(); delivered.clear()

@@ -59,6 +59,10 @@ BLOCKED = {
     # the ledger gave up verifying a hand-off: nothing for a person to do (a handed text is sent in practice;
     # the owner 2026-10-27 16:55 under one of these: "Stop sending me messages like this")
     "dropped": re.compile(r"^Dropped: .*\(nobody could confirm it\)", re.I),
+    # progress chatter and "didn't work" lines (the owner, 2026-10-30: "not update me at all until it works. I hate
+    # seeing 'Still working', 'That didn't work'"): the work goes on, the build is filed, the record is on Mission Control
+    "progress": re.compile(r"^Still on it\b|^(?:I'?m |I am )?still working\b|^I couldn'?t finish\b|^I could not finish\b|"
+                           r"^That (?:still )?didn'?t (?:work|take)\b|^That piece isn'?t something I can do yet|^Not yet[.,]", re.I),
 }
 
 _BUILT = re.compile(r"^(?:That's built now, the one you asked for|I built a fix for this one): [\"“](?P<t>.*?)[\"”]\.?\s*"
@@ -83,6 +87,7 @@ _NOT_DONE2 = re.compile(r"^Not done: (?P<why>.+)$", re.S)
 _CODE_WAIT = re.compile(r"^I am waiting for a verification code: (?P<step>.*?)(?:\s*It was sent to your phone or email\.)?(?:\s*Open the card on Mission Control.*)?$", re.S)
 _DOER_BLOCKED = re.compile(r"^I could not finish on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)
 _DOER_FAILED = re.compile(r"^I couldn't finish on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)
+_DOER_STEP = re.compile(r"^One step needs you on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)   # an owner-only block (2026-10-30)
 _ACKS = (
     (re.compile(r"^Handing that to Sage to work through; it comes back here with what was done\.?$"), "On it. I'll come back here with what I did."),
     (re.compile(r"^Got it, building it now with your OK\. You'll hear from me here when it lands, with an undo\.?$"), "On it. I'll tell you here when it's live."),
@@ -309,6 +314,11 @@ def reword(text: str, channel: str = "") -> str:
         step = re.sub(r"^(?:Type|Enter|Give me|Paste) (?:in )?(?:the |a )?", "", step)
         step = step[0].lower() + step[1:] if step else "the code"
         return f"I need the {step.rstrip('.')}. Reply with it here and I'll carry on."
+    m = _DOER_STEP.match(t)
+    if m:
+        job = _first_clause(m.group("job"))
+        why = " ".join(str(m.group("why") or "").split())
+        return f"One step needs you on \"{job}\": {why}" if job else f"One step needs you: {why}"
     m = _DOER_BLOCKED.match(t) or _DOER_FAILED.match(t)
     if m:
         job = _first_clause(m.group("job"))

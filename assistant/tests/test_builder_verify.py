@@ -118,4 +118,19 @@ ok(all(st[k]["status"] == "retry" and st[k]["attempts"] == 0 and st[k].get("prio
    "re-queued entries are retry with attempts 0 and the old reason kept")
 ok(st["Wiki/Operations/Build request Weekly search-terms report.md"]["status"] == "approved", "nothing else moved")
 
+# ---------------------------------------------------------------- the owner's own ask approves the protected core (2026-10-30)
+_owner = next((k for k, u in (core.people().get("users") or {}).items() if str(u.get("role")) == "owner"), "")
+_staff = next((k for k, u in (core.people().get("users") or {}).items() if str(u.get("role")) == "staff"), "")
+_req_owner = {"key": "Wiki/Personal/Build request x.md", "text": "# Build request x\n\nfix it\n\n<!-- capability: {\"gap\": \"g-1\", \"person\": \"" + _owner + "\", \"ask\": \"fix it\"} -->"}
+_req_dream = {"key": "Wiki/Personal/Build request y.md", "text": "# Build request y\n\nfrom the nightly review"}
+_req_staff = {"key": "Wiki/Personal/Build request z.md", "text": "# Build request z\n\n<!-- capability: {\"gap\": \"g-2\", \"person\": \"" + (_staff or "nobody") + "\"} -->"}
+ok(bool(_owner) and builder.owner_asked(_req_owner) == _owner, "owner_asked: the capability footer names the owner")
+ok(builder.owner_asked(_req_dream) == "" and builder.owner_asked(_req_staff) == "", "owner_asked: a dream-filed or staff-filed request is nobody's ask")
+_prot = ["assistant/doer/computer_policy.py", "assistant/agent/brain.py"]
+ok(builder.auto_ok(_req_owner, _prot) == sorted(_prot), "auto_ok: protected (not tap, not hard) files are approved by the owner's own ask")
+ok(builder.auto_ok(_req_dream, _prot) == [], "auto_ok: nothing for a request nobody asked for")
+ok(builder.auto_ok(_req_owner, _prot + ["assistant/scripts/email_send.py"]) == [] and builder.tap_hits(["assistant/scripts/email_send.py", "assistant/doer/vault.py", "assistant/agent/brain.py"]) == ["assistant/scripts/email_send.py", "assistant/doer/vault.py"],
+   "auto_ok: a send or credential path keeps the whole request on a card (tap_hits)")
+ok(builder.auto_ok(_req_owner, ["scripts/guardrails/check_gates.py"]) == [], "auto_ok: a hard path is never approved")
+
 print(f"\nALL {N} PASSED")

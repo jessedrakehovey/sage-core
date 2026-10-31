@@ -76,6 +76,16 @@ PROTECTED_PATHS = [
 # Never buildable, even with an owner's tap: the gates and their tripwire, the harness, the builder
 # itself (it cannot rewrite itself mid-run), live data, raw sources.
 HARD_PATHS = ["scripts/guardrails/", ".claude/", ".git", "assistant/agent/builder.py", "assistant/data/", "Raw/"]
+# Always an owner's tap, even for a build the owner asked for in chat: the send paths, the executor, the phone,
+# the credentials, the identity files and the memory. Every OTHER protected path is built on the owner's own ask
+# (2026-10-30: "Sage should be able to do anything I ask it even if it needs to stop, immediately build something";
+# the doer's browser fix had waited three days on a card asking leave to edit computer_policy.py).
+TAP_PATHS = ["assistant/scripts/email_send.py", "assistant/scripts/exec_store.py", "assistant/scripts/drain.py",
+             "assistant/scripts/cards.py", "assistant/scripts/collection_autosend.py", "assistant/scripts/phone_bridge.py",
+             "assistant/scripts/mail.py", "assistant/scripts/setup_creds.py", "assistant/doer/vault.py",
+             "assistant/doer/login_fill.py", "assistant/config.json", "assistant/org.json", "assistant/agent/people.json",
+             "assistant/agent/profile.json", "scripts/card_ingest/", "CLAUDE.md", "Memory/", "Schema/"]
+_ASK_BY = re.compile(r"\*\*Ask \(([A-Za-z][\w'-]*)\b", re.I)
 BUILD_OK, BUILD_OTHER, BUILD_DROP = "Build it, I approve (Recommended)", "Build it another way", "Drop it"
 MAX_DIFF_LINES = 2000      # was 600 until 2026-10-23: four owner-asked builds of 1400-1800 lines (tests included) died on it
 FLAKY_RERUNS = 1           # a suite that fails after the change is run once more before the build is blamed for it
@@ -300,6 +310,43 @@ def protected_hits(paths: list) -> list:
 def hard_hits(paths: list) -> list:
     return [p for p in protected_hits(paths) if any(p == x.rstrip("/") or p.startswith(x if x.endswith("/") else x + "/")
                                                     for x in HARD_PATHS)]
+
+
+def tap_hits(paths: list) -> list:
+    """The protected hits that stay an owner's tap whoever asked (TAP_PATHS)."""
+    return [p for p in protected_hits(paths) if any(p == x.rstrip("/") or p.startswith(x if x.endswith("/") else x + "/")
+                                                    for x in TAP_PATHS)]
+
+
+def owner_asked(req: dict) -> str:
+    """The owner whose own chat ask this request came from (the note's capability footer, or its "**Ask (Name, ...)**"
+    line), '' when it was filed by the dream, the reflex, a port or a staff member. Their ask is the approval for the
+    protected core, except the tap paths and the hard paths."""
+    text = str(req.get("text") or "")
+    who = ""
+    try:
+        import capability
+        who = str(capability.parse_footer(text).get("person") or "")
+    except Exception:  # noqa: BLE001
+        who = ""
+    if not who:
+        m = _ASK_BY.search(text)
+        who = m.group(1) if m else ""
+    if not who:
+        return ""
+    p = core.person_for(handle=who.lower()) or next((u for u in (core.people().get("users") or {}).values()
+                                                      if str(u.get("name") or "").split(" ")[0].lower() == who.lower()), None)
+    return who.lower() if p and core.is_owner(p) else ""
+
+
+def auto_ok(req: dict, hits: list) -> list:
+    """The protected hits the owner's own ask approves: all of them, when none is a hard or a tap path; else none
+    (one card for the whole request, as before)."""
+    if not hits or not owner_asked(req):
+        return []
+    if hard_hits(hits) or tap_hits(hits):
+        return []
+    return sorted(set(hits))
 
 
 def fence(paths: list, allow=(), ignore=()) -> tuple:
@@ -720,6 +767,14 @@ def run(max_n: int = 2, dry: bool = False, first: str = "") -> dict:
             hits = fence(paths_now)[0] or _named_paths(str(res.get("question") or "") + " " + str(res.get("summary") or ""))
             reset(wt)
             s.update(summary=res.get("summary", ""), question=res.get("question", ""))
+            ok_now = auto_ok(req, hits) if not s.get("owner_ok_auto") else []
+            if ok_now:
+                # the owner asked for this in chat: their ask is the tap for these files; built again in this run
+                s.update(status="approved", owner_ok=sorted(set((s.get("owner_ok") or []) + ok_now)), owner_ok_auto=True,
+                         attempts=max(0, int(s.get("attempts", 1)) - 1))
+                log(f"BUILDER {key}: the owner's own ask approves {', '.join(ok_now)}; building again now")
+                reqs.append(req)
+                continue
             ask_owner(req, s, hits, str(res.get("question") or res.get("summary") or ""))
             other.append((req, res))
             log(f"BUILDER asked the owner: {key} :: {res.get('summary', '')}")

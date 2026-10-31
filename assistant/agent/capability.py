@@ -311,6 +311,10 @@ def file_build(d: dict, g: dict, by: str = "", previous: str = "", kick: bool = 
 
 # ------------------------------------------------------------------ seam 1: the brain's own reply
 LINE_BUILDING = "That piece isn't something I can do yet, so I'm building it now; I'll pick this up myself here once it's in."
+# What the owner hears when a gap is filed from their ask: one short acknowledgement, then nothing until the ask comes
+# back and works (2026-10-30: "not update me at all until it works. I hate seeing 'Still working', 'That didn't work'").
+# The bridge replaces the turn's "can't" reply with this; a replay that fails again says nothing and is refiled.
+ACK_LINE = "On it."
 LINE_AGAIN = "That still didn't take, so I'm building it a different way; I'll finish this here when it lands."
 
 

@@ -83,6 +83,9 @@ BLOCKED_LINES = {
     "review_summary": "From my review of yesterday's chats: The scorecard says the tracking.mining loop is being ignored",
     "build_slipped": "Still not built: Turn off the nightly YouTube scout. If you still want it, say so once more.",
     "unconfirmed": "I could not confirm that Upload owner1's 2022 back-tax packet into Google Drive on je went; check once and tell me.",
+    "progress": "Still on it; it stopped partway without noting a milestone, so I'm taking that piece again.",
+    "progress ": "I couldn't finish \"the cart\": the window is not on screen. It got as far as: signed in.",
+    "progress  ": "That still didn't take, so I'm building it a different way; I'll finish this here when it lands.",
 }
 for cls, line in BLOCKED_LINES.items():
     ok(voice.classify(line) == cls.strip() and voice.gate(line) == "", f"held back ({cls.strip()}): {line[:50]!r}")
@@ -127,8 +130,10 @@ t = voice.gate('I built a fix for this one: "Doer falls back". What changed: 5a7
 ok(t.startswith("Done: The builder and the doer switch to the fallback account"), f"...no commit id, no date: {t!r}")
 t = voice.gate("I am waiting for a verification code: Type the 6-digit MyDMV code just texted to the phone ending 737 (it expires in 10 minutes). It was sent to your phone or email. Open the card on Mission Control (https://x), type the code in the note box and tap Approve; I will carry on. No code? Tap 'No code came'.")
 ok(t == "I need the 6-digit MyDMV code just texted to the phone ending 737 (it expires in 10 minutes). Reply with it here and I'll carry on.", f"a code ask, as a person asks: {t!r}")
-t = voice.gate('I could not finish on "Upload owner1\'s 2022 back-tax packet from C:/Users/owner1/Documents/Taxes/2022 into Google Drive on ownernam…": I didn\'t upload anything. My rules bar me from reading anything under Taxes.')
-ok(t == 'I couldn\'t finish "Upload owner1\'s 2022 back-tax packet": I didn\'t upload anything. My rules bar me from reading anything under Taxes.', f"a blocked doer line quotes the job at a word: {t!r}")
+t = voice.gate('One step needs you on "Upload owner1\'s 2022 back-tax packet from C:/Users/owner1/Documents/Taxes/2022 into Google Drive on ownernam…": the site wants a verification code only your phone gets.')
+ok(t == 'One step needs you on "Upload owner1\'s 2022 back-tax packet": the site wants a verification code only your phone gets.', f"an owner-only block quotes the job at a word: {t!r}")
+ok(voice.gate('I could not finish on "Upload the packet": my rules bar me from reading anything under Taxes.') == "",
+   "a 'could not finish' line never reaches Chat any more (the build is filed instead, 2026-10-30)")
 ok(voice.gate("Handing that to Sage to work through; it comes back here with what was done.") == "On it. I'll come back here with what I did.", "a tap ack reads like a person")
 ok(voice.gate("Tony's costume party, time to get ready: Tony's costume party is at 6:30 tonight, 248 S Example Ave in Marrow Bay.", "routine")
    == "Tony's costume party is at 6:30 tonight, 248 S Example Ave in Marrow Bay.", "a routine drops its 'Title: ' prefix")

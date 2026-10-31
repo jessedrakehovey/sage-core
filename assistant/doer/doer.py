@@ -537,6 +537,49 @@ def portal(arg: str) -> str:
     return f"{why}. The quickest way to finish it yourself, from your phone: {how}."
 
 
+_OWNER_ONLY = re.compile(r"password|passcode|login saved|no login|sign in yourself|signed? in on your|verification code|one-time code|"
+                         r"\b2fa\b|two-factor|authenticator|your tap|tap (?:approve|the card)|\bpay(?:ment|ing)?\b|card (?:number|details)|"
+                         r"\bcvv\b|identity|id\.me|captcha|your (?:own )?(?:hand|phone)\b|only you can", re.I)
+
+
+def _owner_only(arg: str) -> bool:
+    """A block only the owner can clear: a credential, a code, a tap, money. Everything else is the agent's to build."""
+    return bool(_OWNER_ONLY.search(str(arg or "")))
+
+
+def _gap_for(t: dict, why: str) -> str:
+    """A blocked or resultless run files the build for what was missing (capability.py), by code, and nothing is
+    said in chat until the ask comes back and works (the owner, 2026-10-30: "stop, immediately build something, and
+    not update me at all until it works"; "I hate seeing 'Still working', 'That didn't work'"). -> the build key."""
+    try:
+        import capability
+        p = t.get("payload") or {}
+        who = str(p.get("from") or _first_owner())
+        ask = " ".join(str(p.get("text") or t.get("summary") or t.get("title") or "").split("\n\nHOW WE DID")[0].split())
+        if not ask:
+            return ""
+        d = capability._load()
+        g = capability._find(d, who, ask)
+        if g and g.get("status") in ("building", "capped", "unfiled"):
+            capability._save(d)
+            return str(g.get("build") or "")
+        if g and g.get("status") in ("built", "replayed"):
+            g["quote"] = str(why)[:400]
+            key = capability.file_build(d, g, by=who, previous=f"{g.get('build', '')} landed and the job still stopped: \"{str(why)[:200]}\"")
+            capability._save(d)
+            return key
+        g = capability.open_gap(d, "capability", ask, str(why), who,
+                                {"convo": str(p.get("convo") or f"dm:{who}"), "thread": str(p.get("thread") or ""), "space": str(p.get("space") or "")},
+                                "doer blocked")
+        g["ask_full"] = ask[:600]
+        key = capability.file_build(d, g, by=who)
+        capability._save(d)
+        return key
+    except Exception as e:  # noqa: BLE001
+        log(f"gap for ticket {t.get('id')} failed: {type(e).__name__}: {str(e)[:120]}")
+        return ""
+
+
 def _card_has_screenshot(qid: str) -> bool:
     """True when the checkpoint card really carries a screenshot file (report.py put its name in the exec payload)."""
     try:
@@ -577,7 +620,9 @@ def _say(who: str, kind: str, arg: str, t: dict | None = None) -> str:
         shot = " (with a screenshot)" if _card_has_screenshot(qid) else ""
         return f"I got it to the last step and stopped: {step or arg} The card{shot} is in this chat; tap Approve and I will finish."
     if kind == "DOER_BLOCKED":
-        return f"I could not finish{on}: {portal(arg)}"
+        # only an owner-only step is said (a password, a code, a tap, a payment); any other block files its build
+        # by code and stays quiet until the ask comes back and works (run_ticket, 2026-10-30)
+        return f"One step needs you{on}: {portal(arg)}"
     # plain words, never JSON (the owner 2026-10-18): what it was on, and why it stopped, in one line. A job that
     # left milestone notes says how far it got instead of "nothing was changed" (notes.py, 2026-10-28)
     got = {}
@@ -721,6 +766,15 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
         say += _after_standing(t)
     if mk == "DOER_BLOCKED" and _signin_check(arg):
         say += " " + str(_SIGNIN.get("say") or "If the site is signed out, a sign-in window will be up on the PC until you sign in.")
+    elif mk == "DOER_BLOCKED" and not _owner_only(arg):
+        # not the owner's step: the missing piece is built now and the ask comes back by itself; no words in chat
+        bk = _gap_for(t, arg)
+        log(f"ticket {tid}: blocked, build filed {bk or '(none)'}; nothing said in chat")
+        say = ""
+    elif mk not in ("DOER_DONE", "DOER_ANSWER", "DOER_CHECKPOINT", "DOER_BLOCKED"):
+        bk = _gap_for(t, arg)
+        log(f"ticket {tid}: no result, build filed {bk or '(none)'}; nothing said in chat")
+        say = ""
     try:
         learn = _learn()                                 # the self-learning engine (zero-LLM): record, harvest lesson.json, score
         if mk in ("DOER_DONE", "DOER_ANSWER"):
@@ -729,9 +783,21 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
             learn.after_run(t, r, "browser", started)
     except Exception as e:  # noqa: BLE001
         log(f"learn failed: {type(e).__name__}")
-    deliver(t, say)
+    if say:
+        deliver(t, say)
+    else:
+        _mc_note(f"{job_line(t) or 'a job'}: {mk or 'no result'}: {arg[:300]} (building the missing piece; nothing said in chat)")
     log(f"ticket {tid}: {mk or 'NO_MARKER'} {arg[:160]}")
     return f"{mk or 'NO_MARKER'}: {arg}"
+
+
+def _mc_note(text: str) -> None:
+    """A line for Mission Control only (never Chat): the record of a quiet stop."""
+    try:
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "notify.py")], input=text, capture_output=True, text=True,
+                       encoding="utf-8", timeout=20, cwd=str(VAULT), creationflags=NO_WINDOW)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def run_approved(payload: dict, dry: bool = False) -> int:

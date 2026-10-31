@@ -1332,8 +1332,12 @@ def handle(msg: dict, pre_ack: str = "") -> None:
         except Exception:  # noqa: BLE001
             pass
         if gap_line:
-            out = (out + " " if out else "") + gap_line
-            silent = False
+            # a gap was filed from this ask (capability.after_turn): the owner hears one acknowledgement, not the
+            # "can't" and not "I'm building it"; a replay that failed again says nothing and was refiled (2026-10-30)
+            if msg.get("_capability_replay"):
+                out, silent = "", True
+            else:
+                out, silent = capability.ACK_LINE, False
         if not out and (silent or not direct):
             # NO_REPLY means silence in every mode: nothing is posted and the placeholder comes down
             _drop_ack(ack)
