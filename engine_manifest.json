@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.31+6a979d6",
+  "version": "2026.10.31+c775344",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-31T12:54:42"
+  "synced": "2026-10-31T16:41:21"
  },
  "modules": {
   "money": {
@@ -282,7 +282,7 @@
   "assistant/scripts/phone_bridge.py": "cc107e9d190e1db84d1a82f16dbf2f2b8534c7d622e79dde2bb285263d86794d",
   "assistant/scripts/phone_nudge.py": "29829cd428dc31515bdcd51f8fd496dc3c40206b1e0ecda5692df7899cd9f065",
   "assistant/scripts/preconditions.py": "85167dee9d9b2b4eb6f1248683cd066293b9689af59d2c76135439c904295e1d",
-  "assistant/scripts/regression_packets.py": "ff9d9b66e89cb0fee0c3b26ea1f2e093ebb08b8aa2e1b2e66f4cb3a3e43bd0e4",
+  "assistant/scripts/regression_packets.py": "03b3448760caf8c94c50da734ab935a1f51bef79314c288d7d5525d0154c5738",
   "assistant/scripts/relay_poll.py": "eec55fb06af4e4c524890f7bc376479f09b17fa315b6267a0aab340b3d407aa6",
   "assistant/scripts/rescue.ps1": "5192ef950ded73b984fac125c1ab7c93486cca09d88d04aefd1103026feb3dac",
   "assistant/scripts/rulings.py": "0a802740336c4047b84ce91c0f0f49e1df403e98e29ecd307911c515e03987f8",
@@ -402,6 +402,7 @@
   "assistant/tests/test_projects.py": "8bfb9731b9127f866d87a87d24fbcccf0e8129fc9d3613ccfbd8dd1a5bbb4e2a",
   "assistant/tests/test_receipts.py": "a2207a7e08d8b50efa5c670d25f67bdb8851d883028f28914b634f18cd98588f",
   "assistant/tests/test_reflex.py": "570c71d4507c15063e4d8738cd23763fb925654ad26fef699c7c98b7b3bcbf85",
+  "assistant/tests/test_regression_packets.py": "94b7a9ee71fc60023c57efbfe930927cec578d1ea2a45977fddb9f348aa5567f",
   "assistant/tests/test_relay.py": "9747362db03eaecd7467fa199f56050c3edf12390bae1ae567727d153678ea03",
   "assistant/tests/test_repeat_asks.py": "eef650a5ab60164cbb5a6c1f1cfa321edeb3a67b356add88b9424ffe811fbb65",
   "assistant/tests/test_rulings.py": "06e18cf07d20a0c273293de7a4c0a42361bb859ab0fe730fa3492e56ee774a61",
@@ -463,6 +464,8 @@
   "scripts/skill_radar/candidates.json": "f5015130aa58d7172ae42ba7201a59e7f3b84e9ec8a7426772eda8876874b443",
   "scripts/skill_radar/detect.py": "6fcc64fe74ae039e1358aaf043e041dbeee5cd707b43dded92eddf4c701892eb",
   "scripts/skill_radar/dismissed.json": "dc72974c7921126c6fc30a6b4d97b6ac20eb83b6f4bbba311618fcb1a9a7f56b",
-  "scripts/wiki_tool.py": "c4408edf6034cc101984f87167d523257cd40a0835059b3d312efd20e8ef7ecb"
+  "scripts/wiki_tool.py": "c4408edf6034cc101984f87167d523257cd40a0835059b3d312efd20e8ef7ecb",
+  "scripts/zr_settings/README.md": "a2dedd263ca85fe6432ac0bb1ee924918b29ad7ac32b8a9558070c68dc94977c",
+  "scripts/zr_settings/profile/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
  }
 }
