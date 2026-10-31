@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+acb4410",
+  "version": "2026.10.30+860042d",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T19:50:23"
+  "synced": "2026-10-30T19:51:19"
  },
  "modules": {
   "money": {
@@ -94,7 +94,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "461a84164f7a7e8522ed69bdc9051cc2ec9aa0db0004b0da8f078d443c921974",
+  "assistant/README.md": "867850e4f5a73deec127e23224ae142bce6ed65284acdaf590e38d24619bd7b6",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
   "assistant/agent/README.md": "2fd3d9c5983433d762d67f5fe66239967cd4d0f2e108ffd5dda0af28230a4fde",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",
@@ -179,7 +179,7 @@
   "assistant/channels/slack.py": "7ba8119e996e8a4c859e071f275349f8f3b6dc13306eb68d2ed10f8c912cc123",
   "assistant/config.json": "9baa5ce76eb824679e1f0fd70fca0201a7df0367f08fd9e64c3e7b30bab50aa8",
   "assistant/connections.json": "19f3b14789f88ae1599e37a1985cb127469bf7d0e230da01974c7c413f596491",
-  "assistant/core_sync.py": "ae588c98dbcd7de4ea52b3af8614112b8da476c7e9b4dcb40292788bc97b5298",
+  "assistant/core_sync.py": "4010e7f9cffd2614419f7dea9dc26e416665441be7699dd00ab4709d32f4a74e",
   "assistant/doer/README.md": "ecdad511dfa470b7ca7ac8b8a7fe267533b73c1e1861ba9a0c079850f8c8ce45",
   "assistant/doer/browser.py": "370886c24c3a32cdc0910e914649999215b937c2e775e629b5e0fcae4624b3c6",
   "assistant/doer/click_guard.py": "4cede7780eba915901f0fbb0142cfc7a91373e369821af151bae945cc87d52fe",
@@ -205,7 +205,7 @@
   "assistant/installer/windows/build.ps1": "3155e7cf64f0029c5bd276bc82851cddfb37f071e4017e9176632ed60c43a776",
   "assistant/installer/windows/install.ps1": "b1433ef98574c65f910f50c6c62d9d906977ed037e2ab5b73cbb700674855863",
   "assistant/installer/windows/release.ps1": "544f990a888a1888161d3a41ebce97b13879baf2bc4d5997e8e8f7005e04074b",
-  "assistant/jobs.json": "cdd9c916e5d4107a25c80c1e66d84cdc7bcfa8d5a84e732b2af97a13960c3448",
+  "assistant/jobs.json": "88dce9d74478aa95f6d18e24f42bde8e99e8afefe62e41a02815229eb6abdde8",
   "assistant/mining.json": "bc9c3ced2f775ff1994e395712fb77742f1df30fc9a2750447aab8d8e2672924",
   "assistant/money.json": "6b0bf594f29bf0f17da774c9a871d1f032ec92268ab88ff6aad8c95702d2d22a",
   "assistant/money_rules.json": "188daef0ff9c7628e49e0540e8a64e9fd335129203d5a7f64f64c4d0c1195cfe",
@@ -236,6 +236,7 @@
   "assistant/scripts/conn_check.py": "6695920563ec959054552d3821c41d26f5862796495f5771b432749417b3c766",
   "assistant/scripts/connect.py": "db4e3d97e467f2c221dd87ba70c7938d0cd35dfae39e411ba036cc0719987ed3",
   "assistant/scripts/contacts.py": "ca4c1a8b2f35fdc4666efe2728266890957f165cd99ad9aec288730db97a7ee6",
+  "assistant/scripts/core_release.py": "4cfef525ae494ea13c897545323c73b17fcd8be7474ead592990393335c21c4f",
   "assistant/scripts/crm.py": "7f726aa0fa305698476f6ec848e11aa4522d45cdf2da0563ca292604b16768c9",
   "assistant/scripts/dashboard.py": "347c93f958c2eb59b6e9001f9bef250c0647453002942b852b11ce20ea2ac7ad",
   "assistant/scripts/deadman.ps1": "32f6b22bc9d3a3be95bb1a0187c86de327bfe34503d211f130624153f0a63ea5",
@@ -315,7 +316,7 @@
   "assistant/setup_skill/sage-setup/SKILL.md": "2c860d036e4b5a7b25f722a29f4a389c781d407d9929940ce4b1597f042e39e0",
   "assistant/setup_skill/sage-setup/bootstrap.ps1": "fe992ad4e495318ad33c2e38798bba771872495c6a64cc9afac52377b6d07f2a",
   "assistant/setup_skill/sage-setup/bootstrap.sh": "b810d1df720d046beb1c01f06f9dfcd8012a9441e5cf0ccbeb97c39a91cd1962",
-  "assistant/spine_jobs.json": "eeb4eabd13e572277e4c98a7111f403a686269b7347ce028f773eb518c103c37",
+  "assistant/spine_jobs.json": "a67b5d00cacf00cce5c371132989a97bb788b3d4615ea078be8e531d5924334b",
   "assistant/tasks/AssistantMorning.xml": "5266f9df8b7449e5039e9765f63918459a59d51d42ef66ba0f9d3cde3cb6cadd",
   "assistant/tasks/AssistantTick.xml": "c6ee06fb72ce9fdaeb3b04eefbef2530c194e0d59a68cdf0451f86f3348811cc",
   "assistant/tasks/CommsProbe.xml": "ea7794d2e7adb2192d269678c2da2e681575a677d119ad7ed8df4dfc0ac103f7",
@@ -357,7 +358,8 @@
   "assistant/tests/test_connect.py": "1fca8360bd270e336579ad29d5563d7b3a6e6e5ee195f6ea6490f94f555af0cf",
   "assistant/tests/test_contacts.py": "c1e1f904a759891e27ffd30c2002d54e264ddaff30aa5b21f1f857de6a336f12",
   "assistant/tests/test_context_resolution.py": "108ee4998a74d17e1ead7a5ec23fd93f8d1d9ed16c3347923925d55e31382785",
-  "assistant/tests/test_core_sync.py": "1ae8002b6165cbf6221f1c96ff1cb1da7100bf952af6871f92a61463942ef05f",
+  "assistant/tests/test_core_release.py": "18b50769c6dd42df974ad2e851d9c71eee911cb87d524992d00196e175163352",
+  "assistant/tests/test_core_sync.py": "f3941f05d47afbc444d2d85ef0c0f8b9e2c8f63955f1bab9f821d8c18b4e0459",
   "assistant/tests/test_core_sync_relay.py": "7e1c4f9759eb7976fc3910561e819886dc2a41eb866c1d1dc7c2d9c98ce304bc",
   "assistant/tests/test_core_sync_template.py": "9b3b94fb4bc88c1dc4f7788ba9e7c025bfc18799d9fc4cb71ec3f02f632f1416",
   "assistant/tests/test_correction.py": "07a6b02c1e64650583911f37155687676278eef46c308412723276cc0f8ab0bf",

@@ -34,6 +34,15 @@
       "match": ["bank", "chase", "wells fargo", "wellsfargo", "relay", "relayfi", "citi", "citibank", "bofa", "bank of america", "bankofamerica", "capital one", "capitalone", "credit union", "usbank", "us bank", "simplefin", "american express", "amex", "schwab"],
       "keep": ["plaid", "venmo", "paypal"],
       "aliases": ["purge bank logins", "remove bank logins", "delete bank logins", "purge bank passwords", "bank login purge", "remove bank passwords"]
+    },
+    {
+      "key": "core_publish",
+      "name": "Publish the template update",
+      "lane": "personal",
+      "what": "push the template checkout (core_sync.json core_root) to its public repository and cut a release, after every privacy gate (audit, people, history) and the template's tests pass again at the tap; nothing is pushed when one fails",
+      "cmd": ["python", "assistant/scripts/core_release.py", "publish"],
+      "args": {},
+      "aliases": ["publish sage-core", "publish the template", "release sage-core", "push sage-core", "publish core", "sage-core release"]
     }
   ]
 }

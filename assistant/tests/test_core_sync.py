@@ -213,6 +213,64 @@ check("status reads", "holds: 1" in r.stdout and "behind: 0" in r.stdout, r.stdo
 notes = [json.loads(ln) for ln in (DATA / "cards.jsonl").read_text(encoding="utf-8").splitlines() if ln.strip()]
 check("a Mission Control note per run that changed something, none for an up-to-date run", 6 <= len(notes) <= 12 and all(n.get("source") == "core_sync" for n in notes), str(len(notes)))
 
+# ---------------------------------------------------------------- 10. a change made directly in the template is never undone
+CORE_ALPHA = "assistant/scripts/gamma.py"
+w(CORE_ALPHA, '"""gamma - a generic helper."""\n\n\ndef one():\n    return 1\n')
+commit("gamma: one")
+rc, out = sync()
+check("gamma ships", "def one" in (core_text(CORE_ALPHA) or ""), out[-200:])
+(CORE / CORE_ALPHA).write_text((core_text(CORE_ALPHA) or "") + '\n\ndef two():\n    return 2  # ported in the template\n', encoding="utf-8")
+subprocess.run(["git", "-c", "user.name=porter", "-c", "user.email=p@example.invalid", "commit", "-q", "-am", "gamma: two (a port made in the template)"],
+               cwd=str(CORE), capture_output=True, timeout=60)
+direct_sha = cgit("rev-parse", "--short", "HEAD")
+w(CORE_ALPHA, (V / CORE_ALPHA).read_text(encoding="utf-8") + '\n\ndef three():\n    return 3\n')
+commit("gamma: three")
+rc, out = sync()
+g = core_text(CORE_ALPHA) or ""
+h = state()["holds"].get(CORE_ALPHA) or {}
+check("a vault change to a file changed directly in the template is held, the template's change kept",
+      "held=1" in out and "def two" in g and "def three" not in g and h.get("core_only", "").startswith(direct_sha), out[-200:] + json.dumps(h)[:200])
+sys.path.insert(0, str(V / "assistant"))
+import core_sync as cs  # noqa: E402
+dc = cs.direct_commits(CORE, "")
+check("direct_commits lists the template's own commit (and not the sync's)", [d[0] for d in dc][-1:] == [direct_sha] and CORE_ALPHA in dc[-1][2]
+      and all(cgit("log", "-1", "--format=%an", d[0]) != "core-sync" for d in dc), str(dc[-3:]))
+w(CORE_ALPHA, (V / CORE_ALPHA).read_text(encoding="utf-8") + '\n\ndef two():\n    return 2  # brought here from the template\n')
+commit("gamma: two, brought into the vault")
+rc, out = sync()
+g = core_text(CORE_ALPHA) or ""
+check("once the vault carries the change (comments may differ), the hold releases and both changes land",
+      "released=1" in out and "def two" in g and "def three" in g and CORE_ALPHA not in state()["holds"], out[-200:])
+w(CORE_ALPHA, (V / CORE_ALPHA).read_text(encoding="utf-8") + '\n\ndef four():\n    return 4\n')
+commit("gamma: four")
+rc, out = sync()
+check("after the release, later vault changes write freely", "applied=1" in out and "def four" in (core_text(CORE_ALPHA) or ""), out[-200:])
+(CORE / CORE_ALPHA).write_text((core_text(CORE_ALPHA) or "") + '\n\ndef five():\n    return 5\n', encoding="utf-8")
+subprocess.run(["git", "-c", "user.name=porter", "-c", "user.email=p@example.invalid", "commit", "-q", "-am", "gamma: five"], cwd=str(CORE), capture_output=True, timeout=60)
+w(CORE_ALPHA, (V / CORE_ALPHA).read_text(encoding="utf-8") + '\n\ndef six():\n    return 6\n')
+commit("gamma: six")
+rc, out = sync()
+check("held again for a second direct change", "held=1" in out and CORE_ALPHA in state()["holds"], out[-200:])
+r = subprocess.run([sys.executable, str(V / "assistant" / "core_sync.py"), "--vault", str(V), "--core", str(CORE), "adopt", CORE_ALPHA],
+                   capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
+g = core_text(CORE_ALPHA) or ""
+check("adopt lets the vault's version win: re-exported now, hold gone", r.returncode == 0 and "adopted" in r.stdout and "def six" in g and "def five" not in g
+      and CORE_ALPHA not in state()["holds"], r.stdout + r.stderr)
+
+# ---------------------------------------------------------------- 11. history: a name added then scrubbed still fails the push gate
+before_leak = cgit("rev-parse", "HEAD")
+r = subprocess.run([sys.executable, str(V / "assistant" / "core_sync.py"), "--vault", str(V), "--core", str(CORE), "history", "--range", "HEAD"],
+                   capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
+check("history over the clean template is 0", r.returncode == 0 and "history: 0 added" in r.stdout, r.stdout[-400:])
+for body, msg in (("# ask Pat Quinn first\n", "leak"), ("", "scrub")):
+    (CORE / "assistant/LEAK.md").write_text(body or "# ask the owner first\n", encoding="utf-8")
+    subprocess.run(["git", "-c", "user.name=porter", "-c", "user.email=p@example.invalid", "add", "assistant/LEAK.md"], cwd=str(CORE), capture_output=True, timeout=60)
+    subprocess.run(["git", "-c", "user.name=porter", "-c", "user.email=p@example.invalid", "commit", "-q", "-m", msg], cwd=str(CORE), capture_output=True, timeout=60)
+r = subprocess.run([sys.executable, str(V / "assistant" / "core_sync.py"), "--vault", str(V), "--core", str(CORE), "history", "--range", f"{before_leak}..HEAD"],
+                   capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, timeout=120)
+check("history fails on a name one commit added even though HEAD no longer has it", r.returncode == 1 and "Pat Quinn" in r.stdout
+      and "Pat" not in (core_text("assistant/LEAK.md") or ""), r.stdout[-400:])
+
 print()
 print(f"{'ALL OK' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}  ({TMP})")
 sys.exit(1 if FAILS else 0)

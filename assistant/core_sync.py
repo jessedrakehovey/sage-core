@@ -28,7 +28,12 @@ commit with the vault's message. Zero LLM. Nothing of the organization travels:
     niche path. The next sync after the fix releases the hold by itself. Lines already there before the first sync
     are DEBT (reported once, `debt` lists them), never a hold;
   * every exported file must verify (sage: .py compiles, no prose carries a host or address; template: no raw
-    identifier or resident name survives), or that file is put back and held with the reason.
+    identifier or resident name survives), or that file is put back and held with the reason;
+  * a file someone changed DIRECTLY in the template (a commit there not made by this sync, newer than this sync's
+    last commit to the file) is never overwritten: the vault's version would undo that change. The file is held,
+    ONE build request asks to bring the change into the vault, and the hold releases itself once the vault's export
+    equals the template's copy (`adopt <relpath>` lets the vault's version win when that is the intent). 2026-10-30:
+    three ports landed straight in sage-core and the next vault commit to builder.py would have erased them.
 
 Record: <state_dir>/core_sync_state.json (last synced commit, holds, debt), core_sync_ledger.jsonl (one row per file
 per commit). A board note (Mission Control; never Chat) when a run applied, held or released something. Switches in
@@ -37,6 +42,8 @@ the vault's core_sync.json (sage: assistant/core_sync.json; template: scripts/re
   python core_sync.py [--vault DIR] [--core DIR] [--engine auto|sage|template] run [--dry-run] [--no-build]
   python core_sync.py ... status | holds | debt | ledger [-n N] | classify <relpath> [--rev REV] | refresh [--dry-run]
   python core_sync.py ... audit            every text file of the template scanned for the organization's identity (exit 1 on a hit)
+  python core_sync.py ... history [--range A..B]  every line the commits not pushed yet ADD, scanned the same way (exit 1 on a hit)
+  python core_sync.py ... adopt <relpath>  the vault's version of a file held for a direct template change wins (re-exported now)
 """
 from __future__ import annotations
 
@@ -60,7 +67,8 @@ import engine  # noqa: E402  (this folder's engine: the line classification both
 SENTINEL = "CORE_SYNC"
 CODE_SUFFIXES = (".py", ".ps1", ".js", ".gs", ".html", ".css", ".vbs", ".cmd", ".bat", ".sh")
 MAX_BUILDS_PER_RUN = 3
-GIT_AUTHOR = ["-c", "user.name=core-sync", "-c", "user.email=core-sync@example.invalid"]
+CORE_AUTHOR = "core-sync"
+GIT_AUTHOR = ["-c", f"user.name={CORE_AUTHOR}", "-c", "user.email=core-sync@example.invalid"]
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 DEFAULT_CONFIG = {
@@ -133,6 +141,8 @@ def state() -> dict:
     st.setdefault("runs", 0)
     st.setdefault("relay_seen", [])     # commons upgrade ids this side has filed (or passed at the relay's baseline)
     st.setdefault("relay_baseline", False)
+    st.setdefault("core_base", "")      # template commit before which no direct change is looked for (set on first use)
+    st.setdefault("core_ok", {})        # rel -> template commit at which the vault's export last equalled the template's copy
     return st
 
 
@@ -517,17 +527,23 @@ class SageEngine:
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "text": text[:3500], "kind": "note", "source": "core_sync"},
                                ensure_ascii=False) + "\n")
 
-    def file_build(self, rel: str, ask: str, since: str) -> str:
+    def file_build(self, rel: str, ask: str, since: str, title: str = "") -> str:
         """ONE wiki build request per held file, the shape builder.collect reads ("Build request" in the title,
         no builder mark). Written straight through wiki_writer, not capability.file_build: that one folds asks that
         share vocabulary into the first open request (same_ask), and every hold's ask shares most of its words, so
-        three held files became one request about the first (2026-10-28). The hold's `build` key is the dedupe."""
+        three held files became one request about the first (2026-10-28). The hold's `build` key is the dedupe.
+        With `title`: a direct template change to bring here (file_core_direct)."""
         sys.path.insert(0, str(self.vault / "assistant" / "agent"))
         import wiki_writer  # noqa: E402
-        title = f"Build request Make {rel.replace('/', ' ').replace('_', '-')} organization-free"[:90]   # wiki_tool FILENAME_RE: no _
-        body = (f"## Build request\n\n{ask}\n\nFile: `{rel}`. Held out of sage-core by core_sync since {since}; the next sync "
-                f"releases it by itself once the flagged lines are gone (`python assistant/core_sync.py classify {rel}` shows them). "
-                f"Tests: `assistant/tests/test_template.py`, `test_sage_core.py`, `test_core_sync.py`.")
+        if title:
+            title = re.sub(r"\s+", " ", "Build request " + re.sub(r"[^A-Za-z0-9 .,'-]+", " ", title)).strip()[:90]
+            body = (f"## Build request\n\n{ask}\n\nTemplate commit {since}. Tests: `assistant/tests/test_core_sync.py` "
+                    f"plus whatever the commit adds.")
+        else:
+            title = f"Build request Make {rel.replace('/', ' ').replace('_', '-')} organization-free"[:90]   # wiki_tool FILENAME_RE: no _
+            body = (f"## Build request\n\n{ask}\n\nFile: `{rel}`. Held out of sage-core by core_sync since {since}; the next sync "
+                    f"releases it by itself once the flagged lines are gone (`python assistant/core_sync.py classify {rel}` shows them). "
+                    f"Tests: `assistant/tests/test_template.py`, `test_sage_core.py`, `test_core_sync.py`.")
         x = wiki_writer.write({"title": title, "type": "workflow", "lane": "personal", "body": body}, by="core_sync")
         if x.get("status") not in ("applied", "appended"):
             _log(f"build request for {rel} refused: {x.get('reason')}")
@@ -703,7 +719,7 @@ class TemplateEngine:
         else:
             _log("note: " + text.replace("\n", " | ")[:400])
 
-    def file_build(self, rel: str, ask: str, since: str) -> str:
+    def file_build(self, rel: str, ask: str, since: str, title: str = "") -> str:
         cmd = self.cfg.get("build_cmd") or []
         if not cmd:
             return ""
@@ -978,6 +994,63 @@ def _commit_core(eng, core: Path, touched: list, message: str) -> str:
     return git(["rev-parse", "--short", "HEAD"], core).stdout.strip()
 
 
+def _core_head(core: Path) -> str:
+    return (git(["rev-parse", "HEAD"], core).stdout or "").strip()
+
+
+def core_only_change(core: Path, rel: str, since: str) -> tuple:
+    """(sha, subject) of a commit that changed `rel` in the template directly (not this sync) and is newer than this
+    sync's own last commit to it and than `since`; () when there is none. An older direct commit was already
+    overwritten by a later sync commit, so only the newest commit on the file counts."""
+    rng = [f"{since}..HEAD"] if since else ["HEAD"]
+    r = git(["log", "--format=%h%x1f%an%x1f%s", *rng, "--", rel], core)
+    for ln in (r.stdout or "").splitlines():
+        sha, author, subj = (ln.split("\x1f") + ["", ""])[:3]
+        return () if author == CORE_AUTHOR else (sha, subj)
+    return ()
+
+
+def carries_change(core: Path, sha: str, rel: str, data: bytes) -> bool:
+    """Does `data` (the vault's export) already carry what template commit `sha` did to `rel`'s WORKING lines (every
+    line it added is there, no line it removed is)? Then the change was brought into the vault and writing is safe,
+    whatever the prose around it says."""
+    def work(raw):
+        return {norm(v) for v in working_lines(rel, _decode(raw)).values()} if raw is not None else set()
+    new = work(git(["show", f"{sha}:{rel}"], core, binary=True).stdout or None)
+    r = git(["show", f"{sha}^:{rel}"], core, binary=True)
+    old = work(r.stdout if r.returncode == 0 else None)
+    have = work(data)
+    return (new - old) <= have and not ((old - new) & have)
+
+
+def guard_core_only(core: Path, rel: str, data: bytes, st: dict, prev=None) -> tuple:
+    """Would writing `data` over the template's copy of `rel` undo a change made there directly? (sha, subject) when it
+    would, else (). `prev` (the export of the vault's previous version, or a callable giving it) clears a direct commit
+    that left the file as the vault had it. A copy equal to `data` is reconciled: later vault changes write freely."""
+    dst = core / rel
+    if not dst.exists():
+        return ()
+    cur = dst.read_bytes()
+    if cur == data:
+        st["core_ok"][rel] = _core_head(core)
+        return ()
+    hit = core_only_change(core, rel, st["core_ok"].get(rel) or st.get("core_base") or "")
+    if not hit or carries_change(core, hit[0], rel, data):
+        return ()
+    before = prev() if callable(prev) else prev
+    if before is not None and before == cur:
+        return ()
+    return hit
+
+
+def hold_core_only(st: dict, rel: str, hit: tuple, since: str, subject: str) -> str:
+    why = f"changed directly in the template ({hit[0]} {hit[1][:80]}); the vault's version would undo it"
+    was = st["holds"].get(rel) or {}
+    st["holds"][rel] = {"since": was.get("since") or since, "lines": {}, "subject": subject, "noted": bool(was.get("noted")),
+                        "core_only": f"{hit[0]} {hit[1][:120]}", "build": was.get("build", "") if was.get("core_only") else ""}
+    return why
+
+
 def apply_commit(eng, vault: Path, core: Path, sha: str, cfg: dict, st: dict, ident: list, niche: list, allow: list, dry: bool, rc: dict | None = None) -> dict:
     subject = _subject(vault, sha)
     short = sha[:7]
@@ -1026,6 +1099,16 @@ def apply_commit(eng, vault: Path, core: Path, sha: str, cfg: dict, st: dict, id
             st["holds"][rel] = {"since": short, "lines": {}, "subject": subject, "noted": False, "verify": bad, "build": (st["holds"].get(rel) or {}).get("build", "")}
             rep["failed"].append((rel, bad))
             ledger({"commit": short, "file": rel, "action": "held", "why": "verify: " + bad})
+            continue
+
+        def _prev(rel=rel):
+            old = _rev_text(vault, _parent(vault, sha), rel)
+            return export_bytes(rel, old) if old is not None else None
+        hit = guard_core_only(core, rel, data, st, _prev)
+        if hit:
+            why = hold_core_only(st, rel, hit, short, subject)
+            rep["held"].append((rel, why))
+            ledger({"commit": short, "file": rel, "action": "held", "why": why})
             continue
         if not dry:
             dst = core / rel
@@ -1132,6 +1215,54 @@ def _fake(real: str, pool: tuple, taken: set) -> str:
     return pool[h % len(pool)] + str(h % 97)
 
 
+def history(eng, vault: Path, core: Path, cfg: dict, rng: str, quiet: bool = False) -> int:
+    """Every line ADDED by any template commit in `rng` (default: what the remote does not have yet), scanned with the
+    identity and people patterns. `audit` and `people` read the files as they are now; a push publishes every commit
+    in between too, so a name that one commit added and a later one scrubbed would still go out (2026-10-29: the
+    first public repo carried a phone number in its history). Exit 1 on a hit."""
+    if not rng:
+        up = (git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], core).stdout or "").strip()
+        rng = f"{up}..HEAD" if up else "HEAD"
+    r = git(["log", "-p", "--no-color", "--format=%x1e%h", rng], core)
+    if r.returncode != 0:
+        print(f"{SENTINEL} history: git log {rng} failed: {(r.stderr or '').strip()[:200]}")
+        return 1
+    ident, pats = eng.identity(), [rx for rx, _ in people_patterns(vault, cfg) if rx.rx is not None]
+    hits, n_lines, sha, rel = 0, 0, "", ""
+    for ln in (r.stdout or "").splitlines():
+        if ln.startswith("\x1e"):
+            sha = ln[1:].strip()
+            continue
+        if ln.startswith("+++ "):
+            rel = ln[6:] if ln.startswith("+++ b/") else ""
+            continue
+        if not ln.startswith("+") or not rel:
+            continue
+        n_lines += 1
+        body = ln[1:]
+        line_rel = rel if not (rel.endswith("engine_manifest.json") and re.search(r'"assistant/(?:catalog|onboarding)/', body)) else "assistant/catalog/x"
+        label = next((lbl for rx, lbl in for_path(line_rel, ident) if rx.search(body)), "")
+        if not label:
+            label = next(("person" for rx in pats if rx.rx.search(body)), "")
+        if label:
+            hits += 1
+            if not quiet and hits <= 40:
+                print(f"  {sha} {rel}: {label}: {body.strip()[:100]}")
+    m = git(["log", "--format=%x1e%h%n%B", rng], core)          # the commit messages go out too
+    for block in (m.stdout or "").split("\x1e"):
+        head, _, msg = block.partition("\n")
+        for body in msg.splitlines():
+            n_lines += 1
+            label = next((lbl for rx, lbl in for_path("assistant/COMMIT_MSG.md", ident) if rx.search(body)), "") \
+                or next(("person" for rx in pats if rx.rx.search(body)), "")
+            if label:
+                hits += 1
+                if not quiet and hits <= 40:
+                    print(f"  {head.strip()} commit message: {label}: {body.strip()[:100]}")
+    print(f"{SENTINEL} history: {hits} added line(s) of {n_lines} in {rng} mention the organization or a person")
+    return 1 if hits else 0
+
+
 def people(eng, vault: Path, core: Path, cfg: dict, write: bool = False) -> int:
     """Every person, surname and record id from the organization's records that the template still carries; with
     --write each gets a stable made-up stand-in in core_sync.json -> pseudonyms (then `refresh` re-exports)."""
@@ -1227,6 +1358,11 @@ def refresh(eng, vault: Path, core: Path, cfg: dict, dry: bool = False) -> int:
                 h["verify"] = bad
                 st["holds"][rel] = h
             continue
+        hit = guard_core_only(core, rel, data, st)
+        if hit:                                # a direct template change: refresh never undoes it
+            held_back.append(rel)
+            hold_core_only(st, rel, hit, rev[:7], "refresh")
+            continue
         if rel in st["holds"] and zero:
             st["holds"].pop(rel, None)         # clean under the current rules: released
         dst = core / rel
@@ -1290,8 +1426,8 @@ def file_builds(eng, st: dict, cfg: dict) -> list:
         return []
     filed = []
     for rel, h in list(st["holds"].items()):
-        if h.get("build") or len(filed) >= MAX_BUILDS_PER_RUN:
-            continue
+        if h.get("build") or h.get("core_only") or len(filed) >= MAX_BUILDS_PER_RUN:
+            continue                    # a direct template change has its own request (file_core_direct)
         lines = h.get("lines") or {}
         why = h.get("verify") or "; ".join(f"line {v.get('line')}: {v.get('why')}" for v in list(lines.values())[:6])
         ask = (f"Make {rel} organization-free so it can ship in the template: {why}. Move the organization's names, addresses, "
@@ -1305,6 +1441,54 @@ def file_builds(eng, st: dict, cfg: dict) -> list:
             h["build"] = key
             filed.append((rel, key))
             ledger({"file": rel, "action": "build-filed", "why": key})
+    return filed
+
+
+def direct_commits(core: Path, since: str) -> list:
+    """[(sha, subject, [files])] of template commits not made by this sync, oldest first, after `since`."""
+    rng = f"{since}..HEAD" if since else "HEAD"
+    r = git(["log", "--reverse", "--no-merges", "--format=%x1e%h%x1f%an%x1f%s", "--name-only", rng], core)
+    out = []
+    for block in (r.stdout or "").split("\x1e"):
+        lines = [ln for ln in block.strip().splitlines() if ln.strip()]
+        if not lines:
+            continue
+        sha, author, subj = (lines[0].split("\x1f") + ["", ""])[:3]
+        if author != CORE_AUTHOR:
+            out.append((sha, subj, lines[1:]))
+    return out
+
+
+def file_core_direct(eng, core: Path, st: dict, cfg: dict) -> list:
+    """ONE build request per template commit made there directly (a port another agent's session landed in the
+    template, a fix made in the template's own checkout): the vault does not have it, so the agent this sync serves
+    runs without it and the vault's next commit to the file would undo it (guard_core_only holds that file meanwhile)."""
+    if not cfg.get("file_builds", True) or not st.get("core_base"):
+        return []
+    seen = st.setdefault("core_direct", {})
+    filed = []
+    for sha, subj, files in direct_commits(core, st["core_base"]):
+        if sha in seen or len(filed) >= MAX_BUILDS_PER_RUN:
+            continue
+        names = ", ".join(files[:8]) + (f" and {len(files) - 8} more" if len(files) > 8 else "")
+        ask = (f"Bring the template commit {sha} ('{subj[:140]}') into this folder: it changed {names} in the template's "
+               f"checkout directly, so this agent does not run it and this folder's next commit to those files would undo it. "
+               f"`git -C {core} show {sha}` is the diff (its prose is scrubbed: keep this side's own comments). Apply the code, "
+               f"run the tests it adds, commit; the sync releases the file by itself once this side's code carries the change. "
+               f"Nothing to bring (already here, or it should not come): say so, and the owner's `python assistant/core_sync.py "
+               f"adopt <file>` lets this side's version win.")
+        try:
+            key = eng.file_build(files[0] if files else "", ask, sha, title=f"Bring the template change {subj[:60]} into this agent")
+        except Exception as e:  # noqa: BLE001
+            _log(f"build request for template commit {sha} not filed: {type(e).__name__}: {e}")
+            key = ""
+        if key:
+            seen[sha] = key
+            filed.append((sha, key))
+            ledger({"commit": sha, "action": "direct-build-filed", "why": key})
+            for f in files:
+                if (st["holds"].get(f) or {}).get("core_only", "").startswith(sha):
+                    st["holds"][f]["build"] = key
     return filed
 
 
@@ -1370,13 +1554,18 @@ def run(eng, vault: Path, core: Path, cfg: dict, dry: bool = False, no_build: bo
         print(f"{SENTINEL} bootstrapped {core} at {head[:7]} debt={n_debt}")
         return 0
     rc = relay_cfg(cfg, vault, eng)
+    if not st["core_base"]:             # direct template changes are looked for from here on (older ones were reconciled by hand)
+        st["core_base"] = _core_head(core)
     if head == st["last_commit"]:
         ports = relay_inbox(eng, cfg, st, rc, dry) if rc.get("enabled") else []
+        direct = file_core_direct(eng, core, st, cfg) if not dry else []
         if not dry:
             _save(STATE, st)
             if ports:
                 note(eng, "port requests filed from the commons:\n" + "\n".join(f"- {uid}: {key}" for uid, key in ports), cfg)
-        print(f"{SENTINEL} up to date at {head[:7]} holds={len(st['holds'])} ports={len(ports)}")
+            if direct:
+                note(eng, "template changes made there directly, to bring here:\n" + "\n".join(f"- {sha}: {key}" for sha, key in direct), cfg)
+        print(f"{SENTINEL} up to date at {head[:7]} holds={len(st['holds'])} ports={len(ports)} direct={len(direct)}")
         return 0
     r = git(["rev-list", "--reverse", "--first-parent", f"{st['last_commit']}..{head}"], vault)
     shas = [s for s in (r.stdout or "").split() if s]
@@ -1404,12 +1593,14 @@ def run(eng, vault: Path, core: Path, cfg: dict, dry: bool = False, no_build: bo
             _save(STATE, st)
         _log(f"{sha[:7]} {rep['subject'][:60]!r}: applied {len(rep['applied'])} held {len(rep['held'])} promoted {len(rep['promoted'])} "
              f"deleted {len(rep['deleted'])} skipped {len(rep['skipped'])} failed {len(rep['failed'])}")
-    new_holds = [(rel, (st["holds"][rel].get("verify") or "; ".join(f"line {v.get('line')}: {v.get('why')}" for v in list((st["holds"][rel].get("lines") or {}).values())[:3])))
+    new_holds = [(rel, (st["holds"][rel].get("verify") or (st["holds"][rel].get("core_only") and "changed directly in the template: "
+                                                             + st["holds"][rel]["core_only"]) or "; ".join(f"line {v.get('line')}: {v.get('why')}" for v in list((st["holds"][rel].get("lines") or {}).values())[:3])))
                  for rel in st["holds"] if rel not in before_holds]
     ports = relay_inbox(eng, cfg, st, rc, dry) if rc.get("enabled") and not no_build else []
     if not dry:
         if not no_build:
             filed = file_builds(eng, st, cfg)
+            filed += [(f"template commit {sha}", key) for sha, key in file_core_direct(eng, core, st, cfg)]
         for rel in st["holds"]:
             st["holds"][rel]["noted"] = True
         _save(STATE, st)
@@ -1434,8 +1625,41 @@ def _print_holds(st: dict) -> None:
         print(f"{rel}  (held since {h.get('since')}{', build ' + h['build'] if h.get('build') else ''})")
         if h.get("verify"):
             print(f"   verify: {h['verify']}")
+        if h.get("core_only"):
+            print(f"   changed directly in the template: {h['core_only']} (bring it here, then `adopt {rel}`)")
         for v in list((h.get("lines") or {}).values())[:10]:
             print(f"   line {v.get('line')}: {v.get('why')}")
+
+
+def adopt(eng, vault: Path, core: Path, cfg: dict, rel: str) -> int:
+    """The vault's version of `rel` wins over a direct template change (it was brought here, or it is not wanted):
+    re-export it from the last synced commit now, drop the hold, and mark the file reconciled."""
+    st = state()
+    rev = st["last_commit"]
+    if not rev or not eng.core_ready(core):
+        print(f"{SENTINEL} adopt: nothing synced yet")
+        return 1
+    raw = _rev_text(vault, rev, rel)
+    if raw is None or not eng.ships(rel):
+        print(f"{SENTINEL} adopt: {rel} does not ship at {rev[:7]}")
+        return 1
+    data = export_bytes_for(eng, cfg)(rel, raw)
+    bad = eng.verify(rel, data, eng.identity())
+    if bad:
+        print(f"{SENTINEL} adopt: {rel} does not verify: {bad}")
+        return 1
+    dst = core / rel
+    changed = not dst.exists() or dst.read_bytes() != data
+    if changed:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+        _commit_core(eng, core, [rel], f"core_sync adopt {rel}: this agent's version (at {rev[:7]})")
+    st["holds"].pop(rel, None)
+    st["core_ok"][rel] = _core_head(core)
+    _save(STATE, st)
+    ledger({"commit": rev[:7], "file": rel, "action": "adopted", "why": "re-exported" if changed else "already equal"})
+    print(f"{SENTINEL} adopted {rel} ({'re-exported' if changed else 'already equal'})")
+    return 0
 
 
 def main() -> int:
@@ -1455,6 +1679,8 @@ def main() -> int:
     sub.add_parser("status"); sub.add_parser("holds"); sub.add_parser("debt")
     p = sub.add_parser("ledger"); p.add_argument("-n", type=int, default=30)
     p = sub.add_parser("classify"); p.add_argument("rel"); p.add_argument("--rev", default="HEAD")
+    p = sub.add_parser("adopt"); p.add_argument("rel")
+    p = sub.add_parser("history"); p.add_argument("--range", default=""); p.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
     vault = Path(a.vault).resolve()
     cls = pick_engine(vault, a.engine)
@@ -1476,6 +1702,10 @@ def main() -> int:
         return audit(eng, vault, core, quiet=a.quiet)
     if a.cmd == "people":
         return people(eng, vault, core, cfg, write=a.write)
+    if a.cmd == "history":
+        return history(eng, vault, core, cfg, a.range, quiet=a.quiet)
+    if a.cmd == "adopt":
+        return adopt(eng, vault, core, cfg, a.rel.replace("\\", "/"))
     st = state()
     if a.cmd == "status":
         head = git(["rev-parse", "--short", "HEAD"], vault).stdout.strip()

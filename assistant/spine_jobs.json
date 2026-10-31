@@ -700,6 +700,22 @@
    "timeout_s": 600,
    "expect": "CORE_SYNC",
    "_what": "every commit here flows on to the sage-core checkout (assistant/core_sync.json core_root), organization-free: prose and comments scrubbed, a working line about this business holds the file + files a build request; zero LLM (2026-10-28)"
+  },
+  {
+   "name": "core-release",
+   "cmd": [
+    "python",
+    "assistant/scripts/core_release.py",
+    "check"
+   ],
+   "every_min": 10080,
+   "window": [
+    6,
+    22
+   ],
+   "timeout_s": 1800,
+   "expect": "CORE_RELEASE",
+   "_what": "once a week: when the sage-core checkout is ahead of its public remote, every privacy gate (core_sync audit / people / history) and the template's tests run, and ONE card 'Publish the template update' is posted (held for the Monday digest); the tap runs jobs.json core_publish, which checks everything again before it pushes and releases. A failed gate is a Mission Control note, never a card; zero LLM (2026-10-30)"
   }
  ]
 }

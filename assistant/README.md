@@ -1348,6 +1348,25 @@ every command below, update, modules):
   (`relay.backfill` N keeps the last N); a note is filed once (`relay_seen` in the state). Switch:
   `core_sync.json -> relay` on each side. Fixture test: `assistant/tests/test_core_sync_relay.py` (both directions).
   The one-off inventory of what sage-core lacks today is a separate scout (`PORT_SCOUT_2026-10-28.md` when it lands).
+- **Direct template changes are never undone, and the public repo is published weekly on a tap (2026-10-30).** the owner:
+  "make sure we are regularly porting and updating Sage-core public repo and Sage with best new features". Found:
+  three ports from the property decision study landed straight in the sage-core checkout (never in the live agent),
+  and the next vault commit to `builder.py` would have overwritten them; the 32 relay port requests had never been
+  built (the builder took them in path order); nothing pushed or released on any schedule. Now:
+  (1) **`core_sync` guard:** a template commit not made by the sync (author `core-sync`) that is newer than the
+  sync's last commit to a file HOLDS that file instead of being overwritten (`guard_core_only`, in `run` and
+  `refresh`), and every such commit files ONE build request "Bring the template change ... into this agent"
+  (`file_core_direct`, from `core_base`, the checkout's HEAD when the guard first ran). The hold releases by itself
+  once the vault's export carries the commit's working lines (`carries_change`; comments may differ);
+  `core_sync.py adopt <file>` lets the vault's version win. (2) **`core_sync.py history`:** every line AND commit
+  message the push would add (`@{u}..HEAD`), scanned with the identity + people patterns: `audit`/`people` read
+  only the files as they are now. (3) **`scripts/core_release.py`** (spine `core-release`, weekly): when the checkout
+  is ahead of its remote, the gates run (clean checkout, `audit`, `people`, `history`, the template's
+  `test_sage_core` + `test_core_sync` inside the checkout); clean -> ONE card "Publish the template update" (held for
+  the Monday digest) whose tap runs jobs.json `core_publish`; a failed gate is a Mission Control note. `publish`
+  re-runs every gate on the checkout as it is at the tap, pushes, then `installer/windows/release.ps1`. Switches:
+  `core_sync.json -> release` {enabled, lane, tests, skip_subjects}. Tests: `test_core_sync.py` sections 10-11,
+  `test_core_release.py`.
 - **The organization's extensions by name: `alib.plugins()` (2026-10-28).** The first pass over the debt moved every
   working line that named this organization or its niche out of the runtime engine files (`exec_store`, `drain`,
   `client_texts`, `chat_push`, `brain`, `sentinels`, `phone_bridge`, `doer`, `space_reader`). Identity now comes from
