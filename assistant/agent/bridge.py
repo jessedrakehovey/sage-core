@@ -1788,10 +1788,23 @@ def _single_instance():
 # core.DATA, so a bridge started under a test's scratch store got its own lock and still answered the
 # live space: 2026-10-25 seven such bridges (spawned by test runs, then self-respawning on every code
 # change with the test env) plus the real one posted 8 replies to one message.
-GCHAT_LOCK = Path.home() / ".claude" / "sage-gchat-bridge.lock"
+# Per ORGANIZATION, not per data dir (coexist.py, 2026-10-30): a second agent on this PC (org.json state_home) polls its
+# own Chat app and must never win the first one's lock after a restart; a test's scratch data dir still shares it.
+def _gchat_lock_path() -> Path:
+    try:
+        if str(Path(__file__).resolve().parent.parent) not in sys.path:
+            sys.path.append(str(Path(__file__).resolve().parent.parent))
+        import orgcfg
+        return orgcfg.state_home() / "sage-gchat-bridge.lock"
+    except Exception:  # noqa: BLE001
+        return Path.home() / ".claude" / "sage-gchat-bridge.lock"
+
+
+GCHAT_LOCK = _gchat_lock_path()
 
 
 def _gchat_lock():
+    GCHAT_LOCK.parent.mkdir(parents=True, exist_ok=True)
     fh = open(GCHAT_LOCK, "a+")
     try:
         if os.name == "nt":

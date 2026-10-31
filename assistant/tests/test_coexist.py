@@ -88,5 +88,16 @@ check("a pack with state_home logs under it", str(Path(HOME) / ".sage" / "second
 check("a pack with state_home has its own Claude account store", "second-org" in str(e2["AGENT_ACCOUNT_STORE"]), str(e2))
 check("a pack with state_home has its own builder worktree", "second-org" in str(e2["BUILDER_WT"]), str(e2))
 
+def lock_of(root: Path) -> str:
+    e = dict(os.environ, ASSISTANT_ORG=str(root / "assistant" / "org.json"))
+    c = "import sys; sys.path.insert(0, sys.argv[1]); sys.argv = ['x']; import bridge; print(bridge.GCHAT_LOCK)"
+    r = subprocess.run([sys.executable, "-c", c, str(HERE.parent / "agent")], capture_output=True, text=True, env=e, timeout=120)
+    return (r.stdout.strip().splitlines() or [""])[-1]
+
+
+l1, l2 = lock_of(first), lock_of(second)
+check("the first pack's Chat bridge lock stays in ~/.claude", l1 == str(Path(HOME) / ".claude" / "sage-gchat-bridge.lock"), l1)
+check("a second pack's Chat bridge lock is its own", l2 == str(Path(HOME) / ".sage" / "second-org" / "sage-gchat-bridge.lock"), l2)
+
 print(f"\n{'ALL PASS' if not FAILS else str(len(FAILS)) + ' FAILED'}")
 sys.exit(1 if FAILS else 0)
