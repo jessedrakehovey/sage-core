@@ -99,5 +99,20 @@ l1, l2 = lock_of(first), lock_of(second)
 check("the first pack's Chat bridge lock stays in ~/.claude", l1 == str(Path(HOME) / ".claude" / "sage-gchat-bridge.lock"), l1)
 check("a second pack's Chat bridge lock is its own", l2 == str(Path(HOME) / ".sage" / "second-org" / "sage-gchat-bridge.lock"), l2)
 
+# ---- a test's scaffold under the temp folder never becomes a tenant of the REAL registry (2026-10-31: six suites had
+# registered 'Acme Bakery' there, and the template's own test then refused the name at the publish gate)
+import tempfile as _tf2
+_sp = os.environ.pop("SAGE_PACKS")
+try:
+    scratch = Path(_tf2.gettempdir()) / "wv_x_os"
+    check("a pack under the temp folder is scratch while the real registry is in use", coexist._scratch(scratch))
+    check("a pack beside this one is not", not coexist._scratch(HERE.parent.parent / "x-os"))
+    before = coexist._read(coexist.REGISTRY)
+    coexist.register(scratch)
+    check("register() writes nothing for a scratch pack", coexist._read(coexist.REGISTRY) == before)
+finally:
+    os.environ["SAGE_PACKS"] = _sp
+check("with a scratch registry (SAGE_PACKS) temp roots count again", not coexist._scratch(Path(_tf2.gettempdir()) / "wv_x_os"))
+
 print(f"\n{'ALL PASS' if not FAILS else str(len(FAILS)) + ' FAILED'}")
 sys.exit(1 if FAILS else 0)

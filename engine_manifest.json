@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.30+3105bfb",
+  "version": "2026.10.31+10e3c3d",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-30T20:43:06"
+  "synced": "2026-10-31T09:41:15"
  },
  "modules": {
   "money": {
@@ -181,7 +181,7 @@
   "assistant/channels/base.py": "002830c479c3d2ff3b25d92b9d3926fb068453c17d5d3d3425cfe0b94e07b51e",
   "assistant/channels/gchat.py": "a9473e0ff26358e20cbef24fe0059caf8930f599ef0db4c10b996f590602f9f5",
   "assistant/channels/slack.py": "7ba8119e996e8a4c859e071f275349f8f3b6dc13306eb68d2ed10f8c912cc123",
-  "assistant/coexist.py": "514a7a8ac297d5bd12adff8346ba8e93885f232c8886eb604e08b819ef01ab99",
+  "assistant/coexist.py": "5591c8e9110d6ef38b628b6ae9d9b6671719bb4cabc6f4deb354400b816e2c38",
   "assistant/config.json": "9baa5ce76eb824679e1f0fd70fca0201a7df0367f08fd9e64c3e7b30bab50aa8",
   "assistant/connections.json": "19f3b14789f88ae1599e37a1985cb127469bf7d0e230da01974c7c413f596491",
   "assistant/core_sync.py": "0d6c05002341614b96074861e456699c1274e1cba212235e100830df9d14e464",
@@ -356,7 +356,7 @@
   "assistant/tests/test_chat_push.py": "7b8dbc9fd9297a5435f063cf26e4e478e103bfb918b163f12f8896391dd8378b",
   "assistant/tests/test_chat_stack.py": "3c67c3aa79f27c769f200d6a4e292081c974866812d40dae13ee13a832865ec4",
   "assistant/tests/test_chat_thread.py": "64cf94aa66f47ba58e9af212e5b2f037c68be6a5ec89fdd0a714a026cb0d5377",
-  "assistant/tests/test_coexist.py": "61731918d453b03e91ae2d8b848d9ad88fd231797991665a58380c8eed299938",
+  "assistant/tests/test_coexist.py": "04bc586866ab4006a26d22578853d31362a5d20e019903b6b6cf4ef9b35dfb2d",
   "assistant/tests/test_commitments_chat.py": "c9b0f7e17971c1425cb60ec0ac0cfa7703bd8432a65ba50513f7fdac9cb62e97",
   "assistant/tests/test_comms.py": "30e0f0a1e758dd2c8a520e2ef65290130663461dc11c9dcef210b07994ec21ba",
   "assistant/tests/test_computer.py": "46a4cb2e2a8a21e1aa6587e3cd44bcc920d27bc5f891e3c76175c07588205900",

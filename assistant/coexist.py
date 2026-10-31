@@ -21,6 +21,7 @@ import os
 import re
 import socket
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -34,6 +35,17 @@ def _read(p: Path) -> dict:
         return json.loads(p.read_text(encoding="utf-8-sig")) or {}
     except (OSError, ValueError):
         return {}
+
+
+def _scratch(root: Path | str) -> bool:
+    """A pack under the system temp folder is a test's scaffold, never a tenant of this machine: it is neither counted
+    nor registered while the real registry is in use (a test that sets SAGE_PACKS gets a scratch registry and may use temp roots)."""
+    if os.environ.get("SAGE_PACKS"):
+        return False
+    try:
+        return _norm(root).startswith(_norm(tempfile.gettempdir()) + os.sep)
+    except (OSError, ValueError):
+        return False
 
 
 def _norm(p: str | Path) -> str:
@@ -78,7 +90,7 @@ def packs(extra: list | None = None) -> list:
     roots += [Path(x) for x in (extra or [])]
     seen, out = set(), []
     for r in roots:
-        if not str(r) or not is_pack(r):
+        if not str(r) or not is_pack(r) or _scratch(r):
             continue
         k = _norm(r)
         if k not in seen:
@@ -116,8 +128,10 @@ def allocate(org_name: str, out: Path) -> dict:
 
 
 def register(root: Path) -> None:
+    if _scratch(root):
+        return
     reg = _read(REGISTRY)
-    rows = [r for r in (reg.get("packs") or []) if _norm(r.get("root") or "") != _norm(root) and is_pack(Path(str(r.get("root") or "")))]
+    rows = [r for r in (reg.get("packs") or []) if _norm(r.get("root") or "") != _norm(root) and is_pack(Path(str(r.get("root") or ""))) and not _scratch(str(r.get("root") or ""))]
     c = claims(root)
     rows.append({"root": str(root), "name": c["name"]})
     REGISTRY.parent.mkdir(parents=True, exist_ok=True)
