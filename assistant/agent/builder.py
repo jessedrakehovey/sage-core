@@ -138,7 +138,14 @@ def collect(state: dict | None = None) -> list:
             continue
         if _HAND_BUILT.search(text):
             continue          # done by hand in a session (2026-10-26: one such request was rebuilt twice and never landed)
-        out.append({"key": rel, "title": p.stem, "source": "wiki", "text": text[:6000]})
+        try:
+            ts = p.stat().st_mtime
+        except OSError:
+            ts = 0.0
+        out.append({"key": rel, "title": p.stem, "source": "wiki", "text": text[:6000], "ts": ts})
+    # oldest request first, not alphabetical: by path, every "Port from <another agent>" request (Wiki/Personal/
+    # Build request P...) sat behind forty others and 30 of them were never attempted in three days (2026-10-30)
+    out.sort(key=lambda r: (r["ts"], r["key"]))
     for key, body in _pending_blocks():
         if key.startswith("sage-") and "-ask-" in key and _CODE_ASK.search(body):
             prop = re.sub(r"\s+", " ", re.sub(r"(?s).*?\*Proposal:\*\s*", "", body, count=1))
@@ -644,6 +651,25 @@ def edit_state(fn):
     return out
 
 
+_PORT = re.compile(r"(?i)^build request port from\b")        # core_sync's relay: another agent's upgrade to port
+
+
+def pick(reqs: list, max_n: int = 2, first: str = "") -> list:
+    """The requests this run builds: `first` (an owner's ask in chat) always, then the oldest open ones, and ONE
+    slot kept for the oldest port request from another agent when any is open. The owners' own asks arrive
+    faster than the builder clears them (max_n per run, RUNS_PER_DAY runs), so without the reserved slot the
+    relay's requests never got a turn (2026-10-30: 30 open, none attempted, while the upgrades they carried
+    were already live in the other agent)."""
+    reqs = sorted(reqs, key=lambda r: (0 if r["key"] == first else 1, r.get("ts", 0.0), r["key"]))
+    chosen = reqs[:max_n]
+    if max_n >= 2 and not any(_PORT.search(r["title"]) for r in chosen):
+        port = next((r for r in reqs if _PORT.search(r["title"])), None)
+        if port:
+            keep = [r for r in chosen if r["key"] == first] or chosen[:1]
+            chosen = keep + [r for r in chosen if r not in keep][:max(0, max_n - len(keep) - 1)] + [port]
+    return chosen
+
+
 def run(max_n: int = 2, dry: bool = False, first: str = "") -> dict:
     """`first`: the request key (wiki path) an owner just filed in chat; it is built in this run whatever
     its place in the sorted list (2026-10-23: the owner's Corwin-handoff skill was third of three open
@@ -651,10 +677,7 @@ def run(max_n: int = 2, dry: bool = False, first: str = "") -> dict:
     started = core.stamp()
     state = core.load(STATE, {})
     base = json.loads(json.dumps(state))                 # as loaded: save_state keeps every key this run leaves alone
-    reqs = collect(state)
-    if first:
-        reqs.sort(key=lambda r: 0 if r["key"] == first else 1)
-    reqs = reqs[:max_n]
+    reqs = pick(collect(state), max_n, first)
     if not reqs:
         log("BUILDER nothing to build")
         return {"built": [], "other": []}
