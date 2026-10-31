@@ -57,6 +57,10 @@ NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 # owners' own "keep it short", "not robotic", "reply in thread" and "say plainly whether it was done"
 # rules to make room for dream-written ones). The nightly dream merges near-duplicates instead.
 MAX_RULES = 150
+# The memory cap DOES retire, but only a fact the nightly dream inferred (by "<slug>-dream"): a fact a
+# person stated in chat, from a console or through the builder is never a cap victim (mem_cap_retirable;
+# ported from the property OS 2026-10-30, where the cap had aged out eleven of the owner's own rules).
+# When every active fact is a person's, the set runs over the cap with no victim.
 MAX_MEMORY = 200
 MEM_KINDS = ("person", "preference", "household", "business", "process")
 
@@ -601,6 +605,14 @@ def mem_upsert(kind: str, subject: str, fact: str, evidence: str = "", by: str =
         return _mem_upsert(kind, subject, fact, evidence, by, expires)
 
 
+def mem_cap_retirable(f: dict) -> bool:
+    """Only a fact the nightly dream INFERRED (by "<slug>-dream", dream.py) may be retired by the MAX_MEMORY
+    cap. Everything else came from a person's words in the moment -- an owner or staff member in chat (by =
+    their people.json key), a console (by "owner1-cli" and the like), the builder -- and only a person forgets
+    those (mem_forget). Property OS decision study 2026-10-30: its cap had retired 11 of the owner's own rules."""
+    return str(f.get("by") or "").endswith("-dream")
+
+
 def _mem_upsert(kind, subject, fact, evidence, by, expires) -> dict:
     d = _mem()
     now = stamp()
@@ -620,8 +632,11 @@ def _mem_upsert(kind, subject, fact, evidence, by, expires) -> dict:
                        **({"expires": expires} if expires else {})})
     act = [f for f in d["facts"] if f.get("active", True)]
     victim = None
-    if len(act) > MAX_MEMORY:                              # never the fact just added
-        victim = sorted([f for f in act if f["id"] != mid], key=lambda f: (int(f.get("seen", 1)), f.get("last", "")))[0]
+    pool = [f for f in act if f["id"] != mid and mem_cap_retirable(f)]   # never the fact just added
+    if len(act) > MAX_MEMORY and pool:
+        # retire the least-seen, oldest DREAM-INFERRED fact to keep the prompt small; a person's fact is
+        # never a cap victim (mem_cap_retirable), so when only those remain the set runs over the cap
+        victim = sorted(pool, key=lambda f: (int(f.get("seen", 1)), f.get("last", "")))[0]
         victim["active"] = False
         victim["retired"] = now + " (cap)"
     save(MEMORY, d)
@@ -663,6 +678,32 @@ def mem_forget(mid: str, why: str = "", by: str = "", ledger: bool = True) -> bo
                     log_change("memory_forget", f"forgot {mid}: {f['fact']}", {"op": "mem_restore", "id": mid}, by)
                 return True
     return False
+
+
+def mem_restore(mid: str, why: str = "", by: str = "", force: bool = False) -> dict:
+    """Re-activate a retired fact (a cap victim, a dream retirement an owner disagrees with). Refuses when the
+    fact is already active, or when an active fact on the same subject already says the same thing (unless
+    force). Ledgered with an undo (mem_forget). -> {"status": restored|refused|similar, ...}"""
+    with locked:
+        d = _mem()
+        for f in d["facts"]:
+            if f["id"] != mid:
+                continue
+            if f.get("active", True):
+                return {"status": "refused", "reason": "already active", "id": mid}
+            if not force:
+                for o in d["facts"]:
+                    if o is not f and o.get("active", True) and o.get("subject", "").lower() == f.get("subject", "").lower()                             and similar(o["fact"], f["fact"]):
+                        return {"status": "similar", "id": mid, "similar_to": o["id"], "fact": o["fact"]}
+            f["active"] = True
+            f.pop("retired", None)
+            f["restored"] = stamp() + (" " + why if why else "")
+            f["last"] = stamp()
+            save(MEMORY, d)
+            cid = log_change("memory_restore", f"restored {mid} ({f.get('subject', '')}): {f['fact']}",
+                             {"op": "mem_forget", "id": mid}, by)
+            return {"status": "restored", "id": mid, "fact": f["fact"], "change": cid}
+    return {"status": "refused", "reason": "no such fact", "id": mid}
 
 
 def render_memory() -> str:
