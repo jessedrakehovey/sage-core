@@ -751,6 +751,8 @@ Tests: `assistant/tests/test_receipts.py`.
 - **Placeholder watchdog** (`placeholder_watch`): a "typing" placeholder older than 90 s is edited once
   ("Still on it; this one needs a look at the records"); a crashed turn edits its placeholder to one honest
   line instead of leaving "is typing" up for good; a voice note shows "typing" before the transcription.
+- **Undelivered replies** (`undelivered_retry`, 2026-11-01): a reply Google Chat refuses is queued in
+  `undelivered.json` and re-posted into its thread by the minute tick; after 4 failed tries it is flagged on Mission Control.
 - **`texts_search`**: a read tool over the phone thread log (both iPhones) by words, number or saved name,
   so "my dad texted" / "Marisa texted, let's reply" resolve without asking. Every line is labelled by
   `whois.py` ("Dad (the owner's dad, +1 555-063-5563)", "probably Nicole (+1 ...)").

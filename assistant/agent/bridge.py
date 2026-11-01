@@ -86,6 +86,9 @@ CRASH_LINE = "That one didn't go through on my side; ask me again in a minute."
 INFLIGHT = core.DATA / "inflight.json"      # turns handed to a worker and not yet answered (replayed after a crash)
 REPLAY_MAX_S = 3 * 3600                     # an owner's line older than this is not answered late by itself
 REPLAY_LINE = "My first try at this never posted, so here it is."
+UNDELIVERED = core.DATA / "undelivered.json"   # replies Chat refused, retried by the minute tick
+UNDELIVERED_TRIES = 4
+_ULOCK = threading.Lock()
 
 
 def log(msg: str) -> None:
@@ -575,9 +578,59 @@ def reply(msg: dict, text: str, ack: str = "") -> None:
         posted = g.post(msg["space"], text, msg.get("thread", ""))
         if not msg.get("thread"):
             core.note_thread_root(_thread_of(posted), name, text, "gchat", msg.get("convo", ""))
+        if not posted:
+            raise RuntimeError("Chat returned no message")
         _drop_ack(ack)
     except Exception as e:  # noqa: BLE001
-        log(f"gchat reply failed: {type(e).__name__}: {str(e)[:160]}")
+        log(f"gchat reply failed: {type(e).__name__}: {str(e)[:160]}; queued for retry")
+        _undelivered_add(msg, text)
+
+
+def _undelivered_add(msg: dict, text: str) -> None:
+    """A reply Chat refused waits here; the minute tick retries it (2026-11-01: the owner had to ask
+    'you never replied how to respond to Sloane' before he got the answer)."""
+    if not str(text or "").strip() or not str(msg.get("space") or "").startswith("spaces/"):
+        return
+    with _ULOCK:
+        rows = core.load(UNDELIVERED, [])
+        rows.append({"ts": time.time(), "space": msg.get("space", ""), "thread": msg.get("thread", ""),
+                     "person": msg["person"]["key"], "text": text, "tries": 1})
+        core.save(UNDELIVERED, rows)
+
+
+def undelivered_retry() -> int:
+    """Post each queued reply again; after UNDELIVERED_TRIES failed tries it is dropped from the
+    queue and flagged on Mission Control, never lost silently. -> how many got through."""
+    with _ULOCK:
+        return _undelivered_retry()
+
+
+def _undelivered_retry() -> int:
+    rows = core.load(UNDELIVERED, [])
+    if not rows:
+        return 0
+    g, keep, n = _gchat(), [], 0
+    for r in rows:
+        try:
+            if not (g and g.post(r["space"], r["text"], r.get("thread", ""))):
+                raise RuntimeError("Chat returned no message")
+            n += 1
+            log(f"undelivered reply to {r['person']} posted on retry {r['tries']}")
+            continue
+        except Exception as e:  # noqa: BLE001
+            r["tries"] = int(r.get("tries") or 1) + 1
+            log(f"undelivered reply retry {r['tries']} failed: {type(e).__name__}: {str(e)[:120]}")
+        if r["tries"] >= UNDELIVERED_TRIES:
+            try:
+                sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+                import cards
+                cards.note("bridge", f"A reply to {r['person']} never reached Chat after {r['tries']} tries: {r['text'][:400]}")
+            except Exception:  # noqa: BLE001
+                pass
+            continue
+        keep.append(r)
+    core.save(UNDELIVERED, keep)
+    return n
 
 
 # ------------------------------------------------------------------ handling
@@ -1938,6 +1991,10 @@ def _tick_loop() -> None:
                         log("held messages re-run")
                 except Exception as e:  # noqa: BLE001
                     log(f"held retry crashed: {type(e).__name__}: {str(e)[:200]}")
+                try:
+                    undelivered_retry()
+                except Exception as e:  # noqa: BLE001
+                    log(f"undelivered retry crashed: {type(e).__name__}: {str(e)[:200]}")
                 try:
                     if actions.retry_events(post_in):
                         log("calendar retry settled")

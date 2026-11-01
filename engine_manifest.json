@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.01+4cc8442",
+  "version": "2026.11.01+7770e7b",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-01T08:04:00"
+  "synced": "2026-11-01T10:11:34"
  },
  "modules": {
   "money": {
@@ -96,13 +96,13 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "cdf42641c920a3464a4d9aad67d0c0dc9110675dae5276ae2a71a43a967d56ed",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
-  "assistant/agent/README.md": "8b4a90fd129f2e7a37c5520e9409649270a846a1f1e6d6e046507bcc4828f805",
+  "assistant/agent/README.md": "2965bf99173bf4fa156bacea9663ba95656189111e34140f9e0f601212e49799",
   "assistant/agent/account.py": "787c69306e6edca6d7881434293fa81381f74d03c873d8048ca1d92a29361fe3",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "7f3118ad2776b62656593f99ab44faf7478493e09464cceed75a9b43b0ce9069",
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/brain.py": "ac7cff57ed2a3093aadea683499e057ea864cdad2f0950e30be34e2a13f3dcbb",
-  "assistant/agent/bridge.py": "7455900e28593ab614c5aa6e0f9af2f2e709e7d35a111bb911ade22006ca7bde",
+  "assistant/agent/bridge.py": "dc45e99e5af95292832f6c2a8df38d4a5d702707c36cca50d1cd079e49c9c86e",
   "assistant/agent/builder.py": "3ea1a21484ef0c8eee0bba6678f6d23180e33ad4e49739412f4896f873824bd4",
   "assistant/agent/capability.py": "49c9e6ccaec19b09f0ae037240def5a0250e7a0ce8ddc9495248b6a69a02d55f",
   "assistant/agent/chat.py": "a5dee017374766357c70e8dae5fba8c0cb94e9750e7c205c3724c62f9f1480a6",
@@ -286,7 +286,7 @@
   "assistant/scripts/phone_bridge.py": "cc107e9d190e1db84d1a82f16dbf2f2b8534c7d622e79dde2bb285263d86794d",
   "assistant/scripts/phone_nudge.py": "29829cd428dc31515bdcd51f8fd496dc3c40206b1e0ecda5692df7899cd9f065",
   "assistant/scripts/preconditions.py": "85167dee9d9b2b4eb6f1248683cd066293b9689af59d2c76135439c904295e1d",
-  "assistant/scripts/regression_packets.py": "c5eda67897e63a3218d6331512a515164934e54e5eb3de212aa3f3df763f088f",
+  "assistant/scripts/regression_packets.py": "6794ce8ff11001dd6276df8297e6315f53f93cb9b42e8fbd4b735d8924d3c51c",
   "assistant/scripts/relay_poll.py": "eec55fb06af4e4c524890f7bc376479f09b17fa315b6267a0aab340b3d407aa6",
   "assistant/scripts/rescue.ps1": "5192ef950ded73b984fac125c1ab7c93486cca09d88d04aefd1103026feb3dac",
   "assistant/scripts/rulings.py": "0a802740336c4047b84ce91c0f0f49e1df403e98e29ecd307911c515e03987f8",
@@ -404,10 +404,10 @@
   "assistant/tests/test_ports.py": "1aea65040e38276f63141ee8dde69e007232b3770f7621a29487159ced094075",
   "assistant/tests/test_probation.py": "ab1e1fa3e6b904ba8aafc4de17f53ab275984941feb912476c24b98437370462",
   "assistant/tests/test_projects.py": "8bfb9731b9127f866d87a87d24fbcccf0e8129fc9d3613ccfbd8dd1a5bbb4e2a",
-  "assistant/tests/test_provenance.py": "7fb283136bd0bd144c8b667575d3750d5d2f381ddeff96dec78fa350f59816de",
+  "assistant/tests/test_provenance.py": "b01051ca0a0838c9a480df6863f472e0d8410286305b662c9e9ac942f9402ae2",
   "assistant/tests/test_receipts.py": "a2207a7e08d8b50efa5c670d25f67bdb8851d883028f28914b634f18cd98588f",
   "assistant/tests/test_reflex.py": "570c71d4507c15063e4d8738cd23763fb925654ad26fef699c7c98b7b3bcbf85",
-  "assistant/tests/test_regression_packets.py": "f03e1f2b33c1e28445bbdd0dedf52ac7be49ef4d1a613e62b461a542e4e2e31f",
+  "assistant/tests/test_regression_packets.py": "651eceb73e3138659f86a499cd1d02a5f81ee7fc71e123eff8abbbd665592103",
   "assistant/tests/test_relay.py": "9747362db03eaecd7467fa199f56050c3edf12390bae1ae567727d153678ea03",
   "assistant/tests/test_repeat_asks.py": "eef650a5ab60164cbb5a6c1f1cfa321edeb3a67b356add88b9424ffe811fbb65",
   "assistant/tests/test_rulings.py": "06e18cf07d20a0c273293de7a4c0a42361bb859ab0fe730fa3492e56ee774a61",
