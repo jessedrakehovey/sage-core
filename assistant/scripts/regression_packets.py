@@ -50,6 +50,13 @@ Binding: this file is the engine. An organization binds it with a Binding (packe
 performs one turn in a lane, the ledger recorder, the rule -> files map). The default binding below is this
 assistant's own (agent/chat.py through the local channel); a production pack vendors this file unchanged and binds it
 from a shim.
+
+Runner table (v2.2, 2026-11-01): `table_runner({agent: RunnerSpec})` builds the Binding's runner from DATA. Two
+shapes of turn: `process` (an argv template run with the lane and the packet file; it prints one `EVAL_RESULT <json>`
+line) and `server` (the brain is a chat endpoint: POST {agent: "<brain>-eval-<packet id>", question, <lane field>};
+poll a status URL until done; the binding's readers then lift the deeds and the writes out of the lane). Which agent
+uses which shape, which endpoint, which brain name and how the lane's leftovers read as deeds are the binding's data;
+the engine knows no agent, lane or system of record by name. `--limit N` caps a live run at N turns.
 """
 from __future__ import annotations
 
@@ -63,6 +70,8 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -344,13 +353,211 @@ class Binding:
     lane_root: Path | None = None
 
 
+# ---------------------------------------------------------------- the runner table (agent -> how one turn runs)
+@dataclass
+class RunnerSpec:
+    """How ONE agent's turn runs in a lane, as data.
+
+    mode "process": `command` is an argv template; {lane} and {packet} are filled in (the packet is written into the
+    lane as packet.json when it did not arrive as its own .json file); with dry_run the `dry_flag` is appended. The
+    process prints one line `EVAL_RESULT <json>` with {reply, deeds, writes, error, server_side}.
+    mode "server": the brain is a chat endpoint. POST `endpoint` with {"agent": "<brain>-eval-<packet id>",
+    "question": question(packet, lane), <lane_key>: str(lane), **body}, read {"id"}; GET `status` with {id} filled in
+    until the document's status is a terminal one (`terminal`). Then deeds(lane, doc) -> [deed] and
+    writes(lane, doc) -> [abs path] read what the turn left behind: the lane's journal, the status document's tool
+    steps, whatever the binding decided a deed looks like. With dry_run no request is made: dry_seed(lane, packet)
+    writes what a canned turn would have left and `dry_answer` stands for the reply, so the readers and the lane
+    plumbing run under the tracer with no brain. `server_side` names the writes the server makes that the tracer
+    cannot see (they go in the note; {agent} and {id} are filled in)."""
+    mode: str = "process"
+    command: list = field(default_factory=list)
+    dry_flag: str = "--dry-run"
+    cwd: str = ""                      # process mode: the working directory (default: this engine's root)
+    endpoint: str = ""
+    status: str = ""
+    brain: str = ""
+    body: dict = field(default_factory=dict)
+    lane_key: str = "eval_lane"
+    question: Callable | None = None
+    deeds: Callable | None = None
+    writes: Callable | None = None
+    dry_seed: Callable | None = None
+    dry_answer: str = "Noted."
+    terminal: tuple = ("done", "error", "failed", "answered", "answer_failed")
+    timeout_s: int = 1500
+    busy_wait_s: int = 600
+    poll_s: float = 5.0
+    server_side: list = field(default_factory=list)
+
+
+def packet_file(packet: dict, lane: Path) -> Path:
+    """The packet as its own .json file: the one it came from, or packet.json written into the lane (a packet from a
+    JSONL group file has a `file#line` path and no file of its own)."""
+    pfile = Path(str(packet.get("_path") or ""))
+    if pfile.is_file() and pfile.suffix.lower() == ".json":
+        return pfile
+    pfile = Path(lane) / "packet.json"
+    pfile.write_text(json.dumps({k: v for k, v in packet.items() if not str(k).startswith("_")}, ensure_ascii=False),
+                     encoding="utf-8")
+    return pfile
+
+
+def packet_slug(packet: dict) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", str(packet.get("id") or packet.get("_name") or "p").lower()).strip("-")[:40] or "p"
+
+
+def default_question(packet: dict) -> str:
+    """The brain's question when the binding composes none: the history, then the text, with the fixtures named as the
+    state this turn must read as current."""
+    inp = dict(packet.get("input") or {})
+    parts = []
+    hist = [str(x) for x in (inp.get("history") or []) if str(x).strip()]
+    if hist:
+        parts.append("\n".join(hist))
+    fx = {k: v for k, v in (packet.get("fixtures") or {}).items()}
+    if fx:
+        parts.append("[FIXTURES: the records below replace the live state they are named after; read them as current truth]\n"
+                     + json.dumps(fx, ensure_ascii=False)[:6000])
+    who = str(inp.get("sender") or "").strip()
+    role = str(inp.get("role") or "").strip()
+    head = f"[from {who}" + (f" (role: {role})" if role else "") + "]\n" if who else ""
+    parts.append(head + str(inp.get("text") or ""))
+    return "\n\n".join(parts)
+
+
+def run_process(spec: RunnerSpec, packet: dict, lane: Path, dry_run: bool) -> dict:
+    pfile = packet_file(packet, lane)
+    cmd = [str(a).replace("{lane}", str(lane)).replace("{packet}", str(pfile)) for a in spec.command]
+    if dry_run and spec.dry_flag:
+        cmd.append(spec.dry_flag)
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=(180 if dry_run else spec.timeout_s), cwd=str(spec.cwd or VAULT))
+    except subprocess.TimeoutExpired:
+        return {"error": "turn timed out"}
+    line = next((ln for ln in (r.stdout or "").splitlines() if ln.startswith("EVAL_RESULT ")), "")
+    if not line:
+        return {"error": f"no EVAL_RESULT (rc={r.returncode}): {((r.stderr or '') + (r.stdout or ''))[-300:]}"}
+    try:
+        res = json.loads(line[len("EVAL_RESULT "):])
+    except ValueError as e:
+        return {"error": f"EVAL_RESULT is not json: {e}"}
+    note = ""
+    if res.get("server_side"):
+        note = "server-side (not traced): " + "; ".join(str(x) for x in res["server_side"])
+    return {"reply": res.get("reply") or "", "deeds": list(res.get("deeds") or []), "writes": list(res.get("writes") or []),
+            "error": res.get("error") or "", "note": note}
+
+
+def _http_json(url: str, body: dict | None = None, timeout: int = 30):
+    """One JSON request; (status code, document). A transport failure is (0, {"error": ...})."""
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, method="POST" if body is not None else "GET", data=data,
+                                 headers={"Content-Type": "application/json"} if body is not None else {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as he:
+        try:
+            return he.code, json.loads(he.read() or b"{}")
+        except ValueError:
+            return he.code, {"error": f"HTTP {he.code}"}
+    except Exception as e:  # noqa: BLE001
+        return 0, {"error": f"{type(e).__name__}: {e}"}
+
+
+def ask_server(spec: RunnerSpec, agent: str, question: str, lane: Path) -> dict:
+    """POST the question, poll the status URL to a terminal state. Returns the final status document; on a transport or
+    protocol failure a document {"status": "error", "error": ...}. 409 / 429 (the brain is busy) waits and retries
+    for busy_wait_s."""
+    body = dict(spec.body or {})
+    body.update({"agent": agent, "question": question[:8000]})
+    if spec.lane_key:
+        body[spec.lane_key] = str(lane)
+    t0 = time.time()
+    ask_id = ""
+    while time.time() - t0 < spec.busy_wait_s:
+        code, doc = _http_json(spec.endpoint, body)
+        if code in (409, 429):
+            time.sleep(min(10.0, spec.poll_s * 2))
+            continue
+        if code != 200 or not isinstance(doc, dict) or not doc.get("id"):
+            return {"status": "error", "error": f"ask refused ({code}): {str((doc or {}).get('error') or doc)[:200]}"}
+        ask_id = str(doc["id"])
+        break
+    if not ask_id:
+        return {"status": "error", "error": "the brain stayed busy"}
+    t1 = time.time()
+    url = spec.status.replace("{id}", ask_id)
+    last = {}
+    while time.time() - t1 < spec.timeout_s:
+        time.sleep(spec.poll_s)
+        code, st = _http_json(url)
+        if code != 200 or not isinstance(st, dict):
+            continue
+        last = st
+        if str(st.get("status") or "") in spec.terminal:
+            st.setdefault("id", ask_id)
+            return st
+    last = dict(last or {})
+    last.update({"status": "error", "error": f"no terminal status in {spec.timeout_s}s (last: {last.get('status')})", "id": ask_id})
+    return last
+
+
+def run_server(spec: RunnerSpec, packet: dict, lane: Path, dry_run: bool) -> dict:
+    lane = Path(lane)
+    agent = f"{spec.brain}-eval-{packet_slug(packet)}" if spec.brain else packet_slug(packet)
+    err = ""
+    with WriteTracer() as tr:
+        try:
+            packet_file(packet, lane)
+            q = spec.question(packet, lane) if spec.question else default_question(packet)
+            (lane / "question.txt").write_text(q, encoding="utf-8")
+            if dry_run:
+                doc = {"id": "dryrun", "agent": agent, "status": "done", "answer": str(spec.dry_answer or ""), "steps": []}
+                if spec.dry_seed:
+                    spec.dry_seed(lane, packet)
+            else:
+                doc = ask_server(spec, agent, q, lane)
+            (lane / "ask_status.json").write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+            deeds = list(spec.deeds(lane, doc) or []) if spec.deeds else []
+            extra = list(spec.writes(lane, doc) or []) if spec.writes else []
+        except Exception as e:  # noqa: BLE001
+            doc, deeds, extra = {"status": "error", "answer": ""}, [], []
+            err = f"{type(e).__name__}: {e}"
+    reply = str(doc.get("answer") or "")
+    if not err and str(doc.get("status") or "") != "done":
+        err = str(doc.get("error") or f"ask ended {doc.get('status')!r}: {reply[:160]}")
+    note = ""
+    if not dry_run and spec.server_side:
+        note = "server-side (not traced): " + "; ".join(
+            str(x).replace("{agent}", agent).replace("{id}", str(doc.get("id") or "")) for x in spec.server_side)
+    return {"reply": reply, "deeds": deeds, "writes": tr.unique() + extra, "error": err, "note": note, "lane_agent": agent}
+
+
+def table_runner(specs: dict) -> Callable:
+    """Binding.runner from {agent: RunnerSpec}: an agent with no row is skipped (never run, never failed)."""
+    def runner(packet: dict, lane: Path, dry_run: bool) -> dict:
+        agent = str(packet.get("agent") or "").lower()
+        spec = specs.get(agent)
+        if spec is None:
+            return {"skip": f"no runner for agent {agent!r} yet (runners: {sorted(specs)})"}
+        if spec.mode == "server":
+            return run_server(spec, packet, lane, dry_run)
+        return run_process(spec, packet, lane, dry_run)
+    return runner
+
+
 SUITES = ("smoke", "regression", "full")      # smoke: a handful on every rules/prompt commit; regression: the core set
 SCORING = ("deeds", "judge")                   # deeds: exact actions + arguments; judge: phrases (+ an optional judge pass)
 
 
-def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "", agent: str = "", suite: str = "") -> list:
-    """suite='smoke' runs the smoke packets only; 'regression' runs smoke + regression; 'full' (or '') runs every packet."""
+def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "", agent: str = "", suite: str = "", limit: int = 0) -> list:
+    """suite='smoke' runs the smoke packets only; 'regression' runs smoke + regression; 'full' (or '') runs every packet.
+    limit=N stops after N turns were actually run (skips do not count): one night's budget for a slow runner."""
     results = []
+    ran = 0
     for p in packets:
         if p.get("_error"):
             continue
@@ -371,6 +578,9 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
         if binding.runner is None:
             results.append({"packet": p["_name"], "verdict": "SKIP", "note": "binding has no runner", "writes_outside": []})
             continue
+        if limit and ran >= limit:
+            results.append({"packet": p["_name"], "verdict": "SKIP", "note": f"over --limit {limit}", "writes_outside": []})
+            continue
         lane = Path(binding.lane_root or Path(os.environ.get("TMP") or os.environ.get("TEMP") or "/tmp")) / f"eval_lane_{p['_name']}_{int(time.time())}"
         lane.mkdir(parents=True, exist_ok=True)
         t0 = time.time()
@@ -381,6 +591,7 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
         if r.get("skip"):
             results.append({"packet": p["_name"], "verdict": "SKIP", "note": str(r["skip"])[:200], "writes_outside": []})
             continue
+        ran += 1
         reply = str(r.get("reply") or "")
         deeds = list(r.get("deeds") or [])
         writes = list(r.get("writes") or [])
@@ -418,11 +629,12 @@ def main(binding: Binding, argv: list | None = None) -> int:
     ap.add_argument("--only", default="", help="one packet id")
     ap.add_argument("--agent", default="", help="only this agent's packets")
     ap.add_argument("--suite", default="", choices=("", "smoke", "regression", "full"), help="smoke | regression (smoke+core) | full")
+    ap.add_argument("--limit", type=int, default=0, help="with --live: run at most N turns (skips do not count)")
     ap.add_argument("--json", action="store_true", help="machine-readable result")
     a = ap.parse_args(argv)
     packets = load(binding.packets_dir)
     if a.live:
-        res = live(binding, packets, dry_run=a.dry_run, only=a.only, agent=a.agent, suite=a.suite)
+        res = live(binding, packets, dry_run=a.dry_run, only=a.only, agent=a.agent, suite=a.suite, limit=a.limit)
         if a.json:
             print(json.dumps(res, ensure_ascii=False, indent=1))
         else:

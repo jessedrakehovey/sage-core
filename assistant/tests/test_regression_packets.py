@@ -192,4 +192,131 @@ ok("suite=smoke" in r_sm["note"] and "scoring=deeds" in r_sm["note"], f"the ledg
 write("badsuite", dict(good, id="badsuite", suite="nightly", scoring="vibes"))
 pr = rp.validate(next(p for p in rp.load(PK) if p["_name"] == "badsuite"), KINDS)
 ok(any("suite must be" in x for x in pr) and any("scoring must be" in x for x in pr), f"unknown suite / scoring values are problems: {pr}")
+
+# ---------------------------------------------------------------- the runner table (v2.2): process and server shapes
+import http.server  # noqa: E402
+import threading  # noqa: E402
+
+RT = TMP / "rt"
+RT.mkdir()
+(RT / "pk").mkdir()
+(RT / "pk" / "pa.json").write_text(json.dumps(dict(good, id="pa", agent="alpha")), encoding="utf-8")
+(RT / "pk" / "grp.jsonl").write_text(json.dumps(dict(good, id="pb", agent="beta", expect_deeds=["card:ask"], forbid_deeds=["post:space"]))
+                                     + "\n" + json.dumps(dict(good, id="pc", agent="gamma")) + "\n", encoding="utf-8")
+# process shape: a script that writes one file in the lane and prints EVAL_RESULT; --dry-run appended on a dry run
+script = RT / "turn.py"
+script.write_text(
+    "import json, sys\n"
+    "args = sys.argv[1:]\n"
+    "lane = args[args.index('--lane') + 1]; pk = json.load(open(args[args.index('--packet') + 1], encoding='utf-8'))\n"
+    "open(lane + '/state.json', 'w').write('{}')\n"
+    "print('noise'); print('EVAL_RESULT ' + json.dumps({'reply': 'I will put it in front of the owner.', 'deeds': ['card:ask', 'reply', 'dry' if '--dry-run' in args else 'live'],\n"
+    "      'writes': [lane + '/state.json'], 'error': '', 'server_side': ['the transcript for ' + pk['id']]}))\n", encoding="utf-8")
+spec_a = rp.RunnerSpec(mode="process", command=[sys.executable, str(script), "--lane", "{lane}", "--packet", "{packet}"])
+
+# server shape: a fake chat endpoint that records the POST and answers after one poll
+posted = []
+asks = {}
+
+
+class _H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a):  # quiet
+        pass
+
+    def _send(self, code, obj):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(n) or b"{}")
+        posted.append(body)
+        if body.get("agent", "").endswith("-busy") and sum(1 for b in posted if b.get("agent") == body["agent"]) == 1:
+            return self._send(409, {"error": "busy"})
+        aid = "a%011d" % len(posted)
+        asks[aid] = {"id": aid, "status": "running", "answer": "", "polls": 0}
+        # the fake brain leaves a journal line in the lane, as a diverted card would
+        Path(body["eval_lane"], "journal.jsonl").write_text(json.dumps({"kind": "card", "verb": "ask", "q": body["question"][:40]}) + "\n", encoding="utf-8")
+        self._send(200, {"id": aid})
+
+    def do_GET(self):
+        aid = self.path.rsplit("=", 1)[-1]
+        st = asks.get(aid)
+        if not st:
+            return self._send(404, {"error": "no such ask"})
+        st["polls"] += 1
+        if st["polls"] >= 2:
+            st.update({"status": "done", "answer": "Card posted.", "steps": [{"tool": "Write", "path": str(RT / "elsewhere.txt")}]})
+        self._send(200, st)
+
+
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _H)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def _deeds(lane, doc):
+    out = []
+    jf = Path(lane) / "journal.jsonl"
+    if jf.exists():
+        for ln in jf.read_text(encoding="utf-8").splitlines():
+            r = json.loads(ln)
+            out.append(f"{r['kind']}:{r['verb']}")
+    return out
+
+
+def _writes(lane, doc):
+    return [str(st.get("path")) for st in (doc.get("steps") or []) if st.get("tool") == "Write" and st.get("path")]
+
+
+def _seed(lane, packet):
+    (Path(lane) / "journal.jsonl").write_text(json.dumps({"kind": "card", "verb": "ask", "q": "seeded"}) + "\n", encoding="utf-8")
+
+
+spec_b = rp.RunnerSpec(mode="server", endpoint=base + "/ask", status=base + "/status?id={id}", brain="brain-b",
+                       deeds=_deeds, writes=_writes, dry_seed=_seed, dry_answer="Noted (dry).", poll_s=0.05, timeout_s=10,
+                       server_side=["the server's transcript for {agent} ({id})"],
+                       question=lambda pk, lane: "Q: " + str(pk["input"]["text"]))
+runner = rp.table_runner({"alpha": spec_a, "beta": spec_b})
+lane_root2 = RT / "lanes"
+b3 = rp.Binding(name="t", packets_dir=RT / "pk", kinds=KINDS, runner=runner, lane_root=lane_root2)
+res = {r["packet"]: r for r in rp.live(b3, rp.load(RT / "pk"))}
+ok(res["pa"]["verdict"] == "PASS" and "live" in res["pa"]["deeds"] and "server-side (not traced): the transcript for pa" in res["pa"]["note"],
+   f"process shape: argv template filled, EVAL_RESULT parsed, server_side named: {res['pa']['note'][:120]}")
+ok(res["pc"]["verdict"] == "SKIP" and "no runner for agent 'gamma'" in res["pc"]["note"], "an agent with no row in the table is skipped")
+ok(res["pb"]["verdict"] == "FAIL" and "isolation:write_outside_lane" in res["pb"]["fail_fields"] and str(RT / "elsewhere.txt") in res["pb"]["writes_outside"],
+   f"server shape: the binding's writes reader can fail a turn for a write outside the lane: {res['pb']['fail_fields']}")
+ok("card:ask" in res["pb"]["deeds"] and res["pb"]["reply"] == "Card posted." and "brain-b-eval-pb" in res["pb"]["note"],
+   f"server shape: deeds read from the lane journal, the reply from the status document, the eval agent named: {res['pb']['note'][:140]}")
+pb_post = next(b for b in posted if b["agent"] == "brain-b-eval-pb")
+ok(pb_post["question"].startswith("Q: ") and Path(pb_post["eval_lane"]).is_dir() and str(pb_post["eval_lane"]).startswith(str(lane_root2)),
+   "server shape: the POST carries the composed question and the lane path under the lane root")
+lane_files = {Path(w).name for w in res["pb"]["writes"]}
+ok({"packet.json", "question.txt", "ask_status.json"} <= lane_files, f"server shape: the runner's own writes (packet, question, status copy) are traced in the lane: {sorted(lane_files)}")
+# dry run: no request, the seed stands in for the brain
+n_before = len(posted)
+dres = {r["packet"]: r for r in rp.live(b3, rp.load(RT / "pk"), dry_run=True, only="pb")}
+ok(len(posted) == n_before and dres["pb"]["verdict"] == "ISOLATED" and "card:ask" in dres["pb"]["deeds"] and dres["pb"]["reply"] == "Noted (dry).",
+   f"server shape dry run: no POST, the seed's deeds are read, isolation judged: {dres['pb']['verdict']} {dres['pb']['deeds']}")
+# busy brain (409) is waited out; a refused ask is an error, not a crash
+spec_busy = rp.RunnerSpec(mode="server", endpoint=base + "/ask", status=base + "/status?id={id}", brain="brain", deeds=_deeds, poll_s=0.05, timeout_s=10, busy_wait_s=5)
+(lane_root2 / "busy").mkdir(parents=True)
+rb = rp.run_server(spec_busy, {"id": "busy", "agent": "beta", "input": {"text": "x"}}, lane_root2 / "busy", False)
+ok(not rb.get("error") and rb["reply"] == "Card posted.", f"a 409 from the endpoint is waited out and the ask retried: {rb.get('error')}")
+spec_dead = rp.RunnerSpec(mode="server", endpoint="http://127.0.0.1:9/ask", status="http://127.0.0.1:9/s?id={id}", brain="brain", poll_s=0.05, timeout_s=2, busy_wait_s=1)
+(lane_root2 / "dead").mkdir(parents=True)
+rd = rp.run_server(spec_dead, {"id": "dead", "agent": "beta", "input": {"text": "x"}}, lane_root2 / "dead", False)
+ok(rd.get("error") and "ask refused" in rd["error"], f"an unreachable endpoint is an error verdict, not a crash: {rd.get('error')}")
+dq = rp.default_question({"input": {"sender": "owner1", "role": "manager", "text": "hi", "history": ["[09:00 X] a"]}, "fixtures": {"board": {"a": 1}}})
+ok(dq.startswith("[09:00 X] a") and "[FIXTURES:" in dq and dq.endswith("[from owner1 (role: manager)]\nhi"), f"default question = history, fixtures, headed text: {dq!r}")
+# --limit caps the turns actually run; skips do not count
+lres = rp.live(b3, rp.load(RT / "pk"), limit=1)
+ran = [r["packet"] for r in lres if r["verdict"] in ("PASS", "FAIL")]
+over = [r["packet"] for r in lres if "over --limit" in r.get("note", "")]
+ok(len(ran) == 1 and len(over) == 2 and set(over) == {"pa", "pc"}, f"--limit 1 runs one turn and marks every later packet SKIP: ran={ran} over={over}")
+srv.shutdown()
 print(f"ALL {N} OK")
