@@ -6,7 +6,6 @@ win, gate/describe lines, and the engine files carry no organization. No network
    python assistant/tests/test_provenance.py
 """
 import json
-import re
 import sys
 import tempfile
 from datetime import datetime
@@ -127,9 +126,20 @@ with contextlib.redirect_stdout(buf):
     rc = pv.main(["describe", str(tmp / "facts.json")])
 ok(rc == 0 and "a 1 (s" in buf.getvalue(), f"describe CLI: {buf.getvalue().strip()}")
 
-# --- engine files carry no organization (the engine rule; the vendoring drift test repeats it on the copy)
-NOUNS = re.compile(r"$^")  # identity words come from the pack, never from a literal list (history scrubbed 2026-11-01)
+# --- engine files carry no organization: the check reads the identity words from the engine's own classifier
+# (engine.org_values: org.json / people.json / core_sync.json of whatever pack is present), never from a literal list
+# here -- a literal list of an organization's names would itself put that organization into engine code (found by
+# the personal-side sync on 2026-11-01). A production pack repeats this check on its vendored copy with its own names.
+sys.path.insert(0, str(ROOT))
+try:
+    import engine as _eng
+    ov = _eng.org_values()
+    words = {str(w) for k in ("names", "words", "hosts", "domains") for w in (ov.get(k) or []) if len(str(w)) > 3}
+    words.add(str(ov.get("org_name") or "")) if len(str(ov.get("org_name") or "")) > 3 else None
+except Exception:  # noqa: BLE001
+    words = set()
 for p in (ROOT / "agent" / "provenance.py", ROOT / "agent" / "provenance_rules.json", ROOT / "agent" / "sentinels.json"):
-    hits = [ln.strip()[:80] for ln in p.read_text(encoding="utf-8").splitlines() if NOUNS.search(ln)]
-    ok(not hits, f"{p.name} names no organization: {hits[:2]}")
+    txt = p.read_text(encoding="utf-8").lower()
+    hits = sorted(w for w in words if str(w).lower() in txt)
+    ok(not hits, f"{p.name} names no organization identity word: {hits[:3]}")
 print(f"ALL {N} OK")
