@@ -41,7 +41,7 @@ T8 = mc.load_table(tmp / "big.json")
 ok(len(T8["held_types"]) == 5 and T8["timeout_s"] == 60, "a table with eight held types keeps the first five; the timeout floor is a minute")
 
 # --- classify
-email_card = {"questions": [{"question": "[EMAIL PREVIEW]\nTo: a@example.test\nSubject: Thursday\n\nHi Avery, the crew comes Thu 11/6 at 9.",
+email_card = {"questions": [{"question": "[EMAIL PREVIEW]\nTo: a@sample.test\nSubject: Thursday\n\nHi Avery, the crew comes Thu 11/6 at 9.",
                               "audience": "customer", "options": [{"label": "Approve and send"}, {"label": "Skip"}]}]}
 ok(mc.classify(email_card, T) == ("send_customer_email", "high"), "email preview to a customer = send_customer_email, high")
 text_card = {"questions": [{"question": "[TEXT PREVIEW]\nHi Blake, Fri 8am ok?", "audience": "prospect"}]}
@@ -59,10 +59,10 @@ ok(mc.classify(judg, T) == (mc.NONE_TYPE, "low"), "a judgment card with no send 
 multi = {"questions": [judg["questions"][0], text_card["questions"][0]]}
 ok(mc.classify(multi, T) == ("send_customer_text", "high"), "one high-stakes question makes the card high-stakes")
 ok(mc.classify({"question": "[TEXT PREVIEW] hi", "audience": "customer"}, T)[0] == "send_customer_text", "a bare question dict classifies too")
-ok(mc.key_text(email_card).startswith("To: a@example.test") and "[EMAIL PREVIEW]" not in mc.key_text(email_card), "key_text drops the marker and folds whitespace")
+ok(mc.key_text(email_card).startswith("To: a@sample.test") and "[EMAIL PREVIEW]" not in mc.key_text(email_card), "key_text drops the marker and folds whitespace")
 
 # --- hold / shadow records
-h = mc.hold("q1", "send_customer_email", "high", now=NOW, text="To: a@example.test ...", outcome="live", table=T)
+h = mc.hold("q1", "send_customer_email", "high", now=NOW, text="To: a@sample.test ...", outcome="live", table=T)
 for k in ("card", "action_type", "stakes", "held_at", "reason", "verifier", "timeout_s", "owner_decision"):
     ok(k in h, f"hold record carries {k}")
 ok(h["timeout_s"] == 900 and h["held"] is True and h["verifier"] is None and h["owner_decision"] is None, "a hold always carries a timeout; verifier and owner decision start empty")
