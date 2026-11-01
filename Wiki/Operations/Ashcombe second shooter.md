@@ -3,7 +3,7 @@ type: reference
 area: operations
 tags: [personal]
 created: 2026-10-30
-updated: 2026-10-31
+updated: 2026-11-01
 sources: []
 status: draft
 ---
@@ -25,3 +25,9 @@ staff1 confirmed as second shooter for the Ashcombe wedding.
 
 staff1 confirmed as second shooter for the Ashcombe wedding.
 <!-- agent:20261031-211832:end -->
+
+<!-- agent:20261101-081855:begin -->
+## Added by Sage, 2026-11-01
+
+staff1 confirmed as second shooter for the Ashcombe wedding.
+<!-- agent:20261101-081855:end -->
