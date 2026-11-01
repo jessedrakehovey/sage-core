@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.10.31+28b1e52",
+  "version": "2026.10.31+8e4bd0b",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-10-31T16:42:16"
+  "synced": "2026-10-31T17:11:12"
  },
  "modules": {
   "money": {
@@ -466,6 +466,7 @@
   "scripts/skill_radar/dismissed.json": "dc72974c7921126c6fc30a6b4d97b6ac20eb83b6f4bbba311618fcb1a9a7f56b",
   "scripts/wiki_tool.py": "c4408edf6034cc101984f87167d523257cd40a0835059b3d312efd20e8ef7ecb",
   "scripts/zr_settings/README.md": "f1c0db164df430292bc2ee042100f034532b960f69589672d1598ae8e80ba431",
-  "scripts/zr_settings/profile/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "scripts/zr_settings/profile/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "scripts/zr_settings/profile/NCSET017.BIN": "ea1c602543a14ab2cdfd0a45d975b3a249d698b5857848e025dcfa88dba6721e"
  }
 }
