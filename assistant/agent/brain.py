@@ -222,8 +222,14 @@ def context_block(person: dict | None = None, scope: str = "", space_title: str 
         projects_block = projects.render()
     except Exception:  # noqa: BLE001
         projects_block = ""
+    try:                      # every cached store with its source and time; stale / sentinel / conflict reads as UNKNOWN (Seed B, 2026-11-01)
+        import truth
+        truth_block = truth.render()
+    except Exception:  # noqa: BLE001
+        truth_block = ""
     parts = [persona, org.render(), core.render_rules(), core.render_memory(), routines.render(), _jobs_render(), skills.render(),
-             wiki_map(), resources.render(), texters_block(), sent_block(), connections_block(), builder.render(), reflex_block, projects_block]
+             wiki_map(), resources.render(), texters_block(), sent_block(), connections_block(), builder.render(), reflex_block, projects_block,
+             truth_block]
     return "\n\n".join(x for x in parts if x)
 
 

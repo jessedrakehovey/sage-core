@@ -1271,3 +1271,24 @@ LEARN! BUILD! ADAPT!" Three code changes:
   the same for a block that is not the owner's step (doer README). `voice.BLOCKED["progress"]` holds "Still on it",
   "still working", "I couldn't finish", "That still didn't take" back from Chat whoever posts them.
 - The build lands, the capability loop replays the ask (`capability.tick`), and that reply is the update.
+
+
+## Truth with provenance: FACTS AS OF (Seed B, 2026-11-01; the owner: "give sage normal sage this too")
+
+The engine is `provenance.py` (with its templates `provenance_rules.json` / `sentinels.json` and
+`assistant/tests/test_provenance.py`), byte-identical to sage-core commit `7fe6c86`; never edit it here, change it in
+sage-core and bring it back the same way. `truth.py` is this agent's binding:
+
+- **Pack data, never code:** `assistant/data/provenance_rules.json` (max age per source kind: calendar / mail 12 h,
+  CRM snapshot 26 h, bank feed 48 h, connections 24 h, tasks 6 h; memory, wiki and the exec ledger durable),
+  `assistant/data/sentinels.json` (the false negatives already logged in `Schema/mistakes.md`, each with `why` and
+  `mistake`: an unconnected account, one mailbox searched, a send with no executor record, no meeting in the CRM
+  snapshot) and `assistant/data/brief_facts.json` (which store, which stamp, which value; `@crm` = the CRM snapshot).
+- **The block:** `brain.context_block` (owners only; the staff context never gets it, it names personal mailboxes)
+  ends with FACTS AS OF: every store with its source and time; a stale record, a sentinel hit or two sources that
+  disagree reads UNKNOWN / CONFLICT in plain words, never as its stale value. A store that cannot be read is UNKNOWN.
+- **UTC stamps:** the engine reads stamps as local; `truth.local_stamp` converts `...Z` / offset stamps first (raw, a
+  Z stamp read 8 h off). Across a DST change an age is off by the hour, never more.
+- `python assistant/agent/truth.py shadow` lists every brief fact with its verdict; `render` prints the block.
+  Tests: `assistant/tests/test_truth.py`; packets `scripts/evals/packets/provenance-*.json` (`fixtures.brief_facts`;
+  their live phrase check waits for a lane-aware runner that places that fixture).
