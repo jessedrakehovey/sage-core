@@ -34,10 +34,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core  # noqa: E402
 
+import outreach  # noqa: E402  (Seed A: channel_history / route_tries / needs_channel_review on every row)
+
 LEDGER = core.DATA / "followups.json"
 MIN_LEAD_MIN = 15                   # never check back sooner than this
 MAX_DAYS = 30                       # further out than this is a schedule, not a follow-up
 MAX_TRIES = 3
+# Seed A (goals, 2026-11-01): every row carries channel_history [{channel, ts, result}] and the derived
+# route_tries / needs_channel_review, written by outreach.py at the paths that already exist: mark(status="sent")
+# records the check-in on CHANNEL, note_reply records the person's reply (on the pending row, and on an earlier
+# closed check-in in the same thread). A row closes on its one check-in, so the asks to one person in one thread
+# live on several rows: thread_review() reads them as one. The verdict is context the brain reads (review_head in
+# front of the due question); nothing here changes channel or sends because of it.
+CHANNEL = "chat"
+STALL_TRIES = 2
 FMT = "%Y-%m-%dT%H:%M"
 
 
@@ -137,7 +147,7 @@ def add(rows, convo: str, thread: str, asker: dict | None, now: datetime | None 
         at = clamp_work(at, now)
         row = {"to_key": p["key"], "to": p["name"], "from_key": asker.get("key") or "", "from": asker.get("name") or "",
                "about": about, "at": at.strftime(FMT), "convo": convo, "thread": thread or "",
-               "status": "pending", "tries": 0}
+               "status": "pending", "tries": 0, "channel_history": []}
         # one pending follow-up per person per thread (or per subject when unthreaded): a second
         # directive re-times the first instead of stacking
         old = next((it for it in items if it.get("status") == "pending" and it.get("to_key") == p["key"]
@@ -172,13 +182,23 @@ def note_reply(person_key: str, convo: str, thread: str = "") -> int:
     anywhere else it is only noted (the brain judges at check-in time)."""
     led = _load()
     n = 0
+    now_s = datetime.now().strftime(FMT)
     for it in led.get("items") or []:
-        if it.get("status") != "pending" or it.get("to_key") != person_key:
+        if it.get("to_key") != person_key:
+            continue
+        if it.get("status") == "sent" and _same_place(it, convo, thread):
+            # Seed A: they answered after the check-in went out; that closed ask reads as replied
+            if any(e.get("result") == "no_reply" for e in (it.get("channel_history") or [])):
+                outreach.record_reply(it, ts=now_s)
+                n += 1
+            continue
+        if it.get("status") != "pending":
             continue
         if time.time() - float(it.get("created_ts") or 0) < 5:
             continue                                    # the very message that created it
         if thread and thread == it.get("thread") and convo == it.get("convo"):
-            it.update(status="answered", closed=datetime.now().strftime(FMT))
+            it.update(status="answered", closed=now_s)
+            outreach.record_reply(it, ts=now_s)         # Seed A
         else:
             it["spoke_since"] = True
         n += 1
@@ -225,8 +245,44 @@ def mark(fid: str, status: str = "", retry_min: int = 0, **kw) -> None:
                 status = "failed"
         if status:
             it.update(status=status, closed=datetime.now().strftime(FMT))
+        if status == "sent":    # Seed A: the check-in went out on CHANNEL
+            outreach.record_send(it, CHANNEL, ts=it.get("closed"), min_tries=STALL_TRIES)
         it.update(kw)
     core.save(LEDGER, led)
+
+
+def _same_place(it: dict, convo: str, thread: str = "") -> bool:
+    """The same thread when the row has one, else the same conversation."""
+    if it.get("thread"):
+        return bool(thread) and thread == it.get("thread")
+    return bool(convo) and convo == it.get("convo")
+
+
+def thread_review(to_key: str, convo: str, thread: str = "") -> dict:
+    """The asks to one person in one place, read as one row: {item, who, asker, line}. `line` is outreach's plain
+    words ('two asks to <name> on chat went unanswered; change channel or ask <owner>?') or '' when not stalled."""
+    rows = [it for it in (_load().get("items") or [])
+            if it.get("to_key") == to_key and it.get("status") not in ("cancelled", "invalid") and _same_place(it, convo, thread)]
+    if not rows:
+        return {"item": {"channel_history": []}, "line": ""}
+    merged = outreach.merge(rows)
+    last = sorted(rows, key=lambda r: str(r.get("created") or ""))[-1]
+    who = str(last.get("to") or "").split()[0] if last.get("to") else ""
+    asker = str(last.get("from") or "").split()[0] if last.get("from") else ""
+    return {"item": merged, "who": who, "asker": asker, "about": last.get("about") or "",
+            "line": outreach.review_line(merged, who=who, asker=asker, min_tries=STALL_TRIES)}
+
+
+def review_head(it: dict) -> str:
+    """Seed A: when the earlier check-ins to this person here went unanswered, the verdict goes in front of the due
+    question. Context for the brain: the bound is no third ask on that channel without the giver knowing it is
+    stuck; what to do instead is the brain's to propose, never to send."""
+    r = thread_review(it.get("to_key") or "", it.get("convo") or "", it.get("thread") or "")
+    if not r.get("line"):
+        return ""
+    return ("[CHANNEL REVIEW (code): " + r["line"] + " Do not send the same ask on this channel a third time as if "
+            "nothing happened: say it is stuck, tell the giver, and propose a different channel or reader (a call, a "
+            "text, someone else) for them to decide. Never send on another channel yourself.]\n")
 
 
 def pending() -> list:
@@ -308,7 +364,11 @@ def keep_promises(text: str, added: list | None = None, speaker: str = "", now: 
 
 
 def due_question(it: dict) -> str:
-    """What the bridge asks the brain when a follow-up comes due."""
+    """What the bridge asks the brain when a follow-up comes due (the Seed A channel review in front when stalled)."""
+    return review_head(it) + _due_question(it)
+
+
+def _due_question(it: dict) -> str:
     first = str(it.get("to") or "").split()[0]
     giver = str(it.get("from") or "an owner").split()[0]
     if it.get("from_key") and it.get("from_key") == it.get("to_key"):

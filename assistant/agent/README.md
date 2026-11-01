@@ -1294,3 +1294,25 @@ sage-core and bring it back the same way. `truth.py` is this agent's binding:
 - `python assistant/agent/truth.py shadow` lists every brief fact with its verdict; `render` prints the block.
   Tests: `assistant/tests/test_truth.py`; packets `scripts/evals/packets/provenance-*.json` (`fixtures.brief_facts`;
   their live phrase check waits for a lane-aware runner that places that fixture).
+
+## Goals, reshaped: CHANNEL REVIEW on stuck asks (Seed A, 2026-11-01)
+
+The engine is `outreach.py` (`assistant/tests/test_outreach.py`, 39 checks), written once in sage-core; never edit it
+in a pack, change it in sage-core and bring it back the same way. What it adds to the rows that already exist
+(a follow-up, a chase item), never a goal store beside them:
+
+- `channel_history: [{channel, ts, result}]` appended at the code's EXISTING send and reply paths (result =
+  `no_reply` | `replied` | `bounced`); `route_tries: {channel: n}` and `needs_channel_review` derived from it
+  (`stalled_outreach(item, min_tries=2)`: two or more unanswered asks in a row on ONE channel). Rows from before the
+  field read the same way from their `sends` / `unanswered` / `last_sent` / `last_reply_ts` counters.
+- **Context, never a trigger.** The verdict reaches the model as one plain line in front of its question
+  (`followups.review_head`: "two asks to <name> on chat went unanswered; change channel or ask <owner>?") and the
+  model decides what to propose. No code changes a channel, escalates or sends because of it: a message to anyone is
+  still a card for the owner.
+- **The follow-up ledger binding (`followups.py`):** `mark(status="sent")` records the check-in on `chat`,
+  `note_reply` records the reply (on the pending row, and on an earlier closed check-in in the same place, so an
+  answered ask is never called a stall); a row closes on its one check-in, so `thread_review(to_key, convo, thread)`
+  reads the asks to one person in one place as one (`outreach.merge`); `due_question` carries `review_head`.
+- **Shadow read-back:** `python assistant/agent/outreach.py shadow <ledger.json> [--min-tries 2]` counts the rows
+  already stalled; the plan's rule: zero past two tries = the problem does not exist at this time scale, more than
+  three a week = keep the flag.
