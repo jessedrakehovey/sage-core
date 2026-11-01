@@ -1,0 +1,19 @@
+{
+ "_doc": "provenance.py staleness table (Seed B). max_age_hours per source KIND: a fact read from a record older than its kind's limit is STALE and reads as UNKNOWN in the fact gate (shown with its stamp, never asserted). null = durable, never stale (a note, a memory, a config value). An unlisted kind takes default_max_age_hours. DATA, not code: an organization copies this file beside its own binding and tunes it; the engine ships these generic kinds as the template. Values here are the engine defaults; the production organizations' own tables use their system of record's names.",
+ "max_age_hours": {
+  "work_board": 30,
+  "ledger_report": 4,
+  "live_report": 24,
+  "key_log": 168,
+  "access_note": 720,
+  "decision_log": 720,
+  "card_answer": 720,
+  "chat_message": 168,
+  "synced_note": null,
+  "wiki_note": null,
+  "memory": null,
+  "agent_memory": null,
+  "config": null
+ },
+ "default_max_age_hours": null
+}

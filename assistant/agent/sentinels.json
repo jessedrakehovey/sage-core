@@ -1,0 +1,25 @@
+{
+ "_doc": "provenance.py sentinel table (Seed B): the NAMED false negatives of a system of record, as data. A reading that trips one reads as UNKNOWN, never as 'none' / 'zero' / 'not scheduled'. A rule trips when every condition under `when` holds: kind (one of), source_re (regex over the source string), field (one of), value_in (one of; null, 0, '', false), context (each key equals the reading's context value; a list = one of). `why` is the plain-words reason the gate repeats. These are the engine's generic shapes; an organization's own table names its system of record's reports and fields (the production pack keeps that file beside its binding).",
+ "sentinels": [
+  {
+   "name": "filtered_report_count_zero",
+   "when": {"kind": ["live_report"], "field": ["count", "rows"], "value_in": [0, null], "context": {"filtered": true}},
+   "why": "a filtered pull of the system of record can come back empty for a record that exists; zero rows from a filtered pull is unknown, never none"
+  },
+  {
+   "name": "report_null_schedule_timestamp",
+   "when": {"kind": ["live_report", "work_board"], "field": ["scheduled", "scheduled_start"], "value_in": [null, ""], "context": {"status_in": ["Scheduled"]}},
+   "why": "a report row can carry a null schedule timestamp while the job is scheduled; the schedule is unknown until the record itself is opened"
+  },
+  {
+   "name": "windowed_report_absent",
+   "when": {"kind": ["live_report"], "field": ["exists"], "value_in": [false, 0, null], "context": {"windowed": true}},
+   "why": "a date-windowed pull does not show records outside its window; absence from it is unknown, never gone"
+  },
+  {
+   "name": "cached_count_null",
+   "when": {"kind": ["work_board"], "field": ["photo_count", "count"], "value_in": [null]},
+   "why": "a null count in a cache means not checked, never zero"
+  }
+ ]
+}
