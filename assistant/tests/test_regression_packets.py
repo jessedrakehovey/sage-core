@@ -64,7 +64,7 @@ ok(any("tested_rule is empty" in x for x in probs), "tested_rule is required")
 ok(any("rationale must be a non-empty sentence or null" in x for x in probs), "an empty-string rationale is not a sentence")
 ok(any("forbid_phrases must be a list" in x for x in probs), "list fields are checked")
 ok(not any(x.startswith("good:") or x.startswith("owed:") or x.startswith("old:") for x in probs), "clean packets raise nothing")
-ok(rp.owed(packets) == ["old", "owed"], f"owed = the packets with no owner sentence: {rp.owed(packets)}")
+ok(rp.owed(packets) == ["owed"], f"owed = the packets with neither an owner sentence nor an expectation: {rp.owed(packets)}")
 ok(rp.known_kind("card:ask", KINDS) and rp.known_kind("card", KINDS) and not rp.known_kind("mail:send", KINDS), "deed kinds match by family")
 
 # ---------------------------------------------------------------- scoring

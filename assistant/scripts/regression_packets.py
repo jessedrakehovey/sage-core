@@ -22,7 +22,7 @@ input.sender, rationale null.
 Why the owner writes the rationale: an expectation the system drafted for itself makes the test self-grading. A
 packet generated from the owner's answered card carries that judgment as deeds and phrases, so its rationale may be
 null (quoted only when the owner typed a note); a packet with neither a sentence nor an expectation is skipped live.
---check lists every null rationale as owed. Packets may sit in packets/ or one sub-folder down (packets/<group>/), as
+--check lists as OWED the packets with neither. Packets may sit in packets/ or one sub-folder down (packets/<group>/), as
 one .json each or as a .jsonl with one packet per line (generated groups).
 
 Modes
@@ -181,8 +181,9 @@ def has_expectations(p: dict) -> bool:
 
 
 def owed(packets: list) -> list:
-    """Packets with no owner sentence yet (well-formed, skipped live)."""
-    return [p["_name"] for p in packets if not p.get("_error") and p.get("rationale") is None]
+    """Packets that test nothing yet: no owner sentence AND no expectation (skipped live). A card-made packet with
+    deeds or phrases and a null rationale is not owed; it runs on the owner's judgment the card carried."""
+    return [p["_name"] for p in packets if not p.get("_error") and p.get("rationale") is None and not has_expectations(p)]
 
 
 def flag_changed(packets: list, changed: list, rule_files: Callable[[str], list] | None) -> list:
@@ -427,8 +428,11 @@ def main(binding: Binding, argv: list | None = None) -> int:
             print("PROBLEM " + x)
         for f in flags:
             print(f"FLAG {f['packet']} (tested_rule {f['tested_rule']}) <- {', '.join(f['changed'])}: review before the next live run")
-        for o in owed(packets):
-            print(f"OWED {o}: rationale is null (skipped live until the owner writes the sentence)")
+        ow = owed(packets)
+        for o in ow[:20]:
+            print(f"OWED {o}: no rationale and no expectations (skipped live until one exists)")
+        if len(ow) > 20:
+            print(f"OWED ... {len(ow) - 20} more")
         print(f"RESULT REGRESSION packets={len(packets)} problems={len(probs)} flagged={len(flags)} owed={len(owed(packets))}")
     return 1 if probs else 0
 
