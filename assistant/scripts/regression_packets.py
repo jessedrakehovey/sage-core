@@ -20,7 +20,10 @@ The older shape ({"message", "who", "expect_deeds", "forbid_phrases"}) still loa
 input.sender, rationale null.
 
 Why the owner writes the rationale: an expectation the system drafted for itself makes the test self-grading. A
-packet whose rationale is null is well-formed (--check passes it) but never run live; the runner lists it as owed.
+packet generated from the owner's answered card carries that judgment as deeds and phrases, so its rationale may be
+null (quoted only when the owner typed a note); a packet with neither a sentence nor an expectation is skipped live.
+--check lists every null rationale as owed. Packets may sit in packets/ or one sub-folder down (packets/<group>/), as
+one .json each or as a .jsonl with one packet per line (generated groups).
 
 Modes
   --check               zero-LLM: every packet is well-formed, names only deed kinds the binding has, and (with
@@ -85,7 +88,25 @@ def normalize(p: dict) -> dict:
 
 def load(packets_dir: Path) -> list:
     out = []
-    for f in sorted(glob.glob(str(Path(packets_dir) / "*.json"))):
+    d = Path(packets_dir)
+    files = sorted(glob.glob(str(d / "*.json"))) + sorted(glob.glob(str(d / "*" / "*.json")))
+    # generated packets travel as one JSONL per group (one packet per line, named by its id)
+    for jf in sorted(glob.glob(str(d / "*.jsonl"))) + sorted(glob.glob(str(d / "*" / "*.jsonl"))):
+        for i, ln in enumerate(Path(jf).read_text(encoding="utf-8-sig", errors="replace").splitlines(), 1):
+            if not ln.strip():
+                continue
+            try:
+                raw = json.loads(ln)
+                if not isinstance(raw, dict):
+                    raise ValueError("not an object")
+                dd = normalize(raw)
+                dd["_name"] = str(dd.get("id") or f"{Path(jf).stem}-{i}")
+                dd.setdefault("id", dd["_name"])
+                dd["_path"] = f"{jf}#{i}"
+                out.append(dd)
+            except ValueError as e:
+                out.append({"_name": f"{Path(jf).stem}#{i}", "_path": f"{jf}#{i}", "_error": str(e)})
+    for f in files:
         name = Path(f).stem
         try:
             raw = json.loads(Path(f).read_text(encoding="utf-8-sig"))
@@ -111,7 +132,7 @@ def validate(p: dict, kinds: set | None = None) -> list:
     for k in REQUIRED:
         if k not in p:
             probs.append(f"missing field {k}")
-    if p.get("id") and p.get("_name") and p["id"] != p["_name"]:
+    if p.get("id") and p.get("_name") and p["id"] != p["_name"] and "#" not in str(p.get("_path") or ""):
         probs.append(f"id {p['id']!r} differs from the file name {p['_name']!r}")
     inp = p.get("input")
     if not isinstance(inp, dict):
@@ -153,6 +174,10 @@ def check(packets: list, kinds: set | None) -> list:
         for x in validate(p, kinds):
             problems.append(f"{p['_name']}: {x}")
     return problems
+
+
+def has_expectations(p: dict) -> bool:
+    return any(p.get(k) for k in LIST_FIELDS)
 
 
 def owed(packets: list) -> list:
@@ -316,9 +341,10 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
             continue
         if agent and str(p.get("agent") or "") != agent:
             continue
-        if p.get("rationale") is None and not dry_run:
-            # the owner's sentence gates SCORING; the dry run is about isolation and runs every packet
-            results.append({"packet": p["_name"], "verdict": "SKIP", "note": "no owner rationale yet", "writes_outside": []})
+        if p.get("rationale") is None and not has_expectations(p) and not dry_run:
+            # a packet generated from a card carries the owner's judgment as deeds and phrases; one with neither a
+            # sentence nor an expectation tests nothing and is skipped (the dry run is about isolation and runs all)
+            results.append({"packet": p["_name"], "verdict": "SKIP", "note": "no owner rationale and no expectations", "writes_outside": []})
             continue
         if binding.runner is None:
             results.append({"packet": p["_name"], "verdict": "SKIP", "note": "binding has no runner", "writes_outside": []})
@@ -330,6 +356,9 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
             r = binding.runner(p, lane, dry_run) or {}
         except Exception as e:  # noqa: BLE001
             r = {"error": f"{type(e).__name__}: {e}"}
+        if r.get("skip"):
+            results.append({"packet": p["_name"], "verdict": "SKIP", "note": str(r["skip"])[:200], "writes_outside": []})
+            continue
         reply = str(r.get("reply") or "")
         deeds = list(r.get("deeds") or [])
         writes = list(r.get("writes") or [])

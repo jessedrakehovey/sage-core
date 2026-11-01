@@ -108,11 +108,12 @@ write("leaky", dict(good, id="leaky"))
 res = rp.live(b, rp.load(PK))
 by = {r["packet"]: r for r in res}
 ok(by["good"]["verdict"] == "PASS" and not by["good"]["writes_outside"], f"good packet passes in its lane: {by['good']['note']}")
-ok(by["owed"]["verdict"] == "SKIP" and "owed" not in seen and by["old"]["verdict"] == "SKIP", "no owner sentence = skipped, the runner never asked")
+ok(by["owed"]["verdict"] == "SKIP" and "owed" not in seen, "no owner sentence AND no expectations = skipped, the runner never asked")
+ok(by["old"]["verdict"] == "PASS" and "old" in seen, "a null-rationale packet with expectations (a card-made one) runs on its deeds")
 ok(by["leaky"]["verdict"] == "FAIL" and "isolation:write_outside_lane" in by["leaky"]["fail_fields"] and by["leaky"]["writes_outside"],
    f"a write outside the lane fails the packet whatever the deeds: {by['leaky']['fail_fields']}")
 ok(str(seen["good"][0]).startswith(str(lane_root)) and seen["good"][1] is False, "each run gets a fresh lane under lane_root")
-ok(("good", "PASS", []) in recorded and ("leaky", "FAIL", by["leaky"]["fail_fields"]) in recorded and not any(r[0] == "owed" for r in recorded),
+ok(("good", "PASS", []) in recorded and ("leaky", "FAIL", by["leaky"]["fail_fields"]) in recorded and not any(r[0] == "owed" for r in recorded) and ("old", "PASS", []) in recorded,
    f"ledger rows for the run packets only: {recorded}")
 recorded.clear()
 res2 = rp.live(b, rp.load(PK), dry_run=True, only="good")
@@ -162,4 +163,20 @@ with contextlib.redirect_stdout(buf):
 ok(rc == 0 and "leak=0" in buf.getvalue() and "isolated=3" in buf.getvalue() and "owed" in seen,
    "clean dry run exits 0 and runs the owed packets too (isolation needs no owner sentence)")
 
+# packets one folder down load too; a runner that declines a packet makes it SKIP, not FAIL
+sub = PK / "cards"
+sub.mkdir()
+write("cards/sub-one", dict(good, id="sub-one", agent="nobody"))
+loaded = [p["_name"] for p in rp.load(PK)]
+ok("sub-one" in loaded, f"a packet in packets/<group>/ loads: {loaded}")
+b2 = rp.Binding(name="t", packets_dir=PK, kinds=KINDS, lane_root=lane_root,
+                runner=lambda p, lane, dry: ({"skip": "no runner for nobody"} if p.get("agent") == "nobody" else runner(p, lane, dry)))
+res3 = {r["packet"]: r for r in rp.live(b2, rp.load(PK), only="sub-one")}
+ok(res3["sub-one"]["verdict"] == "SKIP" and "no runner" in res3["sub-one"]["note"], "a runner skip is a SKIP verdict")
+# a JSONL group: one packet per line, each named by its id
+(PK / "cards" / "grp.jsonl").write_text(json.dumps(dict(good, id="jl-one")) + "\n" + json.dumps(dict(good, id="jl-two", rationale=None)) + "\n{bad\n", encoding="utf-8")
+loaded = {p["_name"]: p for p in rp.load(PK)}
+ok("jl-one" in loaded and "jl-two" in loaded and loaded["jl-one"]["_path"].endswith("#1"), f"JSONL packets load by id with file#line paths: {sorted(loaded)}")
+ok(any(n.startswith("grp#3") and loaded[n].get("_error") for n in loaded), "a bad JSONL line is one problem, not a crash")
+ok(rp.validate(loaded["jl-one"], KINDS) == [], "a JSONL packet's id need not equal the group file name")
 print(f"ALL {N} OK")
