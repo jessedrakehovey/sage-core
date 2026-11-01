@@ -1,0 +1,53 @@
+{
+  "_what": "Metacheck action-type table (Seed C, 'gate by action type, not by a number'). A card whose action is one of the HELD types gets a deferred, fresh-context re-check of its key fact before the owner reads it. The hold can only ADD a check; it never removes or weakens the owner's tap, and no number or confidence is ever shown. At most 5 held types. An organization copies this file and names its own exec kinds, markers and audiences; the engine code never names a system of record, a channel product or a person.",
+  "timeout_s": 900,
+  "verify_within_s": 600,
+  "lines": {
+    "confirmed": "verifier re-checked this: it matches the source",
+    "discrepancy": "verifier found a difference, needs your read",
+    "timeout": "verifier timed out, verify by hand",
+    "waiting_office": "held until the office opens; the re-check timed out after hours"
+  },
+  "held_types": {
+    "send_customer_email": {
+      "stakes": "high",
+      "exec_kinds": ["email_send"],
+      "markers": ["EMAIL PREVIEW"],
+      "audiences": ["customer", "prospect"],
+      "unknown_audience": true,
+      "reason": "re-check the recipient, the date and any amount in this email before it is sent"
+    },
+    "send_customer_text": {
+      "stakes": "high",
+      "exec_kinds": ["text_send"],
+      "markers": ["TEXT PREVIEW", "SMS PREVIEW"],
+      "audiences": ["customer", "prospect"],
+      "unknown_audience": true,
+      "reason": "re-check the day, the time and the name in this text before it is sent"
+    },
+    "send_staff_message": {
+      "stakes": "high",
+      "exec_kinds": ["chat_send"],
+      "markers": ["EMAIL PREVIEW", "TEXT PREVIEW", "CHAT PREVIEW"],
+      "audiences": ["staff", "vendor"],
+      "unknown_audience": false,
+      "reason": "re-check the fact this message states before it goes to a colleague"
+    },
+    "record_write": {
+      "stakes": "high",
+      "exec_kinds": ["record_create", "record_close", "record_set_status", "record_schedule", "record_assign", "record_note"],
+      "markers": [],
+      "audiences": [],
+      "unknown_audience": false,
+      "reason": "re-check the record id, the status and the date before the system of record is written"
+    },
+    "payment": {
+      "stakes": "high",
+      "exec_kinds": ["bill_approve", "payment"],
+      "markers": ["PAYMENT PREVIEW"],
+      "audiences": [],
+      "unknown_audience": true,
+      "reason": "re-check the amount, the payee and the invoice before money moves"
+    }
+  }
+}

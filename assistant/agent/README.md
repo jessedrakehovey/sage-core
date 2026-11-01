@@ -1316,3 +1316,25 @@ in a pack, change it in sage-core and bring it back the same way. What it adds t
 - **Shadow read-back:** `python assistant/agent/outreach.py shadow <ledger.json> [--min-tries 2]` counts the rows
   already stalled; the plan's rule: zero past two tries = the problem does not exist at this time scale, more than
   three a week = keep the flag.
+
+## Metacheck, by action TYPE: a deferred re-check before the owner reads a high-stakes card (Seed C, 2026-11-01)
+
+The engine is `metacheck.py` + `metacheck.json` (`assistant/tests/test_metacheck.py`, 65 checks), written once in
+sage-core and vendored into a pack with its sha. Gated by action type from a data table, never by a number: no
+model-self-reported confidence, no decimal on a card, no inline fresh-context pass on the hot path.
+
+- `classify(card, table) -> (action_type, stakes)`: the card's exec kind first (it is what the tap will run), then a
+  `[... PREVIEW]` marker with its `audience`; a marker with no audience fails TOWARD the check. At most five held
+  types; a pack copies `metacheck.json` and names its own exec kinds, audiences and reasons.
+- The hold record (`hold()`; `shadow()` is the same shape with `held: false` for the unarmed log): card, action_type,
+  stakes, held_at, reason in plain words, verifier `{status, finding, ts}` (confirmed | discrepancy | timeout),
+  timeout_s (never under a minute, 15 min by default), owner_decision.
+- `resolve(hold, verifier, now, office_open)`: confirmed = released unchanged (one quiet detail line); discrepancy =
+  released and flagged "verifier found a difference, needs your read"; no verdict past the timeout = released with
+  "verifier timed out, verify by hand", except after hours, when it waits for the office to open (the owner's
+  decision 4: a held customer send never auto-releases outside office hours). `apply()` appends the line to the
+  card's detail text and RAISES if a question, an option or an exec payload changed: a hold may only add a check,
+  it never removes or weakens the owner's tap, and no line carries a number.
+- A pack ships it unarmed: every minted card gets a shadow row, nothing is held, and `calibration(rows, days)` reads
+  the ledger back in words (how many high-stakes cards, how many held, how the verifier ruled). The plan's rule:
+  fewer than two wrong high-stakes cards a week = the gate's value over the owner's own read is low; more = arm it.
