@@ -179,4 +179,17 @@ loaded = {p["_name"]: p for p in rp.load(PK)}
 ok("jl-one" in loaded and "jl-two" in loaded and loaded["jl-one"]["_path"].endswith("#1"), f"JSONL packets load by id with file#line paths: {sorted(loaded)}")
 ok(any(n.startswith("grp#3") and loaded[n].get("_error") for n in loaded), "a bad JSONL line is one problem, not a crash")
 ok(rp.validate(loaded["jl-one"], KINDS) == [], "a JSONL packet's id need not equal the group file name")
+# suites: smoke runs only smoke packets; regression runs smoke + regression; the note records suite and scoring
+write("sm", dict(good, id="sm", suite="smoke", scoring="deeds"))
+write("rg", dict(good, id="rg", suite="regression", scoring="judge"))
+write("fl", dict(good, id="fl", suite="full"))
+names = lambda res: sorted(r["packet"] for r in res)  # noqa: E731
+ok(names(rp.live(b, rp.load(PK), suite="smoke")) == ["sm"], "suite=smoke runs the smoke packets only")
+ok(set(names(rp.live(b, rp.load(PK), suite="regression"))) >= {"sm", "rg"} and "fl" not in names(rp.live(b, rp.load(PK), suite="regression")), "suite=regression runs smoke + regression, not full")
+ok("fl" in names(rp.live(b, rp.load(PK), suite="full")), "suite=full runs everything")
+r_sm = next(r for r in rp.live(b, rp.load(PK), only="sm"))
+ok("suite=smoke" in r_sm["note"] and "scoring=deeds" in r_sm["note"], f"the ledger note carries suite and scoring: {r_sm['note'][:80]}")
+write("badsuite", dict(good, id="badsuite", suite="nightly", scoring="vibes"))
+pr = rp.validate(next(p for p in rp.load(PK) if p["_name"] == "badsuite"), KINDS)
+ok(any("suite must be" in x for x in pr) and any("scoring must be" in x for x in pr), f"unknown suite / scoring values are problems: {pr}")
 print(f"ALL {N} OK")

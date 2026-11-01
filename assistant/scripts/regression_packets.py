@@ -25,6 +25,13 @@ null (quoted only when the owner typed a note); a packet with neither a sentence
 --check lists as OWED the packets with neither. Packets may sit in packets/ or one sub-folder down (packets/<group>/), as
 one .json each or as a .jsonl with one packet per line (generated groups).
 
+Suites and scoring (per packet, as data): `suite`: smoke (10-20 packets, the critical paths, on every rules / prompt
+commit, a handful live at most) | regression (the core few hundred: on demand before a rules / prompt change ships and
+from the nightly post-patch step) | full (every unique packet, weekly at most, never from a session). `scoring`:
+deeds (a deterministic action: the replay must show the same action with the same arguments as deed strings, e.g.
+exec:wo_close_one + arg:wo=123456-1, no model judge) | judge (open-ended text: phrase checks; an optional judge pass,
+never the model configuration that wrote the answer, is the binding's to add). Both land in the ledger row's note.
+
 Modes
   --check               zero-LLM: every packet is well-formed, names only deed kinds the binding has, and (with
                         --changed <files>) says which packets a changed file FLAGS for review (tested_rule match)
@@ -155,6 +162,10 @@ def validate(p: dict, kinds: set | None = None) -> list:
             for d in p.get(k, []) or []:
                 if isinstance(d, str) and not known_kind(d, kinds):
                     probs.append(f"{k}: unknown deed kind {d!r}")
+    if p.get("suite") not in (None, "") and p.get("suite") not in SUITES:
+        probs.append(f"suite must be one of {SUITES}")
+    if p.get("scoring") not in (None, "") and p.get("scoring") not in SCORING:
+        probs.append(f"scoring must be one of {SCORING}")
     both = set(p.get("expect_deeds") or []) & set(p.get("forbid_deeds") or [])
     if both:
         probs.append(f"deeds both expected and forbidden: {sorted(both)}")
@@ -333,7 +344,12 @@ class Binding:
     lane_root: Path | None = None
 
 
-def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "", agent: str = "") -> list:
+SUITES = ("smoke", "regression", "full")      # smoke: a handful on every rules/prompt commit; regression: the core set
+SCORING = ("deeds", "judge")                   # deeds: exact actions + arguments; judge: phrases (+ an optional judge pass)
+
+
+def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "", agent: str = "", suite: str = "") -> list:
+    """suite='smoke' runs the smoke packets only; 'regression' runs smoke + regression; 'full' (or '') runs every packet."""
     results = []
     for p in packets:
         if p.get("_error"):
@@ -341,6 +357,11 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
         if only and p["_name"] != only:
             continue
         if agent and str(p.get("agent") or "") != agent:
+            continue
+        ps = str(p.get("suite") or "full")
+        if suite == "smoke" and ps != "smoke":
+            continue
+        if suite == "regression" and ps not in ("smoke", "regression"):
             continue
         if p.get("rationale") is None and not has_expectations(p) and not dry_run:
             # a packet generated from a card carries the owner's judgment as deeds and phrases; one with neither a
@@ -374,7 +395,7 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
         if bad:
             fails = fails + ["isolation:write_outside_lane"]
             verdict = "LEAK" if dry_run else "FAIL"
-        note = (f"{time.time() - t0:.0f}s; deeds={deeds}; fails={fails}; "
+        note = (f"{time.time() - t0:.0f}s; suite={p.get('suite') or 'full'}; scoring={p.get('scoring') or 'deeds'}; deeds={deeds}; fails={fails}; "
                 + (f"outside={bad[:5]}; " if bad else "") + (str(r.get("note") or "") + "; " if r.get("note") else "")
                 + f"reply: {reply[:120]!r}")
         row = {"packet": p["_name"], "verdict": verdict, "fail_fields": fails, "deeds": deeds, "writes": writes,
@@ -396,11 +417,12 @@ def main(binding: Binding, argv: list | None = None) -> int:
     ap.add_argument("--changed", nargs="*", default=[], help="files a commit changed: flags packets by tested_rule")
     ap.add_argument("--only", default="", help="one packet id")
     ap.add_argument("--agent", default="", help="only this agent's packets")
+    ap.add_argument("--suite", default="", choices=("", "smoke", "regression", "full"), help="smoke | regression (smoke+core) | full")
     ap.add_argument("--json", action="store_true", help="machine-readable result")
     a = ap.parse_args(argv)
     packets = load(binding.packets_dir)
     if a.live:
-        res = live(binding, packets, dry_run=a.dry_run, only=a.only, agent=a.agent)
+        res = live(binding, packets, dry_run=a.dry_run, only=a.only, agent=a.agent, suite=a.suite)
         if a.json:
             print(json.dumps(res, ensure_ascii=False, indent=1))
         else:
