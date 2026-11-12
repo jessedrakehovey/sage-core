@@ -14,6 +14,8 @@ Backends, all free, tried in order until one answers:
   3. DuckDuckGo's plain HTML page, standard library only (often asks for a human check);
   4. Wikipedia's open search API (always up, narrow but honest).
 Page text: `trafilatura` when installed, else a standard-library extractor.
+A YouTube link is read as what is SAID in the video (its captions, via yt-dlp from whichever Python on this
+computer has it) under its title, channel and description; no captions -> the title and description alone.
 
 Safety: every page is somebody else's words. Results come back marked as data, never instructions,
 and a read refuses this computer and private-network addresses (Mission Control, routers, the doer's
@@ -29,7 +31,9 @@ import html as _html
 import ipaddress
 import json
 import re
+import importlib.util
 import socket
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -254,9 +258,103 @@ class _Text:
         return title, "\n".join(out).strip()
 
 
+# ------------------------------------------------------------------ a YouTube video: its words, not its page
+
+_YT_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/|embed/)|youtu\.be/)([\w-]{11})", re.I)
+YT_TIMEOUT = 150
+_YT_CMD: list = []
+
+
+def youtube_id(url: str) -> str:
+    m = _YT_ID.search(url or "")
+    return m.group(1) if m else ""
+
+
+def _ytdlp_cmd() -> list:
+    """The command that runs yt-dlp: this Python when it has it, a yt-dlp on PATH, else the first venv under
+    ~/.venvs that has it installed. [] when none does."""
+    if _YT_CMD:
+        return _YT_CMD
+    import shutil
+    cmd: list = []
+    if importlib.util.find_spec("yt_dlp"):
+        cmd = [sys.executable, "-m", "yt_dlp"]
+    elif shutil.which("yt-dlp"):
+        cmd = [shutil.which("yt-dlp")]
+    else:
+        for py in sorted(Path.home().glob(".venvs/*/Scripts/python.exe")) + sorted(Path.home().glob(".venvs/*/bin/python")):
+            env = py.parent.parent
+            if list(env.glob("Lib/site-packages/yt_dlp")) or list(env.glob("lib/python*/site-packages/yt_dlp")):
+                cmd = [str(py), "-m", "yt_dlp"]
+                break
+    _YT_CMD[:] = cmd
+    return cmd
+
+
+def _ytdlp(args: list) -> subprocess.CompletedProcess:
+    cmd = _ytdlp_cmd()
+    if not cmd:
+        raise RuntimeError("yt-dlp is not installed on this computer")
+
+    def run(extra):
+        return subprocess.run(cmd + extra + args, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=YT_TIMEOUT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    cp = run(["--js-runtimes", "node"])                    # newer yt-dlp solves YouTube's player check through Node
+    if cp.returncode != 0 and "js-runtimes" in (cp.stderr or ""):
+        cp = run([])                                       # an older yt-dlp without that option
+    return cp
+
+
+def _vtt_text(vtt: str) -> str:
+    """WebVTT -> plain prose: no timings or tags, the rolling-caption repeats collapsed."""
+    lines: list = []
+    for raw in vtt.splitlines():
+        ln = raw.strip()
+        if not ln or ln.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")) or "-->" in ln or ln.isdigit():
+            continue
+        ln = re.sub(r"\s+", " ", _html.unescape(re.sub(r"<[^>]+>", "", ln))).strip()
+        if ln and (not lines or lines[-1] != ln):
+            lines.append(ln)
+    return re.sub(r"\s+", " ", " ".join(lines)).strip()
+
+
+def read_youtube(url: str, max_chars: int = 30000) -> dict:
+    """{"ok", "url", "title", "text", "cut"} for a YouTube link: title, channel, length, description, transcript."""
+    watch = f"https://www.youtube.com/watch?v={youtube_id(url)}"
+    with tempfile.TemporaryDirectory(prefix="sage-yt-") as td:
+        try:
+            cp = _ytdlp(["--skip-download", "--write-info-json", "--write-subs", "--write-auto-subs",
+                         "--sub-langs", "en-orig,en,en-US,en-GB", "--sub-format", "vtt", "--ignore-errors",
+                         "-o", str(Path(td) / "%(id)s.%(ext)s"), watch])
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "url": watch, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+        infos = list(Path(td).glob("*.info.json"))
+        if not infos:
+            errs = [ln for ln in (cp.stderr or "").splitlines() if ln.startswith("ERROR")]
+            return {"ok": False, "url": watch,
+                    "error": "yt-dlp could not open the video: " + (" | ".join(errs) or (cp.stderr or "")[-200:])[:300]}
+        info = json.loads(infos[0].read_text(encoding="utf-8"))
+        vtts = sorted(Path(td).glob("*.vtt"), key=lambda v: (".en-orig." not in v.name, ".en." not in v.name, v.name))
+        said = _vtt_text(vtts[0].read_text(encoding="utf-8")) if vtts else ""
+    title = info.get("title") or ""
+    channel = info.get("uploader") or info.get("channel") or ""
+    head = [f"Video: {title}" if title else "", f"Channel: {channel}" if channel else "",
+            f"Length: {info['duration_string']}" if info.get("duration_string") else "",
+            f"Published: {info['upload_date']}" if info.get("upload_date") else ""]
+    desc = (info.get("description") or "").strip()
+    text = "\n".join(x for x in head if x) + (f"\n\nDescription:\n{desc[:3000]}" if desc else "")
+    text += (f"\n\nTranscript (what is said in the video):\n{said}" if said
+             else "\n\n(This video has no captions; only the title and description above are known.)")
+    good = bool(title or said)
+    return {"ok": good, "url": info.get("webpage_url") or watch, "title": title, "text": text[:max_chars],
+            "cut": len(text) > max_chars, **({} if good else {"error": "the video had nothing readable"})}
+
+
 def read(url: str, max_chars: int = 8000) -> dict:
     """{"ok", "url", "title", "text", "cut"}"""
     max_chars = max(500, min(int(max_chars or 8000), 40000))
+    if youtube_id(url):
+        return read_youtube(url, max(max_chars, 30000))    # a talk needs its whole transcript to be summed up
     try:
         url = _check_url(url)                              # here, not only in fetch: the guard is the read's own
         final, page = fetch(url)

@@ -1340,6 +1340,47 @@ ok("bills" in intents.MONEY_OPS and any(t["name"] == "money" and "bills" in t["i
 for f in ("prompt.md", "templates/prompt.generic.md"):
     ok("money` `bills`" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: an 'is it really due / why short' question has its rung")
 
+# ---------------------------------------------------------------- 36. "So what this video is talking about <YouTube link>" (gap g-57f6b7)
+# the owner, 2026-11-12 07:40: answered "I couldn't get what's said in that video". web_read on a YouTube link returns the
+# video's transcript (yt-dlp captions), so the brain reads it and says what the video is about.
+import websearch  # noqa: E402
+VIDEO_ASK = "So what this video is talking about https://youtu.be/JmmoLKG8ewQ"
+seen36 = {}
+
+
+def _fake_video(args):
+    out = Path(args[args.index("-o") + 1]).parent
+    seen36["url"] = args[-1]
+    (out / "v.info.json").write_text(json.dumps({"title": "Pricing your wedding films", "uploader": "A Channel"}), encoding="utf-8")
+    (out / "v.en.vtt").write_text("WEBVTT\n\n00:00:00.000 --> 00:00:03.000\nraise your prices every season\n", encoding="utf-8")
+    return type("CP", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+
+def fake_run_video(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen36["read"] = gmcp.call("web_read", {"url": "https://youtu.be/JmmoLKG8ewQ"})
+    return {"ok": True, "session": "S36", "text": "It's a talk on pricing wedding films: the main point is to raise your prices every season."}
+
+
+_ytdlp0, websearch._ytdlp = websearch._ytdlp, _fake_video
+brain._run_claude = fake_run_video
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+try:
+    bridge.handle({"channel": "local", "person": owner1, "text": VIDEO_ASK, "convo": "spaces/AAQAtest",
+                   "thread": "spaces/AAQAtest/threads/video36", "space": "spaces/AAQAtest", "direct": True})
+finally:
+    websearch._ytdlp = _ytdlp0
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+r36 = str(seen36.get("read"))
+ok(seen36.get("url") == "https://www.youtube.com/watch?v=JmmoLKG8ewQ" and "Pricing your wedding films" in r36
+   and "raise your prices every season" in r36,
+   f"'{VIDEO_ASK}': web_read returns what is said in the video ({r36[:120]!r})")
+ok("couldn't get what's said" not in out and "raise your prices" in out and len(cap._load()["gaps"]) == g0 and len(NOTES) == n0,
+   "the video ask is answered from the transcript: no 'couldn't get what's said' line, no build filed")
+ok(any(t["name"] == "web_read" and "YouTube" in t["description"] for t in gmcp.TOOLS), "web_read tells the brain it reads YouTube links")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("A video link (YouTube)" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a video question has its rung")
+
 # ---------------------------------------------------------------- 20. a voice note that failed to transcribe is tried again (gap g-21835d)
 # the owner, 2026-11-07 10:06: a voice note came in as "[voice note ... ; transcription failed]" and was answered "Your voice
 # note didn't come through on my end". The replay hands back only that line: the bridge transcribes the saved file again.

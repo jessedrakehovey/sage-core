@@ -18,6 +18,8 @@ or gpt instance can without opening any browsers but it needs to be free."* Two 
   (standard library), the `ddgs` package if installed, DuckDuckGo's HTML page, Wikipedia's search API. Bing's bare
   page is left out on purpose: to a cookieless client it matches only the first word of the query.
 - **`web_read`** (url) reads one page as clean text (`trafilatura` if installed, else a built-in extractor).
+  A YouTube link (2026-11-12) comes back as what is said in the video: its captions via yt-dlp (this Python's,
+  a yt-dlp on PATH, or the first `~/.venvs/*` that has it) under the title, channel and description.
 
 Pages are marked as other people's words, never instructions. A read refuses this computer and private-network
 addresses (Mission Control, the browser's debugging port, the router, the tailnet), redirects included. No key, no
