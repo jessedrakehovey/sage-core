@@ -177,9 +177,18 @@ def cancel(fid: str) -> bool:
     return False
 
 
-def note_reply(person_key: str, convo: str, thread: str = "") -> int:
-    """A message from this person was seen. In the follow-up's own thread it closes it;
-    anywhere else it is only noted (the brain judges at check-in time)."""
+def _not_this_ask(text: str) -> bool:
+    """A post in a follow-up's thread that is not its answer: a question, or an ask addressed to
+    the agent ("Sage, show me...") - ported from example's chaser (br-b15d5935, 2026-10-31), where
+    other posts in a chase's thread closed it. Only noted, the brain judges it at check-in."""
+    name = re.escape(str(core.profile().get("name") or "Agent"))
+    return bool(re.search(r"\?|^\W*(?:hey|hi|ok|okay)?[\s,]*" + name + r"\b|\b(?:give|show|tell|send) me\b", text or "", re.I))
+
+
+def note_reply(person_key: str, convo: str, thread: str = "", text: str = "") -> int:
+    """A message from this person was seen. In the follow-up's own thread it closes it, unless
+    it is a question or an ask to the agent (_not_this_ask); anywhere else it is only noted (the
+    brain judges at check-in time)."""
     led = _load()
     n = 0
     now_s = datetime.now().strftime(FMT)
@@ -196,7 +205,7 @@ def note_reply(person_key: str, convo: str, thread: str = "") -> int:
             continue
         if time.time() - float(it.get("created_ts") or 0) < 5:
             continue                                    # the very message that created it
-        if thread and thread == it.get("thread") and convo == it.get("convo"):
+        if thread and thread == it.get("thread") and convo == it.get("convo") and not _not_this_ask(text):
             it.update(status="answered", closed=now_s)
             outreach.record_reply(it, ts=now_s)         # Seed A
         else:

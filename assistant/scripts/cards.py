@@ -875,6 +875,16 @@ def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=F
         if hits:
             q["rulings"] = [{"id": h["id"], "ruling": h["ruling"], "quote": h["quote"]} for h in hits[:3]]
             advice.append(f"q{i}: RULING {hits[0]['id']} applies -- \"{hits[0]['ruling'][:120]}\"; card posted pre-decided")
+        # ONE RULE STORE (2026-10-30, from the property OS): Sage's own rules and the lane lessons, the best
+        # hit only, with its source ("sage r12", "wedding L3"). Advice only; never changes the card.
+        try:
+            agent_hits = rulings.find_agent_rules(q["question"], lane=q.get("lane") or lane)
+        except Exception:  # noqa: BLE001
+            agent_hits = []
+        for h in agent_hits[:1]:
+            if h["rule"][:24].lower() not in q["question"].lower():
+                advice.append(f"q{i}: an agent rule applies ({h['id']}, {h['date']}): {h['rule'][:220]}  "
+                              "Act within it, or say on the card why this case differs.")
         _warn_long(q, ex)
         if ex:
             q["exec"] = ex
@@ -884,6 +894,15 @@ def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=F
         expires_s = EXEC_EXPIRES_S if any(execs) else DECISION_EXPIRES_S
     card = {"id": qid, "ts": now, "owner": str(owner or ""), "status": "open",
             "wait_s": float(expires_s), "questions": questions}
+    try:
+        # Seed C (metacheck_bind.py, 2026-11-03): a high-stakes card (a message to a client, a record write, a payment) gets
+        # its key facts re-read against the records before it is written; the verifier's plain line is appended to the
+        # details, the tap and the payload untouched; every card leaves one ledger row (calibration). Never blocks a post.
+        import metacheck_bind
+        card = metacheck_bind.bind(card, owner=str(owner or ""), now=now)
+        questions = card["questions"]
+    except Exception as e:  # noqa: BLE001
+        advice.append(f"metacheck skipped: {type(e).__name__}: {str(e)[:80]}")
     if thread:
         card["chat_thread"] = str(thread)
     if space:
@@ -1492,6 +1511,17 @@ def sweep():
 SETUP_NOW, SETUP_LEAVE, SETUP_ELSE = "Set it up now (Recommended)", "Leave it off for now", "Something else"
 
 
+def _chat_first(text: str) -> str:
+    """A card's words without anything that sends the owner to the computer (agent/chatfirst.py, 2026-11-04). The registry's
+    `renew` line is the developer's (commands, paths) and never goes on a card."""
+    try:
+        sys.path.insert(0, str(HERE.parent / "agent"))
+        import chatfirst
+        return chatfirst.clean(text, "")
+    except Exception:  # noqa: BLE001
+        return text
+
+
 def connection_card(cid: str, name: str, detail: str, renew: str, how: str = "") -> dict:
     """The alarm card for a connection that stopped working, with buttons that DO something
     (the owner 2026-10-17: "if it says bank feed is down, then it should have a button that says let's
@@ -1500,11 +1530,21 @@ def connection_card(cid: str, name: str, detail: str, renew: str, how: str = "")
     lane = "money" if cid.startswith("bank-") else ("owner6" if cid.endswith("owner6") else "personal")
     return {"header": f"{name} down", "lane": lane, "clears_when": {"connection": cid}, "setup_rid": cid,
             "question": f"{name} has stopped working ({detail.rstrip('.')}). Set it back up now? I'll walk you through it here, step by step.",
-            "details": (f"How it is set up: {how}\n\n" if how else "") + (f"Renew: {renew}" if renew else ""),
+            "details": _chat_first(f"How I set it back up: {how}" if how else ""),
             "advice": "💡 Set it up now: the steps come to this chat, nothing else changes. Leave it off: I stay quiet about it for a few days.",
             "options": [{"label": SETUP_NOW, "description": "the steps come here"},
                         {"label": SETUP_LEAVE, "description": "no nagging for a few days"},
                         {"label": SETUP_ELSE, "description": "tell me here what you'd rather do"}]}
+
+
+def _lane_space(lane: str) -> str:
+    """The Chat space this lane's cards go to (the owners' home space, else the first owner's DM); '' when none."""
+    try:
+        import chat_push
+        t = chat_push.targets(lane, "card")
+        return str(t[0][1]) if t else ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _act_on_setup(h) -> bool:
@@ -1531,10 +1571,22 @@ def _act_on_setup(h) -> bool:
                 hint = connect.paste_hint(rid)
                 text += ("\n" + hint) if hint else ""
             else:
+                # chat-first (2026-11-04): a form in chat, the vault's own sign-in, a job, or a build for the agent; never a
+                # console or a window on the PC. A login the vault lacks comes as its Enter login card.
                 import setup_actions
-                r = setup_actions.run(rid, by="card")
-                text = f"{name}: {r.get('message') or 'started the setup step on the PC.'}"
-            say("cards.sweep", lane, text)
+                space = _lane_space(lane)
+                r = setup_actions.run_chat(rid, by="card", space=space)
+                text = str(r.get("message") or f"{name}: I'm on it.")
+                if r.get("state") in ("needs_login", "failed") and r.get("site") and space:
+                    try:
+                        import chat_forms
+                        import chat_push
+                        chat_push._g().post_body(space, chat_forms.job_card(rid, {"name": name, "title": "Set it up", "intro": ""}, result=r))
+                        text = ""
+                    except Exception:  # noqa: BLE001
+                        pass
+            if text:
+                say("cards.sweep", lane, text)
         elif ans.startswith("leave it"):
             try:
                 import sentinels

@@ -1,4 +1,8 @@
 {
+ "mission_control": {
+  "_doc": "read_only (the owner 2026-11-01, 'Make all data entry for anything go through google chat never mission control'): Mission Control shows things and takes taps; keys, tokens, notes, asks, contacts and chat are typed only in Google Chat (scripts/chat_forms.py).",
+  "read_only": true
+ },
  "wiki": {
   "client_pages": "Wiki/Couples",
   "_doc": "form_ingest.py (and any engine script that writes client pages): the folder of client pages in this vault. A new organization gets Wiki/Clients; the organization keeps Wiki/Couples."
@@ -147,7 +151,22 @@
   "state_file": "scripts/projects/project_state.json",
   "delivery_warn_days": 14,
   "shoot_prep_days": 14,
-  "default_turnaround_weeks": 8
+  "default_turnaround_weeks": 8,
+  "fields": {
+   "_doc": "The tracker's field names and the words Mission Control shows for them (dashboard.py); the engine carries no business words.",
+   "label": "couple",
+   "date": "wedding_date",
+   "delivery": "promised_delivery",
+   "label_head": "Couple",
+   "date_head": "Wedding",
+   "delivery_head": "Promised delivery",
+   "next_date": "next shoot",
+   "next_delivery": "next delivery"
+  }
+ },
+ "onboarding": {
+  "_doc": "onboarding.py in chat: Discovery and Training questions ride in the agent's ONBOARDING line, one a turn, answered in the owners' own words (the `onboard` deed). This organization is long past onboarding, so off here; new_org.py writes true.",
+  "in_chat": false
  },
  "editor": {
   "disk_snooze_until": "2026-10-30",
@@ -228,8 +247,13 @@
   "profile": "~/.claude/pw-wv-cli-profile",
   "cdp_port": 9333,
   "offscreen": true,
+  "in_front": true,
+  "clear_screen_idle_s": 300,
   "signin_window": {},
-  "_doc": "assistant/doer: one on-demand browser agent per agent_run ticket. offscreen=false shows the window while it works. notes_per_job_max = how many of the turn's milestone notes (report.py note) reach the job's chat thread; continues_max = how many times a run that ended on max_turns or its time limit is continued from its notes (doer.carry_on) before the owner hears it stopped."
+  "_doc": "assistant/doer: one on-demand browser agent per agent_run ticket. in_front (2026-11-06, default true) = the window opens on the main monitor, in front, for every job unless a person used the mouse or keyboard within clear_screen_idle_s seconds (default 300): then it stays off-screen so their screen is clear; Control PC shows it either way. offscreen=false shows the window always (the old switch, kept). notes_per_job_max = how many of the turn's milestone notes (report.py note) reach the job's chat thread; continues_max = how many times a run that ended on max_turns or its time limit is continued from its notes (doer.carry_on) before the owner hears it stopped. live_card (2026-11-03): one Chat card per job, redrawn in place at every milestone with a picture of the screen (doer/livecard.py; the picture needs config shots); live_shot_every_s = how often a fresh picture is taken; remote_desktop_url = where 'Control PC' goes (Chrome Remote Desktop, the owner's live view and remote control of this PC from a phone).",
+  "live_card": true,
+  "live_shot_every_s": 20,
+  "remote_desktop_url": "https://remotedesktop.google.com/access"
  },
  "phone": {
   "nudge_to": "p621eb2@example.invalid",
@@ -238,8 +262,8 @@
    "enabled": true,
    "time": true,
    "money": true,
-   "include_family": true,
-   "_doc": "Ruling 13 (2026-10-15): personal texts stay out of the card stream EXCEPT a time-related one (a date/time and a plan) or a money-tied one (an amount, pay/owe/venmo), which may get a draft card marked payload.exception. The owners' own numbers never come through. Words: assistant/mining.json -> personal_text_exception."
+   "include_family": false,
+   "_doc": "Ruling 13 (2026-10-15): personal texts stay out of the card stream EXCEPT a time-related one (a date/time and a plan) or a money-tied one (an amount, pay/owe/venmo), which may get a draft card marked payload.exception. The owners' own numbers never come through, and with include_family false (2026-10-16: Casey Juniper, the groomsmen chat) neither do family / friends (Wiki/People, and a group text whose known members are family / friends): logged only. Words: assistant/mining.json -> personal_text_exception."
   }
  },
  "meetings": {
@@ -285,5 +309,38 @@
   "_doc": "assistant/agent/event_reminders.py (2026-10-25, the owner after Tony's party: 'You should have given me reminders about it'): one line in the owner's chat events_lead_min minutes before every timed event on a connected owner calendar (client meetings are meeting_reminder.py's). events:false switches it off. Events Sage adds itself also get a once-reminder (actions._event_reminder).",
   "events": true,
   "events_lead_min": 45
+ },
+ "pages": {
+  "_doc": "The organization's own Mission Control pages (mc_server._extra_page, dashboard nav; 2026-11-01). modules: /<name> renders `page` of the module at `file`, /api/<name> returns `api` as JSON, `nav` puts a link in the header. static: /<mount>/<path> serves that file from <folder>, index.html for a folder (the shoot-day app, say). The engine ships none of these: a new organization starts with an empty map.",
+  "modules": {
+   "gear": {
+    "file": "gear/gear.py",
+    "page": "page",
+    "api": "status",
+    "nav": "Gear"
+   },
+   "money": {
+    "file": "assistant/scripts/money/budget.py",
+    "page": "page",
+    "api": "status",
+    "nav": "Money"
+   }
+  },
+  "static": {
+   "shoot": "apps/shoot-day/builds/shoot-day"
+  }
+ },
+ "shots": {
+  "_doc": "scripts/shots.py (2026-11-03): where a screenshot is hosted so a Chat card can show it. backend drive = the agent's service account uploads into a SHARED DRIVE named drive_name (default '<agent name> screenshots') that the owner made and added the service account to as Content manager; each picture is link-shared for ttl_s seconds, then deleted by the sweep. off = cards carry no picture. folder_id = a folder inside that drive ('' = its root).",
+  "backend": "drive",
+  "drive_name": "",
+  "folder_id": "",
+  "ttl_s": 900
+ },
+ "computer": {
+  "_doc": "assistant/doer/computer_policy.py (2026-11-06): write roots this organization adds to the engine's computer_policy.json (its own apps' data folders); the engine's roots are out/doer, doer/tools, Temp, Downloads/<agent>, Videos/<agent> Inbox and Wiki.",
+  "write_roots": [
+   "apps/shoot-day/weddings"
+  ]
  }
 }

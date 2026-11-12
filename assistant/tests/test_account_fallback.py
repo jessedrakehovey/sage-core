@@ -7,6 +7,7 @@ import os as _os, tempfile as _tf
 _os.environ.setdefault("WV_LOG_DIR", _tf.mkdtemp(prefix="wv_logs_"))   # never the live ~/.claude logs
 import os
 import sys
+import time
 import tempfile
 from pathlib import Path
 
@@ -55,6 +56,14 @@ def with_fb(name):
 
 ok(account.is_limit(LIMIT) and account.is_limit("", None, "rate limit reached") and not account.is_limit("timed out"),
    "account: the limit check matches the CLI's limit lines only")
+
+# 2026-11-01 16:46: max5x said "weekly limit"; the check missed it, so no turn ever moved to max20x
+WEEKLY = "You've hit your weekly limit · resets 2pm (America/Los_Angeles)"
+with_fb("max20x")
+ok(account.is_limit(WEEKLY) and account.is_limit("Opus limit reached") and not account.is_refusal(WEEKLY),
+   "account: a weekly (or model) limit is a limit, not a refusal")
+ok(account.note_limit(None, WEEKLY) > time.time() and account.order()[0] == "max20x",
+   "account: after a weekly limit the next turn goes straight to the fallback")
 
 # ---------------------------------------------------------------- doer (browser)
 calls = []

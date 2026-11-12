@@ -81,6 +81,13 @@ def config():
     return cfg
 
 
+def mc_read_only() -> bool:
+    """config.json -> mission_control.read_only: Mission Control shows and takes taps, but nothing is typed into it;
+    every bit of data entry goes through the Chat app's forms (the owner 2026-11-01, scripts/chat_forms.py)."""
+    cfg = load_json(CONFIG, None) or {}
+    return bool((cfg.get("mission_control") or {}).get("read_only"))
+
+
 def business_lane() -> str:
     """The organization's business lane: the FIRST lane in config.json -> lanes (new_org.py writes it first)."""
     try:

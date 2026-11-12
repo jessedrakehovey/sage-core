@@ -86,6 +86,16 @@ WRITE_MODES = ("w", "a", "x", "+")
 
 
 # ---------------------------------------------------------------- packets
+def _first_owner() -> str:
+    """The first owner's key (assistant/agent/people.json): the packet's default sender when it names none."""
+    try:
+        import json as _j
+        d = _j.loads((ROOT / "agent" / "people.json").read_text(encoding="utf-8-sig"))
+        return next((k for k, u in (d.get("users") or {}).items() if str(u.get("role") or "owner") == "owner"), "owner")
+    except Exception:  # noqa: BLE001
+        return "owner"
+
+
 def normalize(p: dict) -> dict:
     """The v2 shape from either shape; never mutates the input."""
     d = dict(p)
@@ -228,13 +238,21 @@ def flag_changed(packets: list, changed: list, rule_files: Callable[[str], list]
 
 
 # ---------------------------------------------------------------- scoring
-def score(reply: str, deeds: list, p: dict) -> tuple:
-    """(verdict, fail_fields). A deed kind matches by exact name or by family ('card' matches 'card:ask')."""
-    rl = str(reply or "").lower()
+def score(reply: str, deeds: list, p: dict, said: list | None = None) -> tuple:
+    """(verdict, fail_fields). A deed kind matches by exact name or by family ('card' matches 'card:ask').
+
+    `said` = the texts the turn put in front of the owner besides the reply: the card it posted, the draft it carded
+    for a tap. Required phrases are read across the reply AND those texts, because a turn that re-cards an edited
+    draft says the edited words on the card and only "nothing sent" in the reply. Forbidden phrases are judged on
+    the carded texts alone when there are any (the reply may narrate what it dropped: "his edit removed 'X'"), and
+    on the reply when the turn carded nothing."""
+    texts = [str(s or "") for s in (said or []) if str(s or "").strip()]
+    rl = "\n".join([str(reply or "")] + texts).lower()
+    fl = "\n".join(texts).lower() if texts else str(reply or "").lower()
     done = [str(d) for d in (deeds or [])]
     fails = []
     for ph in p.get("forbid_phrases") or []:
-        if ph.lower() in rl:
+        if ph.lower() in fl:
             fails.append(f"said:{ph}")
     for ph in p.get("require_phrases") or []:
         if ph.lower() not in rl:
@@ -340,8 +358,9 @@ def outside(paths: list, lane: Path, allow: list | None = None) -> list:
 @dataclass
 class Binding:
     """What an organization supplies. runner(packet, lane: Path, dry_run: bool) -> {"reply": str, "deeds": [str],
-    "writes": [abs path], "error": str, "note": str}; it performs ONE turn with every state write pointed into
-    `lane`. record(name, verdict, fail_fields, note, artifact) appends the eval-ledger row. rule_files(tested_rule)
+    "writes": [abs path], "error": str, "note": str, "said": [str] (optional: the card and draft texts the turn put
+    in front of the owner; phrases are scored across reply + said)}; it performs ONE turn with every state write
+    pointed into `lane`. record(name, verdict, fail_fields, note, artifact) appends the eval-ledger row. rule_files(tested_rule)
     -> the files that rule is read from. kinds = the deed vocabulary (families or exact kinds)."""
     name: str
     packets_dir: Path
@@ -360,12 +379,13 @@ class RunnerSpec:
 
     mode "process": `command` is an argv template; {lane} and {packet} are filled in (the packet is written into the
     lane as packet.json when it did not arrive as its own .json file); with dry_run the `dry_flag` is appended. The
-    process prints one line `EVAL_RESULT <json>` with {reply, deeds, writes, error, server_side}.
+    process prints one line `EVAL_RESULT <json>` with {reply, deeds, writes, error, server_side, said (optional)}.
     mode "server": the brain is a chat endpoint. POST `endpoint` with {"agent": "<brain>-eval-<packet id>",
     "question": question(packet, lane), <lane_key>: str(lane), **body}, read {"id"}; GET `status` with {id} filled in
-    until the document's status is a terminal one (`terminal`). Then deeds(lane, doc) -> [deed] and
-    writes(lane, doc) -> [abs path] read what the turn left behind: the lane's journal, the status document's tool
-    steps, whatever the binding decided a deed looks like. With dry_run no request is made: dry_seed(lane, packet)
+    until the document's status is a terminal one (`terminal`). Then deeds(lane, doc) -> [deed],
+    writes(lane, doc) -> [abs path] and said(lane, doc) -> [text] read what the turn left behind: the lane's journal,
+    the status document's tool steps, whatever the binding decided a deed looks like, the text of every card it
+    journalled (so a phrase check sees the carded draft, not only the reply). With dry_run no request is made: dry_seed(lane, packet)
     writes what a canned turn would have left and `dry_answer` stands for the reply, so the readers and the lane
     plumbing run under the tracer with no brain. `server_side` names the writes the server makes that the tracer
     cannot see (they go in the note; {agent} and {id} are filled in)."""
@@ -381,6 +401,7 @@ class RunnerSpec:
     question: Callable | None = None
     deeds: Callable | None = None
     writes: Callable | None = None
+    said: Callable | None = None
     dry_seed: Callable | None = None
     dry_answer: str = "Noted."
     terminal: tuple = ("done", "error", "failed", "answered", "answer_failed")
@@ -447,7 +468,7 @@ def run_process(spec: RunnerSpec, packet: dict, lane: Path, dry_run: bool) -> di
     if res.get("server_side"):
         note = "server-side (not traced): " + "; ".join(str(x) for x in res["server_side"])
     return {"reply": res.get("reply") or "", "deeds": list(res.get("deeds") or []), "writes": list(res.get("writes") or []),
-            "error": res.get("error") or "", "note": note}
+            "said": [str(s) for s in (res.get("said") or []) if str(s or "").strip()], "error": res.get("error") or "", "note": note}
 
 
 def _http_json(url: str, body: dict | None = None, timeout: int = 30):
@@ -523,8 +544,9 @@ def run_server(spec: RunnerSpec, packet: dict, lane: Path, dry_run: bool) -> dic
             (lane / "ask_status.json").write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
             deeds = list(spec.deeds(lane, doc) or []) if spec.deeds else []
             extra = list(spec.writes(lane, doc) or []) if spec.writes else []
+            said = [str(s) for s in (spec.said(lane, doc) or []) if str(s or "").strip()] if spec.said else []
         except Exception as e:  # noqa: BLE001
-            doc, deeds, extra = {"status": "error", "answer": ""}, [], []
+            doc, deeds, extra, said = {"status": "error", "answer": ""}, [], [], []
             err = f"{type(e).__name__}: {e}"
     reply = str(doc.get("answer") or "")
     if not err and str(doc.get("status") or "") != "done":
@@ -533,7 +555,7 @@ def run_server(spec: RunnerSpec, packet: dict, lane: Path, dry_run: bool) -> dic
     if not dry_run and spec.server_side:
         note = "server-side (not traced): " + "; ".join(
             str(x).replace("{agent}", agent).replace("{id}", str(doc.get("id") or "")) for x in spec.server_side)
-    return {"reply": reply, "deeds": deeds, "writes": tr.unique() + extra, "error": err, "note": note, "lane_agent": agent}
+    return {"reply": reply, "deeds": deeds, "writes": tr.unique() + extra, "said": said, "error": err, "note": note, "lane_agent": agent}
 
 
 def table_runner(specs: dict) -> Callable:
@@ -595,12 +617,13 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
         reply = str(r.get("reply") or "")
         deeds = list(r.get("deeds") or [])
         writes = list(r.get("writes") or [])
+        said = [str(s) for s in (r.get("said") or []) if str(s or "").strip()]
         bad = outside(writes, lane, binding.allow_outside)
         if dry_run:
             # the canned answer is not the agent's: a dry run judges isolation only
             verdict, fails = ("LEAK" if bad else "ISOLATED"), []
         else:
-            verdict, fails = score(reply, deeds, p)
+            verdict, fails = score(reply, deeds, p, said)
         if r.get("error"):
             verdict, fails = ("LEAK" if dry_run else "FAIL"), fails + [f"error:{str(r['error'])[:80]}"]
         if bad:
@@ -610,7 +633,7 @@ def live(binding: Binding, packets: list, dry_run: bool = False, only: str = "",
                 + (f"outside={bad[:5]}; " if bad else "") + (str(r.get("note") or "") + "; " if r.get("note") else "")
                 + f"reply: {reply[:120]!r}")
         row = {"packet": p["_name"], "verdict": verdict, "fail_fields": fails, "deeds": deeds, "writes": writes,
-               "writes_outside": bad, "lane": str(lane), "note": note, "reply": reply}
+               "writes_outside": bad, "lane": str(lane), "note": note, "reply": reply, "said": said}
         if not dry_run and binding.record is not None:
             try:
                 binding.record(p["_name"], verdict, fails, note, p.get("_path") or "")
@@ -691,7 +714,7 @@ def _default_runner(p: dict, lane: Path, dry_run: bool) -> dict:
     if dry_run:
         return {"reply": "", "deeds": [], "writes": [], "note": "default binding has no dry-run turn"}
     inp = p.get("input") or {}
-    r = subprocess.run([sys.executable, str(ROOT / "agent" / "chat.py"), "--as", str(inp.get("sender") or "owner1"),
+    r = subprocess.run([sys.executable, str(ROOT / "agent" / "chat.py"), "--as", str(inp.get("sender") or _first_owner()),
                         "--timeout", "300", str(inp.get("text") or "")],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=360, cwd=str(VAULT))
     reply = (r.stdout or "").strip()

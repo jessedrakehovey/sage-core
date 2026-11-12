@@ -33,4 +33,16 @@ if [ "$status" -ne 0 ]; then
   echo "then 'git add scripts/guardrails/gate_baseline.json' and commit again."
   exit 1
 fi
+# Seed F (scripts/evals/triggers.py): a staged prompt, rules file, chase code or packet runs the zero-LLM
+# packet check (--check); a malformed packet or an unknown deed kind blocks the commit. Fail-open when absent.
+if [ -f "$root/scripts/evals/triggers.py" ]; then
+  tout=$(python "$root/scripts/evals/triggers.py" staged 2>&1)
+  tstatus=$?
+  if [ "$tstatus" -ne 0 ]; then
+    echo "$tout"
+    echo ""
+    echo "COMMIT BLOCKED by scripts/evals/triggers.py: a packet is malformed or names a deed kind the agent lacks."
+    exit 1
+  fi
+fi
 exit 0

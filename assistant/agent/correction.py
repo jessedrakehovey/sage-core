@@ -14,6 +14,7 @@ What happens now, around the unchanged brain:
 
   detect   `kind(text)`: a correction is a follow-up that points back at the last answer and says it did not do it:
            card   "where is the (approval) card", "no card", "you never sent one", "it never came / posted"
+                  (the card the last reply pointed at, held for the digest or posted in another space, is posted here by code)
            redo   "that's not what I asked", "try again", "do it again", "that's wrong", "redo"
            build  "why is it not built", "still not built", "not working"
            fix    "fix it", "fix it so that doesn't happen again"
@@ -55,8 +56,19 @@ _KINDS = (
     ("build", re.compile(r"(?:why|how come) (?:is|isn'?t|was|wasn'?t) (?:it|that|this) (?:still )?not built|(?:still )?not built|isn'?t built|not working|still (?:doesn'?t|does not|isn'?t|is not) work", re.I)),
     ("fix", re.compile(r"\bfix (?:it|that|this)\b|so (?:that |it )?(?:doesn'?t|does not|won'?t|never) happens? again|make sure (?:it|that) (?:doesn'?t|never)", re.I)),
     ("redo", re.compile(r"not what I (?:asked|meant|said|wanted)|that'?s (?:wrong|not it|not right|not what)|wrong (?:person|number|card|one|thread|draft)|\b(?:try|do (?:it|that)|send (?:it|that)|make (?:it|that)|post (?:it|that)|run (?:it|that)) again\b|"
-                        r"\bredo (?:it|that|the)\b|didn'?t (?:do|work|happen|go)\b|still (?:nothing|waiting|no(?:thing)?\b|not (?:done|here|there))|you (?:didn'?t|did not|never) (?:do|send|make|post|put|answer|reply)", re.I)),
+                        r"\bredo (?:it|that|the)\b|didn'?t (?:do|work|happen|go)\b|still (?:nothing|waiting|no(?:thing)?\b|not (?:done|here|there))|you (?:didn'?t|did not|never) (?:do|send|make|post|put|answer|reply)|"
+                        # 2026-11-04, complaints the net let through: "he was never texted", "You haven't given me anything
+                        # to sign into yet I'm telling you to let me do it", "the project I told you to do"
+                        r"\bnever (?:got )?(?:texted|emailed|messaged|called|delivered|received)\b|"
+                        r"you (?:haven'?t|have not) (?:given|sent|shown|done|made|posted|put|told|opened|started|finished)\b|"
+                        r"\bI(?:'m| am) telling you\b|\bI (?:already |just )?(?:told|asked) you to\b|\b(?:like|as) I (?:asked|said|told you)\b", re.I)),
 )
+# an iPhone types curly quotes: "didn’t work" has to read as "didn't work" (2026-11-04: none of the day's complaints matched)
+_CURLY = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'})
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "").translate(_CURLY)).strip()
 # "Again" / "Redo" on its own line is a redo; "Again, I keep saying this, you can deduce..." is a preference, not one
 _REDO_SHORT = re.compile(r"^(?:ok(?:ay)?,? |sorry,? |please |yes,? )?(?:again|redo|retry|try again|do it again|do it over|one more time)\b", re.I)
 _SHORT_WORDS = 8
@@ -70,7 +82,7 @@ _DEED_KEYS = ("task", "do", "card", "call", "note", "build", "project", "schedul
 
 def kind(text: str) -> str:
     """'card' | 'build' | 'fix' | 'redo' | '' for an owner's line."""
-    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    t = _norm(text)
     if not t or _NOT_A_CORRECTION.match(t) or len(t) > 400:
         return ""
     for k, rx in _KINDS:
@@ -105,6 +117,50 @@ def original_ask(convo: str, thread: str, person: dict, before: str = "", rows: 
             if _is_ask(r.get("text")):
                 return {"text": str(r.get("text") or "").strip(), "ts": str(r.get("ts") or ""), "thread": str(r.get("thread") or "")}
     return {}
+
+
+REPEAT_S = 2 * 3600
+_REPEAT_MIN_WORDS = 3
+_FILLER = {"the", "a", "an", "my", "our", "please", "now", "again", "button", "hey", "ok", "okay", "can", "you", "to", "up"}
+
+
+def _words(text: str) -> set:
+    return set(re.findall(r"[a-z0-9']+", _norm(text).lower())) - _FILLER
+
+
+def repeat_of(convo: str, thread: str, person: dict, text: str, rows: list | None = None, now: float | None = None) -> dict:
+    """The same ask again. An ask that comes back is an ask that did not work (2026-11-04: one setup ask three
+    times in two hours, each answered with the same line, none recorded). This person's earlier line in this
+    conversation (this thread, when there is one) within REPEAT_S that says the same thing (four fifths of the words
+    in common, at least _REPEAT_MIN_WORDS of them) and that the agent answered.
+    -> {text, ts, thread, reply, n} (reply = what the agent said to it; n = times it was asked before) or {}."""
+    t = _norm(text)
+    mine = _words(t)
+    if len(mine) < _REPEAT_MIN_WORDS or _NOT_A_CORRECTION.match(t) or t.endswith("?") or kind(t):
+        return {}
+    rows = rows if rows is not None else core.rows(core.TRANSCRIPT)[-LOOKBACK_ROWS * 4:]
+    name = str((person or {}).get("name") or "")
+    agent = str(core.profile().get("name", "Agent"))
+    cut = time.strftime("%Y-%m-%d %H:%M", time.localtime((now or time.time()) - REPEAT_S))
+    pool = [r for r in rows if str(r.get("convo") or "") == str(convo or "") and str(r.get("ts") or "") >= cut]
+    hits = []
+    for i, r in enumerate(pool):                      # any thread of this conversation: the second try is often a new thread
+        if str(r.get("who") or "") != name or _NOT_A_CORRECTION.match(str(r.get("text") or "")):
+            continue
+        theirs = _words(r.get("text"))
+        if not theirs or len(mine & theirs) / max(len(mine | theirs), 1) < 0.8:
+            continue
+        said = next((str(x.get("text") or "") for x in pool[i + 1:] if str(x.get("who") or "") == agent and not x.get("note")), "")
+        if said:
+            hits.append({"text": str(r.get("text") or "").strip(), "ts": str(r.get("ts") or ""), "thread": str(r.get("thread") or ""),
+                         "reply": said[:300]})
+    return {**hits[-1], "n": len(hits)} if hits else {}
+
+
+def same_answer(a: str, b: str) -> bool:
+    """Two replies that say the same thing: the repeat got the answer that did not work the first time."""
+    wa, wb = _words(a), _words(b)
+    return bool(wa) and bool(wb) and len(wa & wb) / min(len(wa), len(wb)) >= 0.8     # one may be the other cut short
 
 
 def expected_deed(ask: str) -> str:
@@ -158,6 +214,92 @@ def card_in_thread(thread: str, ask: dict | None = None, now: float | None = Non
     return best
 
 
+ELSEWHERE_LOOKBACK_S = 7 * 86400
+
+
+def card_not_here(convo: str, thread: str, space: str = "", ask: dict | None = None, now: float | None = None) -> dict:
+    """The open card the agent's last reply here pointed at that is NOT in this conversation, or {}: held off Chat for
+    the weekly digest, or posted in another space. 2026-11-05 06:03-06:09: a doer sign-in card went
+    to the home space while the reply in the owner's DM said "tap Enter login on the card"; "There is no card" met "nothing
+    was posted to Chat ... I can't re-post it from here" and nothing moved. Matched by its header (or the part after the
+    colon) in that reply; failing that, the newest such card since the ask, when the reply spoke of a card at all.
+    System cards ("mc") never go to Chat and are never matched."""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import cards
+    except Exception:  # noqa: BLE001
+        return {}
+    now = now or time.time()
+    agent = str(core.profile().get("name") or "")
+    mine = [r for r in core.rows(core.TRANSCRIPT)[-LOOKBACK_ROWS * 4:] if str(r.get("who") or "") == agent
+            and str(r.get("convo") or "") == str(convo or "")]
+    said = ""
+    for scope in ((thread,) if thread else ()) + ("",):
+        pool = [r for r in mine if str(r.get("thread") or "") == scope] if scope else mine
+        if pool:
+            said = str(pool[-1].get("text") or "").lower()
+            break
+    if not said:
+        return {}
+    here = str(space or "") or (str(thread).split("/threads/")[0] if "/threads/" in str(thread or "") else "")
+    away = []
+    for c in cards._live():
+        if not isinstance(c, dict) or c.get("status") != "open" or c.get("delivery") == "mc":
+            continue
+        if now - float(c.get("ts") or 0) > ELSEWHERE_LOOKBACK_S:
+            continue
+        names = [str(n) for n in (c.get("chat") or {}).values()]
+        if names and (not here or any(n.startswith(here + "/") for n in names)):
+            continue                                  # it is in this conversation (or we cannot tell where we are)
+        away.append(c)
+    away.sort(key=lambda c: float(c.get("ts") or 0))
+    for c in reversed(away):
+        hdr = str((c.get("questions") or [{}])[0].get("header") or "").strip().lower()
+        tail = hdr.split(":", 1)[1].strip() if ":" in hdr else ""
+        if (hdr and hdr in said) or (len(tail) >= 4 and tail in said):
+            return c
+    if "card" not in said:
+        return {}
+    since = now - HERE_LOOKBACK_S
+    if ask and ask.get("ts"):
+        try:
+            since = max(since, time.mktime(time.strptime(str(ask["ts"])[:16], "%Y-%m-%d %H:%M")))
+        except ValueError:
+            pass
+    fresh = [c for c in away if float(c.get("ts") or 0) >= since - 60]
+    return fresh[-1] if fresh else {}
+
+
+def surface(card: dict, convo: str, thread: str, space: str = "") -> dict:
+    """Post that card into this conversation now (its thread, or the DM). -> the card, or {}."""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import cards
+        import chat_push
+    except Exception:  # noqa: BLE001
+        return {}
+    c = dict(card)
+    c.pop("chat_thread", None)
+    c.pop("chat_space", None)
+    if "/threads/" in str(thread or ""):
+        c["chat_thread"] = str(thread)
+    elif str(space or "").startswith("spaces/"):
+        c["chat_space"] = str(space)
+    try:
+        chat = chat_push.push_card(c)
+    except Exception as e:  # noqa: BLE001
+        core.log_change("correction_error", f"surface {c.get('id')}: {type(e).__name__}: {str(e)[:120]}", {"op": "none"}, "code")
+        return {}
+    if not chat:
+        return {}
+    merged = dict(card.get("chat") or {})            # the first message keeps its name, so closing it still edits it
+    for k, v in chat.items():
+        merged[f"{k}:here" if k in merged and merged[k] != v else k] = v
+    c.update(chat=merged, delivery="now", urgent=True, surfaced_ts=time.time())
+    cards._write(cards.LIVE / f"{c['id']}.json", c)
+    return {**c, "surfaced": True}
+
+
 def here_note(card: dict) -> str:
     """The block for 'where is the card' when the card is right there: say where and how it stands, make nothing."""
     try:
@@ -170,6 +312,11 @@ def here_note(card: dict) -> str:
         state = str(card.get("status") or "open")
     q = (card.get("questions") or [{}])[0]
     at = time.strftime("%H:%M", time.localtime(float(card.get("ts") or 0)))
+    if card.get("surfaced"):
+        return ("[CORRECTION, from the owner: they say the card is not there. It was not in this conversation (held for the weekly digest, or "
+                "posted in another space); "
+                f"code has just posted it here: '{str(q.get('header') or 'the card')[:120]}', now {state}. Do NOT make another "
+                "card. Tell them in one short line that it is right here now and what the tap on it does.]")
     return ("[CORRECTION, from the owner: they ask where the card is. It is already in this thread: "
             f"'{str(q.get('header') or 'the card')[:120]}', posted {at}, now {state}. Do NOT make another card (a second one "
             "could send the same message twice) and never say it closed unsent unless the state above says so. Tell them in "
@@ -185,6 +332,9 @@ def note(k: str, text: str, ask: dict, expected: str, rerun: bool = False) -> st
             + (" (a card they expected is not there: make it again now, this turn, whatever your record says about it)" if k == "card" else "")
             + (" (something keeps failing: say in one line what you are changing, by a `note` build request if code must change, and do the ask again)" if k == "fix" else "")
             + (" (a build they are waiting on: answer from BUILDS, and if it is not in there, file it again now)" if k == "build" else "")
+            + (f" (they are asking the SAME thing again; last time you answered: \"{str(ask.get('reply') or '')[:200]}\". That answer did "
+               "not get it done, so do not give it again: find out what actually happened to it, then do it another way or say the one "
+               "thing that failed)" if k == "repeat" else "")
             + f".\nTheir ask was ({ask.get('ts', '')[11:16]}): \"{str(ask.get('text') or '')[:500]}\"\n"
             f"Do it now, this turn: {want}. \"Sorry\" is three words at most; an apology is never the answer by itself, "
             "and never \"I can't see why\". If something stops you, say the one thing and do every other part.")
@@ -234,7 +384,7 @@ def record(person: dict, k: str, text: str, ask: dict, expected: str, applied: l
     row = {"ts": core.stamp(), "who": str(person.get("key") or ""), "kind": k, "text": str(text or "")[:300],
            "ask": str(ask.get("text") or "")[:300], "ask_ts": str(ask.get("ts") or ""), "expected": expected,
            "applied": sorted({str(a.get("kind") or "") for a in (applied or [])}), "forced": forced, "rerun": rerun,
-           "words_only": bool(expected or k in ("card", "redo", "fix")) and not (applied or forced or here),
+           "words_only": bool(expected or k in ("card", "redo", "fix", "repeat")) and not (applied or forced or here),
            "reply": str(reply or "")[:300], "convo": convo, "thread": thread}
     if here:
         row["card_here"] = here                       # the card was in the thread: words were the right answer

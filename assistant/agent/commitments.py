@@ -267,6 +267,13 @@ _REFUSED = re.compile(r"(?i:card (?:was )?(?:refused|blocked|didn't post|did not
 _ANSWERED = re.compile(r"need from you|blocked because|tried:|i can't|i cannot|can't send|already on|nothing to add|there's nothing to", re.I)
 
 
+# ...but a reply that PROMISES the thing is not the thing (2026-11-04 16:17: "I can't confirm it was sent ... I've
+# handed the draft on; it comes here in a few minutes" closed its own promise the minute it was made, the card was
+# then refused, and nobody was told)
+_PROMISED = re.compile(r"\bcomes? here\b|\bstill comes\b|\byou(?:'ll| will) (?:get|have|see) (?:the|a|it)\b|\bin a few minutes\b|"
+                       r"\bI(?:'ve| have) (?:handed|sent|passed|started)\b|\bI(?:'ll| will) (?:post|send|tell|report|come back)\b", re.I)
+
+
 def _answered_in_chat(it: dict) -> str:
     """The agent's own reply in this hand-off's thread, within 20 minutes of the hand-off, that already told the
     owner where it stands (blocked / need from you / already done). '' when there is none."""
@@ -285,8 +292,9 @@ def _answered_in_chat(it: dict) -> str:
             ts = datetime.strptime(str(r.get("ts"))[:16], "%Y-%m-%d %H:%M")
         except (TypeError, ValueError):
             continue
-        if t0 - timedelta(minutes=3) <= ts <= t0 + timedelta(minutes=20) and _ANSWERED.search(str(r.get("text") or "")):
-            return re.sub(r"\s+", " ", str(r.get("text") or "")).strip()
+        said = str(r.get("text") or "")
+        if t0 - timedelta(minutes=3) <= ts <= t0 + timedelta(minutes=20) and _ANSWERED.search(said) and not _PROMISED.search(said):
+            return re.sub(r"\s+", " ", said).strip()
     return ""
 
 

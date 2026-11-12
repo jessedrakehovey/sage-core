@@ -39,13 +39,56 @@ CFG = (load_json(ROOT / "config.json", {}) or {}).get("doer") or {}
 PROFILE = Path(os.path.expanduser(os.environ.get("DOER_PROFILE") or CFG.get("profile") or "~/.claude/pw-wv-cli-profile"))
 PORT = ports.current("cdp", int(os.environ.get("DOER_CDP_PORT") or CFG.get("cdp_port") or 9333))
 STATE = Path(os.environ["DOER_DATA"]) / "browser.json" if os.environ.get("DOER_DATA") else ROOT / "data" / "doer" / "browser.json"
+LEFT_OPEN = STATE.with_name("left_open.json")      # pages held open for an owner (leftopen.py, 2026-11-08)
+UPLOADS = STATE.with_name("uploads.json")          # tabs with an upload running (upload.py, 2026-11-10)
+WAITS = STATE.with_name("waits.json")              # pages waiting on an owner's sign-in check (2026-11-11)
+WAIT_HOLD_MIN = int(CFG.get("wait_hold_min", 30))
 CHROME_CANDIDATES = [
     Path(os.path.expandvars(r"%LOCALAPPDATA%\ms-playwright")),
 ]
 LAUNCH_ARGS = ["--no-first-run", "--no-default-browser-check", "--disable-blink-features=AutomationControlled",
-               "--disable-features=FedCm", "--window-size=1366,900", "--disable-session-crashed-bubble", "--hide-crash-restore-bubble"]
+               # ONE --disable-features (Chrome keeps only the last one). CalculateNativeWinOcclusion: Windows otherwise
+               # tells Chrome an off-screen / covered / locked-screen window is hidden and it stops painting, so the
+               # live card's picture came back blank or black (2026-11-08)
+               "--disable-features=FedCm,CalculateNativeWinOcclusion", "--window-size=1366,900", "--disable-session-crashed-bubble", "--hide-crash-restore-bubble",
+               # an off-screen window keeps rendering, so the live card's CDP picture is never a stale frame (2026-11-03)
+               "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"]
 OFFSCREEN = ["--window-position=-32000,-32000"]
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+# In front by default (the owner 2026-11-06: "bring to front should be standard for Sage PC work unless someone is working
+# on the computer in the last 5 minutes and needs a clear screen"): the window opens on the main monitor unless a
+# person touched the mouse or keyboard within clear_screen_idle_s; then it stays off-screen (Control PC still shows it).
+IN_FRONT = bool(CFG.get("in_front", True))
+CLEAR_SCREEN_IDLE_S = int(CFG.get("clear_screen_idle_s", 300))
+
+
+def idle_seconds() -> float:
+    """Seconds since the last mouse or key on this PC (Windows' own count); a very large number when it cannot be read."""
+    if os.name != "nt":
+        return 1e9
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+        li = LASTINPUTINFO()
+        li.cbSize = ctypes.sizeof(LASTINPUTINFO)
+        if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(li)):
+            return 1e9
+        return max(0.0, (ctypes.windll.kernel32.GetTickCount() - li.dwTime) / 1000.0)
+    except Exception:  # noqa: BLE001
+        return 1e9
+
+
+def someone_at_the_pc(within_s: float | None = None) -> bool:
+    """True when a person used the mouse or keyboard within `within_s` (default config doer.clear_screen_idle_s)."""
+    return idle_seconds() < float(CLEAR_SCREEN_IDLE_S if within_s is None else within_s)
+
+
+def want_front() -> bool:
+    """The default for a job's window: in front, unless someone is at the PC right now or in_front is off."""
+    return IN_FRONT and not someone_at_the_pc()
 
 
 def cdp_url() -> str:
@@ -78,6 +121,93 @@ def alive(timeout_s: float = 1.5) -> dict | None:
         return None
 
 
+def held_tabs() -> set:
+    """Tab ids of pages left open for an owner at a step the agent could not finish (leftopen.py, 2026-11-08: "leave
+    the browser open for the user to do it themself unless the user selects ... do later"). Never pruned, and while
+    any is held the browser is not quit (close_browser without force)."""
+    try:
+        d = json.loads(LEFT_OPEN.read_text(encoding="utf-8")) if LEFT_OPEN.is_file() else {}
+    except Exception:  # noqa: BLE001
+        d = {}
+    held = {str(e.get("target") or "") for e in (d or {}).values()
+            if isinstance(e, dict) and e.get("state") == "open" and e.get("target")}
+    # a tab with an upload still running (upload.py refreshes `until` while it watches; 2026-11-10)
+    try:
+        up = json.loads(UPLOADS.read_text(encoding="utf-8")) if UPLOADS.is_file() else {}
+    except Exception:  # noqa: BLE001
+        up = {}
+    now = time.time()
+    held |= {str(k) for k, v in (up or {}).items() if isinstance(v, dict) and float(v.get("until") or 0) > now}
+    # a page waiting on an owner's sign-in check: their tap or code answers THIS page (hold_wait)
+    return held | {str(v.get("target")) for v in _waits().values() if v.get("target") and float(v.get("until") or 0) > now}
+
+
+def _waits() -> dict:
+    try:
+        d = json.loads(WAITS.read_text(encoding="utf-8")) if WAITS.is_file() else {}
+    except Exception:  # noqa: BLE001
+        d = {}
+    return {str(k): v for k, v in (d or {}).items() if isinstance(v, dict)}
+
+
+def _save_waits(d: dict) -> None:
+    try:
+        WAITS.parent.mkdir(parents=True, exist_ok=True)
+        WAITS.write_text(json.dumps(d, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def hold_wait(tid: str, page: dict | None = None, minutes: float | None = None, now: float | None = None) -> dict:
+    """The job stopped on a page that waits for its owner (a tap on their phone, a code): keep THAT page. A sign-in
+    check answers the page that asked for it; a reload or a fresh sign-in sends a new one, so the owner's tap lands
+    on a prompt nobody is waiting on any more (2026-11-10: five hours and six taps for one link, "you're stuck in a
+    loop, just keep the same browser open"). While held the tab is never pruned and the browser never quit, by this
+    job or any other. -> the entry, {} when there is no real page to hold."""
+    page = active_page() if page is None else page
+    url = str((page or {}).get("url") or "")
+    if not tid or not page or not page.get("id") or url.startswith(("about:", "chrome:", "devtools:")):
+        return {}
+    now = now or time.time()
+    e = {"target": str(page["id"]), "url": url[:300], "epoch": now,
+         "until": now + 60 * float(WAIT_HOLD_MIN if minutes is None else minutes)}
+    d = _waits()
+    d[str(tid)] = e
+    _save_waits(d)
+    return e
+
+
+def waiting(tid: str = "", except_tid: str = "", now: float | None = None) -> dict:
+    """With `tid`: that job's held page ({} when none, or its time ran out). Without: every live one but `except_tid`."""
+    now = now or time.time()
+    live = {k: v for k, v in _waits().items() if float(v.get("until") or 0) > now}
+    if tid:
+        return live.get(str(tid)) or {}
+    return {k: v for k, v in live.items() if k != str(except_tid)}
+
+
+def release_wait(tid: str, before: float | None = None) -> bool:
+    """The job moved on: its page is an ordinary tab again. With `before`, only an entry made before that moment goes
+    (a run that stopped on a NEW wait keeps the one it just made)."""
+    d = _waits()
+    e = d.get(str(tid))
+    if not e or (before is not None and float(e.get("epoch") or 0) >= before):
+        return False
+    d.pop(str(tid), None)
+    _save_waits(d)
+    return True
+
+
+def expire_waits(now: float | None = None) -> list:
+    """Drop holds whose time ran out. -> the job ids dropped (the caller closes the browser if nothing else needs it)."""
+    now = now or time.time()
+    d = _waits()
+    gone = [k for k, v in d.items() if float(v.get("until") or 0) <= now]
+    if gone:
+        _save_waits({k: v for k, v in d.items() if k not in gone})
+    return gone
+
+
 def prune_tabs(keep: int = 1) -> int:
     """Close every page but `keep`, over plain HTTP (/json/close), so it can never hang.
 
@@ -92,6 +222,9 @@ def prune_tabs(keep: int = 1) -> int:
             pages = [t for t in json.loads(r.read().decode("utf-8", "replace")) if t.get("type") == "page"]
     except Exception:
         return 0
+    # a page held open for an owner is never closed here, and does not count toward `keep`
+    held = held_tabs()
+    pages = [t for t in pages if str(t.get("id") or "") not in held]
     # keep a real page over about:blank when there is one (a sign-in window may be mid-flow)
     pages.sort(key=lambda t: t.get("url", "").startswith("about:"))
     closed = 0
@@ -181,20 +314,35 @@ def _lease():
         return None
 
 
-def open_browser(show: bool = False, wait_s: float = 25.0) -> str:
-    """Start the browser if it is not up; return the CDP url. Idempotent."""
+def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
+    """Start the browser if it is not up; return the CDP url. Idempotent. `show` None = the default (want_front):
+    in front unless someone is at the PC; True = in front, whatever; False = off-screen."""
     global PORT
     if alive() and not ports.ours("cdp", PORT):
         # another program's browser (another agent's doer, a stray Chrome) answers on our port: move, never attach to it
         PORT, _how = ports.claim("cdp", PORT)
+    front_default = show is None and want_front()
     if alive():
         st = _state()
+        if show and st.get("offscreen") and held_tabs():
+            try:                                          # a page is held for an owner: move it, never restart over it
+                show_on_screen()
+            except Exception:  # noqa: BLE001
+                pass
+            prune_tabs()
+            return cdp_url()
         if show and st.get("offscreen"):
             # on-screen was asked for but it is hidden: restart it visible
             close_browser()
         else:
             prune_tabs()
+            if front_default and st.get("offscreen"):
+                try:                                      # the default: bring the one that is up in front, no restart
+                    show_on_screen()
+                except Exception:  # noqa: BLE001
+                    pass
             return cdp_url()
+    show = bool(show) or front_default
     exe = chrome_exe()
     if not exe:
         raise RuntimeError("no Chromium found: `npx playwright install chromium` or set doer.chrome in assistant/config.json")
@@ -228,8 +376,11 @@ def open_browser(show: bool = False, wait_s: float = 25.0) -> str:
     raise RuntimeError("the browser did not answer on its CDP port (another Chrome may hold the profile; close it or free the lease)")
 
 
-def close_browser() -> bool:
-    """Ask the browser to quit (Browser.close over CDP), then make sure its pid is gone."""
+def close_browser(force: bool = False) -> bool:
+    """Ask the browser to quit (Browser.close over CDP), then make sure its pid is gone. While a page is held open for
+    an owner (held_tabs) it stays up and this returns False; `force` is the owner's Do later (leftopen.later)."""
+    if not force and held_tabs() and alive():
+        return False
     st = _state()
     ok = False
     if alive():
@@ -289,6 +440,8 @@ def _cdp_calls(ws: str, calls: list) -> list:
     out = []
     try:
         for i, (method, params) in enumerate(calls, 1):
+            if callable(params):                      # params built from the answers so far (same session: upload.py)
+                params = params(out)
             payload = json.dumps({"id": i, "method": method, "params": params or {}}).encode()
             mask, n = os.urandom(4), len(payload)
             head = bytes([0x81]) + (bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + n.to_bytes(2, "big"))
@@ -376,8 +529,7 @@ def show_on_screen() -> tuple:
         return False, f"could not list the browser's tabs ({type(e).__name__})"
     if not pages:
         return False, "the browser has no open page"
-    pages.sort(key=lambda t: t.get("url", "").startswith(("about:", "chrome:")))
-    page = pages[0]
+    page = active_page(pages) or pages[0]
     ws = str((alive() or {}).get("webSocketDebuggerUrl") or "")
     sw, sh = _screen()
     try:
@@ -409,11 +561,103 @@ def show_on_screen() -> tuple:
     return True, f"maximized on the main monitor, showing {page.get('url', '')[:120]}"
 
 
+def _page_focus(ws: str) -> tuple:
+    """(visible, focused) of one page, asked of the page itself. (False, False) when it does not answer."""
+    try:
+        r = _cdp_calls(ws, [("Runtime.evaluate", {"expression": "document.visibilityState + '|' + document.hasFocus()",
+                                                  "returnByValue": True})])[0] or {}
+        v = str(((r.get("result") or {}).get("value")) or "")
+        vis, _, foc = v.partition("|")
+        return vis == "visible", foc == "true"
+    except Exception:  # noqa: BLE001
+        return False, False
+
+
+def active_page(pages: list | None = None, focus=None) -> dict:
+    """The page the job is working on: the tab that is visible AND focused, else a visible one, else the first real
+    page (2026-11-06, the owner: "sometimes sage sends screenshots of pages it is not working on" - the first tab in
+    Chrome's list is not the one in front once the job opened a second tab). `focus` = a stand-in for _page_focus
+    in tests. {} when there is no page."""
+    if pages is None:
+        if not alive():
+            return {}
+        try:
+            with urllib.request.urlopen(cdp_url() + "/json/list", timeout=5) as r:
+                pages = [t for t in json.loads(r.read().decode("utf-8", "replace")) if t.get("type") == "page"]
+        except Exception:  # noqa: BLE001
+            return {}
+    real = [p for p in pages if not str(p.get("url", "")).startswith(("about:", "chrome:", "devtools:", "chrome-extension:"))]
+    pool = real or list(pages)
+    if not pool:
+        return {}
+    if len(pool) == 1:
+        return pool[0]
+    focus = focus or _page_focus
+    visible, focused = [], []
+    for p in pool[:12]:
+        vis, foc = focus(str(p.get("webSocketDebuggerUrl") or ""))
+        if vis and foc:
+            focused.append(p)
+        elif vis:
+            visible.append(p)
+    return (focused or visible or pool)[0]
+
+
+def front_page_ws() -> str:
+    """The CDP websocket of the page the job is on ('' when the browser is down or has no page)."""
+    return str(active_page().get("webSocketDebuggerUrl") or "")
+
+
+def ready_to_paint(page: dict) -> str:
+    """Make sure the window holding `page` can paint before a picture is taken (2026-11-08, the owner: "control images are
+    showing blank or black"). A minimized window paints nothing and Page.captureScreenshot just hangs, so it is
+    restored: in front when nobody is at the PC (the in-front rule), else off-screen, so it never jumps in front of
+    a person working. -> '' (already fine) | 'front' | 'offscreen' | 'unknown'."""
+    v = alive()
+    bws = str((v or {}).get("webSocketDebuggerUrl") or "")
+    if not bws or not page.get("id"):
+        return "unknown"
+    try:
+        wid = int((_cdp_calls(bws, [("Browser.getWindowForTarget", {"targetId": page["id"]})])[0] or {}).get("windowId") or 0)
+        if not wid:
+            return "unknown"
+        b = (_cdp_calls(bws, [("Browser.getWindowBounds", {"windowId": wid})])[0] or {}).get("bounds") or {}
+        if b.get("windowState") != "minimized":
+            return ""
+        if want_front():
+            ok, _ = show_on_screen()
+            if ok:
+                return "front"
+        _cdp_calls(bws, [("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}}),
+                         ("Browser.setWindowBounds", {"windowId": wid, "bounds": {"left": -32000, "top": -32000}})])
+        st = _state()
+        if st:
+            st["offscreen"] = True
+            _save_state(st)
+        time.sleep(0.4)                               # one frame to paint
+        return "offscreen"
+    except (OSError, ValueError):
+        return "unknown"
+
+
+def navigate(url: str) -> bool:
+    """Send the front page to `url` (the owner's own sign-in, 2026-11-03). False when the browser is down."""
+    ws = front_page_ws()
+    if not ws or not str(url).startswith(("http://", "https://")):
+        return False
+    try:
+        r = _cdp_calls(ws, [("Page.navigate", {"url": str(url)})])[0] or {}
+        return not (isinstance(r, dict) and r.get("error"))
+    except (OSError, ValueError):
+        return False
+
+
 def status() -> dict:
     v = alive()
     st = _state()
     return {"up": bool(v), "cdp": cdp_url() if v else "", "browser": (v or {}).get("Browser", ""), "offscreen": st.get("offscreen"),
-            "pid": st.get("pid"), "profile": str(PROFILE)}
+            "pid": st.get("pid"), "profile": str(PROFILE), "in_front_default": IN_FRONT, "idle_s": round(idle_seconds(), 1),
+            "someone_at_the_pc": someone_at_the_pc()}
 
 
 def probe_profile() -> str:

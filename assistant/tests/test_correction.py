@@ -200,6 +200,59 @@ cards._write(cards.DONE / f"{c2['id']}.json", c2)
 cards._write(cards.LIVE / f"{qid}.json", {**c, "status": "expired"})
 ok(not correction.card_in_thread(TH), "a card that expired untapped is not 'here': the usual correction makes it again")
 
+# ---------------------------------------------------------------- 3c. "There is no card": the card is somewhere else
+# 2026-11-05 06:03-06:09, the real pair: the doer's sign-in card for the ShareGrid job posted in the home space, the reply
+# in the owner's DM said "Tap Enter login on the card"; "There is no card" met "nothing was posted to Chat ... I can't re-post
+# it into Chat from here" and nothing moved. Now code posts that card here and the brain is told so; not words alone.
+import chat_push  # noqa: E402
+SIGNIN = {"question": "[ACTION PREVIEW] Sign in to sharegrid.com and carry on with the job. My vault has no login for sharegrid.com.",
+          "header": "Sign-in needed: sharegrid.com", "lane": "wedding", "audience": "owner", "urgent": True,
+          "options": [{"label": "Enter login"}, {"label": "I'll sign in myself"}, {"label": "Stop"}],
+          "exec": {"kind": "agent_run", "approve_label": "Enter login",
+                   "payload": {"ticket": "a" * 16, "step": "Sign in to sharegrid.com and carry on with the job", "values": {},
+                               "url": "https://www.sharegrid.com/login", "host": "sharegrid.com", "login": True, "resume": "sign in, then carry on"}}}
+hr = cards.post([dict(SIGNIN)], owner="doer", lane="wedding", thread="spaces/HOMESP/threads/SG0")
+hqid = hr.get("qid")
+ok(hr.get("posted") and hqid, f"fixture: the sign-in card posted ({str(hr)[:80]})")
+hc = cards._read(cards.LIVE / f"{hqid}.json"); hc["chat"] = {"home": "spaces/HOMESP/messages/SG0.SG0"}; cards._write(cards.LIVE / f"{hqid}.json", hc)
+SG, DMSP = "dm:owner1-sharegrid", "spaces/DMJ"
+core.say(SG, NAME, "I need the sharegrid.com login to carry on. Tap Enter login on the card: it goes straight to my vault.",
+         channel="gchat", meta={"thread": f"{DMSP}/threads/SG1"})
+ok(correction.card_not_here(SG, "", DMSP).get("id") == hqid, "the card the last reply pointed at is found: it is in the home space, not here")
+ok(not correction.card_not_here(SG, "", "spaces/HOMESP") and not correction.card_not_here("dm:nobody", "", DMSP),
+   "a card already in this space, or a conversation that never mentioned it, finds nothing")
+pushed = []
+_real_push = chat_push.push_card
+chat_push.push_card = lambda c: pushed.append(c) or {"home": f"{DMSP}/messages/SG2.SG2"}
+n_before = len(calls)
+replies[:] = ["It's right here now: tap Enter login and the form goes straight to my vault.", "Sorry."]
+bridge.handle({"channel": "local", "person": owner1, "convo": SG, "space": DMSP, "thread": "", "direct": True, "text": "There is no card"})
+ok(pushed and pushed[-1]["id"] == hqid and pushed[-1].get("chat_space") == DMSP and not pushed[-1].get("chat_thread"),
+   "There is no card: the card is posted into this DM by code")
+hc = cards._read(cards.LIVE / f"{hqid}.json")
+ok(set(hc.get("chat") or {}) == {"home", "home:here"}, f"both messages are on record, so a tap or a close finds either: {hc.get('chat')}")
+ok(len(calls) == n_before + 1 and "code has just posted it here" in calls[-1] and "Do NOT make another" in calls[-1],
+   "one turn, and the brain is told the card is here now")
+ok(not any(a.get("kind") in ("task", "card") for a in actions.LAST_APPLIED), "no second card")
+row = correction.recent(1)[-1]
+ok(row["kind"] == "card" and row.get("card_here") == hqid and not row["words_only"], "the ledger row is not words alone")
+ok(not any(f["data"].get("convo") == SG for f in reflex.d_corrections()), "no reflex finding: correction:2026-11-05 06:09 clears")
+ok(not correction.card_not_here(SG, "", DMSP), "once it is here it is not posted again")
+
+# held for the weekly digest (never in Chat): the same correction posts it; a system card never
+os.environ["ASSISTANT_CARDS_DELIVERY"] = "weekly"
+wr = cards.post([{"question": "Approve the venue walkthrough reply?", "header": "Reply to the venue", "lane": "wedding",
+                  "options": [{"label": "Send"}, {"label": "Skip"}],
+                  "exec": {"kind": "agent_run", "approve_label": "Send", "payload": {"ticket": "b" * 16, "step": "reply", "values": {}, "resume": "send the reply"}}}],
+                owner="operator", lane="wedding")
+os.environ.pop("ASSISTANT_CARDS_DELIVERY", None)
+ok(wr.get("delivery") == "weekly", f"fixture: held for the digest ({str(wr)[:80]})")
+core.say(SG, NAME, "The reply to the venue is on the card, tap Send when it reads right.", channel="gchat", meta={"thread": ""})
+ok(correction.card_not_here(SG, "", DMSP).get("id") == wr["qid"], "a card held for the digest is not here either")
+hc2 = cards._read(cards.LIVE / f"{wr['qid']}.json"); cards._write(cards.LIVE / f"{wr['qid']}.json", {**hc2, "delivery": "mc"})
+ok(not correction.card_not_here(SG, "", DMSP), "a system card (Mission Control only) is never brought into Chat")
+chat_push.push_card = _real_push
+
 # ---------------------------------------------------------------- 4. the reflex: words alone after everything -> one build request
 correction.record(owner1, "redo", "That's not what I asked", {"text": "Decide whether he emailed us and draft the email instead", "ts": core.stamp()}, "",
                   [], "", True, "I'm sorry, I misread that.", convo=dm)

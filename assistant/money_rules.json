@@ -240,6 +240,12 @@
  },
  "rules": [
   {
+   "id": "r-vault-moves",
+   "match": "\\b(to|from) [a-z0-9 .'&-]{0,30}vault\\b|\\bvault transfer\\b",
+   "bucket": "transfer",
+   "why": "SoFi vault moves are own money (2026-11-02)"
+  },
+  {
    "id": "r-stripe-in",
    "match": "stripe|square inc|sq \\*.*deposit",
    "sign": "in",
@@ -333,6 +339,75 @@
    "id": "r-transfer",
    "match": "^transfer|xfer to|xfer from|online transfer|relay transfer|bucket transfer",
    "bucket": "transfer"
+  },
+  {
+   "id": "r-income-wages",
+   "match": "teledyne flir|example housin",
+   "sign": "in",
+   "bucket": "income:personal",
+   "why": "paychecks (2026-11-02)"
+  },
+  {
+   "id": "r-income-interest",
+   "match": "interest earned|interest paid|interest payment",
+   "sign": "in",
+   "bucket": "income:personal"
+  },
+  {
+   "id": "r-groceries-2",
+   "match": "\\bcostco\\b(?! gas)|\\baldi\\b|port alder fm|farmers? market|smart & final|grocery outlet",
+   "sign": "out",
+   "bucket": "personal:groceries"
+  },
+  {
+   "id": "r-fuel-2",
+   "match": "storke fuel|\\bstorke\\b|fuel depot|gasbuddy|circle k|7-eleven|\\bam ?pm\\b|valero|brackwater airport|city of sb parking|\\bmta\\b|aaa insurance|parking",
+   "sign": "out",
+   "bucket": "personal:car"
+  },
+  {
+   "id": "r-dining-2",
+   "match": "del taco|slo donut|dune coffee|el pollo loco|mcdonald|white caps bistro|anacappuccino|caje marrow bay|meal prep sunday",
+   "sign": "out",
+   "bucket": "personal:dining"
+  },
+  {
+   "id": "r-personal-subs-2",
+   "match": "^apple$|apple\\.com|microsoft|disney|kingsisle|fitness 19|abc\\*.*fitness|abc -fitness|planet fitness",
+   "sign": "out",
+   "bucket": "personal:subscriptions"
+  },
+  {
+   "id": "r-shopping",
+   "match": "homegoods|marshalls|banana republic|fashion gal|best buy|dollar tree|home depot|walmart|ross |old navy|\\bgap\\b|ikea",
+   "sign": "out",
+   "bucket": "personal:shopping"
+  },
+  {
+   "id": "r-entertainment",
+   "match": "six flags|cinema|regal|amc |theat",
+   "sign": "out",
+   "bucket": "personal:other"
+  },
+  {
+   "id": "r-bank-fees-personal",
+   "match": "overdraft fee|foreign transaction fee|monthly service fee|insufficient funds",
+   "sign": "out",
+   "account": "college|sofi|credit card",
+   "bucket": "personal:other"
+  },
+  {
+   "id": "r-bank-fees-biz",
+   "match": "monthly service fee|wire fee",
+   "sign": "out",
+   "account": "bus |relay|example",
+   "bucket": "biz:fees"
+  },
+  {
+   "id": "r-biz-insurance",
+   "match": "next insur|hiscox|thimble|simply business",
+   "sign": "out",
+   "bucket": "biz:insurance"
   }
  ],
  "learned": []

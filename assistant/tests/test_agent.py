@@ -132,6 +132,9 @@ check("task: the operator's ticket carries the thread it was asked in (the card 
       len(_tq) == 1 and _tq[0]["payload"]["thread"] == "spaces/S1/threads/ASK1" and _tq[0]["payload"]["convo"] == "spaces/S1")
 check("actions: successes add no line under the reply (owner1 2026-10-07: no robotic confirmations)",
       not any(w in joined for w in ("Learned", "Remembered", "Scheduled", "Wiki note written", "Handed to the operator", "/undo")))
+_held = actions.apply({"learn": [{"rule": "Reply to leads without asking first"}]}, owner1)
+check("actions: a held-back rule says one plain human sentence (build request 2026-10-17: no system notice)",
+      len(_held) == 1 and _held[0].startswith("I've put that one in front of you") and not any(w in _held[0] for w in ("- ", ":", "Mission Control", "needs your hand")))
 note_path = core.VAULT / "Wiki" / "Home" / "Dishwasher.md"
 txt = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
 check("note: schema front matter, draft, bad tag dropped", "type: asset" in txt and "status: draft" in txt and "nonsense-tag" not in txt and "tags: [maintenance]" in txt)
@@ -535,6 +538,18 @@ ln = actions.apply({"followups": [{"to": "owner1", "about": "Whether the invoice
 check("follow-up: the SUGGEST field registers quietly (no code line)", ln == [] and len(followups.pending()) == 1)
 fu_change = [c for c in core.rows(core.CHANGES) if c.get("kind") == "followup"][-1]
 check("follow-up: undo cancels it", core.undo(fu_change["id"], by="owner1").startswith("Undone") and not followups.pending())
+# br-b15d5935 (ported from example's chaser): another post in the follow-up's thread does not close it
+followups.add([{"to": "owner6", "about": "Whether the Ashdown timeline is final", "at": "2026-10-05T17:00"}], "dm:owner1", "th-w", owner1, now=fnow)
+_fl = followups._load()
+for _it in _fl["items"]:
+    _it["created_ts"] = 0
+core.save(followups.LEDGER, _fl)
+_agent = core.profile().get("name", "Agent")
+followups.note_reply("owner6", "dm:owner1", "th-w", "Did the Coffeys pay yet?")
+followups.note_reply("owner6", "dm:owner1", "th-w", f"{_agent}, show me the dinner list")
+check("follow-up: a question or an ask to the agent in its thread leaves it open", len(followups.pending()) == 1)
+followups.note_reply("owner6", "dm:owner1", "th-w", "Yes, it's final")
+check("follow-up: the answer in its thread closes it", not followups.pending())
 check("people: owner6's Workspace address resolves to her", (core.person_for(email="owner6@example.invalid") or {}).get("key") == "owner6")
 
 # ---- shared spaces (the reader) + attachments
@@ -1098,6 +1113,41 @@ check("team pay: matched by the handle in org, the People page or the contact's 
       and actions.team_member("+1 805 555 0199") == "Corwin Castellan IV"
       and actions.team_member("p4f6cf3@example.invalid") == "" and actions.team_member("") == "")
 _contacts_mod.lookup, _cards_mod.post = _real_lookup, _real_post
+
+# reschedule (2026-11-06): a schedule is found by id, by the dict the deed records, or by its title; changed in place;
+# the change undone. Until then the hourly "owner loves you" reminder could be neither stopped (the stop arrived as
+# {'id': 's8'} and matched nothing) nor moved (there was no change at all).
+rs = routines.add({"title": "owner6 loves you", "say": "owner6 wants you to know she loves you.", "when": {"every_hours": 1}}, by="owner6")
+check("find: by id, by the recorded dict, by title, by part of the title; nothing for a stranger",
+      routines.find(rs["id"])["id"] == rs["id"] and routines.find({"id": rs["id"]})["id"] == rs["id"]
+      and routines.find("owner6 loves you")["id"] == rs["id"] and routines.find("loves you")["id"] == rs["id"] and routines.find("nothing like it") == {})
+up = routines.update(rs["id"], {"when": {"every_hours": 3}, "say": "owner6 loves you."}, by="owner1")
+_row = next(x for x in routines.active() if x["id"] == rs["id"])
+check("reschedule: changed in place and ledgered with the old fields as its undo", up["status"] == "applied" and _row["when"] == {"every_hours": 3}
+      and _row["say"] == "owner6 loves you." and core.rows(core.CHANGES)[-1]["undo"] == {"op": "routine_restore", "id": rs["id"],
+      "fields": {"when": {"every_hours": 1}, "say": "owner6 wants you to know she loves you."}})
+check("reschedule: undo puts the old time and words back", "Undone" in core.undo(core.rows(core.CHANGES)[-1]["id"], by="owner1")
+      and next(x for x in routines.active() if x["id"] == rs["id"])["when"] == {"every_hours": 1})
+check("reschedule: a bad when, an unknown schedule or nothing to change is refused with a reason",
+      routines.update(rs["id"], {"when": {"every_hours": 0.1}})["status"] == "refused" and routines.update("s999", {"when": {"daily": "08:00"}})["status"] == "refused"
+      and routines.update(rs["id"], {})["status"] == "refused")
+_l = actions.apply({"unschedule": [{"id": rs["id"]}]}, owner1)
+check("unschedule: the {'id': ...} shape the deed records stops it", not any("don't have" in x for x in _l) and not any(x["id"] == rs["id"] for x in routines.active()))
+routines.enable(rs["id"])
+_l = actions.apply({"unschedule": ["owner6 loves you"]}, owner1)
+check("unschedule: its title stops it too", not any(x["id"] == rs["id"] for x in routines.active()))
+routines.enable(rs["id"])
+_l = actions.apply({"reschedule": [{"id": "loves you", "when": {"daily": "09:00"}}]}, owner1)
+check("reschedule deed: applied through actions by title, no refusal line", not _l and next(x for x in routines.active() if x["id"] == rs["id"])["when"] == {"daily": "09:00"})
+_l = actions.apply({"unschedule": ["no such schedule"]}, owner1)
+check("unschedule: a stranger is still refused in words", bool(_l) and "don't have an active schedule" in _l[0])
+import intents as _intents  # noqa: E402
+_ok, _line, _pl = _intents.validate("reschedule", {"id": "owner6 loves you", "when": {"every_hours": 2}}, owner1, {})
+check("reschedule deed: validated by title, recorded under its id", _ok and _pl == {"id": rs["id"], "when": {"every_hours": 2}})
+_ok, _line, _pl = _intents.validate("unschedule", {"id": "loves you"}, owner1, {})
+check("unschedule deed: validated by part of the title, recorded under its id", _ok and _pl == {"id": rs["id"]})
+check("unschedule deed: a stranger is refused at validation", not _intents.validate("unschedule", {"id": "s999"}, owner1, {})[0])
+routines.disable(rs["id"], by="owner1")
 
 print(f"\n{PASS} passed, {FAIL} failed  (scratch: {TMP})")
 sys.exit(1 if FAIL else 0)

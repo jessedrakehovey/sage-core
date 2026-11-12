@@ -24,6 +24,7 @@ os.environ["DOER_DATA"] = str(TMP / "doer")
 os.environ["DOER_STATUS"] = str(TMP / "doer_status.md")
 os.environ["DOER_VAULT_KEY"] = "test-key"
 os.environ["AGENT_STATE"] = str(TMP / "agent_state")
+os.environ["AGENT_PICKUP"] = "off"                     # a test step's end never wakes a real pick-up turn
 os.environ["AGENT_DATA"] = str(TMP / "agent_data")
 os.environ["AGENT_SUGGESTIONS"] = str(TMP / "sugg.md")
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -116,6 +117,14 @@ check("cancel queues no operator ticket", not any(t["kind"] == "card_answer" and
 import drain
 ok, res = drain._exec_agent_run(dict(tk["payload"]), True)
 check("drain dry-run of agent_run", ok and "DRY_RUN_OK" in res, res)
+_real_run = drain._run
+drain._run = lambda cmd, timeout=180: subprocess.CompletedProcess(
+    cmd, 1, stdout="DOER_RESULT=DOER_FAILED the save button never enabled",
+    stderr="".join(f"[lease] waiting on doer-browser profile ({i})\n" for i in range(20)))
+ok, res = drain._exec_agent_run(dict(tk["payload"]), False)
+drain._run = _real_run
+check("agent_run failure tail keeps the doer's verdict, not lease noise",
+      not ok and res.rstrip().endswith("the save button never enabled"), res)
 
 # 6. prompt building: no leftover placeholders, task + ticket + out dir present
 t = tickets._load()[TID]
@@ -131,6 +140,7 @@ check("prompt keeps the JSON example braces", '"step":' in p and "{" in p)
 # 7. marker parsing + run_ticket outcomes with a stand-in turn, browser and chat
 doer.browser.open_browser = lambda show=False, wait_s=0: "http://127.0.0.1:1"
 doer.browser.close_browser = lambda: True
+_real_deliver = doer.deliver
 delivered = []
 doer.deliver = lambda t, text: delivered.append(text)
 doer.CLAUDE = str(ROOT / "tests" / "test_doer.py")      # exists; run_turn is replaced below anyway
@@ -236,12 +246,12 @@ check("approved dry run shows the step", rc == 0 and "DRY_RUN_OK" in buf.getvalu
 
 # 9. Sage's `do` -> one agent_run ticket with the conversation, no operator ticket
 actions.WAKE_DOER = False
-owner1 = core.person_for(handle="owner1")
+OWNER = core.person_for(handle=core.first_owner())       # the primary owner, whoever the organization's is
 before = set(tickets._load())
-lines = actions.apply({"do": {"lane": "home", "text": "Check whether the Edison bill is paid"}}, owner1, {"convo": "dm:owner1", "thread": ""})
+lines = actions.apply({"do": {"lane": "home", "text": "Check whether the Edison bill is paid"}}, OWNER, {"convo": f"dm:{OWNER['key']}", "thread": ""})
 new = [tickets._load()[k] for k in set(tickets._load()) - before]
 check("do -> agent_run ticket in the lane with the convo", len(new) == 1 and new[0]["kind"] == "agent_run" and new[0]["lane"] == "home"
-      and new[0]["payload"]["convo"] == "dm:owner1" and new[0]["payload"]["from"] == "owner1")
+      and new[0]["payload"]["convo"] == f"dm:{OWNER['key']}" and new[0]["payload"]["from"] == OWNER["key"])
 check("do -> a successful hand-off adds no confirmation line (owner1 2026-10-07: no robotic lines)", not lines)
 
 # 10. policy regexes compile and catch the obvious
@@ -341,6 +351,8 @@ check("max-turns run becomes one plain sentence", "ran out of steps" in pe and "
 _pe2 = doer.plain_error('{"is_error":true,"errors":["Tool blocked by policy"]}')
 check("an error run names the error in plain words", "stopped on an error" in _pe2 and "Tool blocked by policy" in _pe2, _pe2)
 check("a plain string passes through", doer.plain_error("the browser closed") == "the browser closed")
+_pe3 = doer.plain_error('ns":81,"uuid":"a1b2","killed_by_hook":0,"refused_tools":2,"session_id":"s-9"}')
+check("a cut tail of the result JSON never reaches chat", "{" not in _pe3 and "uuid" not in _pe3 and "stopped" in _pe3, _pe3)
 say_line = doer._say("owner1", "", raw_max, {"payload": {"text": "add Wren to the CRM project"}})
 check("the chat line for a no-result run is plain and names the job", "add Wren" in say_line and "{" not in say_line and "couldn't finish" in say_line, say_line)
 pm = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
@@ -349,6 +361,36 @@ _pl = doer.portal("The Add host picker will not open || DO IT YOURSELF: https://
 check("a blocked line renders as the owner's portal: reason, link, phone steps, no retry promise",
       _pl.startswith("The Add host picker will not open. The quickest way to finish it yourself, from your phone: https://app.example-crm.com/scheduling then open Vision Meeting") and "try again" not in _pl, _pl)
 check("a blocked line without a hand-over still reads plainly", doer.portal("no login saved for x") == "no login saved for x.")
+# a failure never tells the owner to use a terminal or type commands (nightly review, 2026-11-02)
+_term = doer._say(OWNER["key"], "DOER_BLOCKED", "The CRM page would not load || DO IT YOURSELF: open a terminal on the PC and run claude login, then type the command `python assistant/doer/vault.py add`", {"payload": {"text": "update the Harper project"}})
+_pc = doer.pc_only(_term)
+check("a doer failure that says to open a terminal / run claude / type commands loses that step (and no stock line is tacked on, 2026-11-11)",
+      "terminal" not in _pc.lower() and "claude" not in _pc.lower() and "python" not in _pc and "`" not in _pc
+      and "The CRM page would not load" in _pc and doer.PC_LINE not in _pc, _pc)
+# a sign-in block names the chat route, never vault.py / browser.py / a page on the PC (nightly review, 2026-10-17)
+for _arg, _host in (("no login saved for app.sharegrid.com, add it with vault.py add sharegrid", "app.sharegrid.com"),
+                    ("The site is signed out. Run browser.py --show and sign in.", ""),
+                    ("not signed in || DO IT YOURSELF: run vault.py add for https://www.example-crm.com/app", "example-crm.com")):
+    _si = doer.pc_only(doer._say(OWNER["key"], "DOER_BLOCKED", _arg, {"payload": {"text": "block the dates on ShareGrid"}}))
+    check(f"a sign-in block says /signin in chat, no commands: {_arg[:30]}",
+          ".py" not in _si and "Setup page" not in _si and "Mission Control" not in _si and "/signin" in _si
+          and "save my" in _si and (not _host or f"/signin {_host}" in _si) and doer.PC_LINE not in _si, _si)
+check("a block that is not a sign-in keeps its own words", doer.signin_line("The Add host picker will not open") == "")
+check("a line with no terminal step is left exactly as it was", doer.pc_only(_pl) == _pl
+      and doer.pc_only("Your flight leaves from Terminal 4 at 9:10.") == "Your flight leaves from Terminal 4 at 9:10.")
+_said, _rx = [], type(sys)("receipts")
+_rx.say = lambda tid, convo, thread, text, **kw: _said.append(text)
+_old_rx, sys.modules["receipts"] = sys.modules.get("receipts"), _rx
+_old_run, doer.subprocess.run = doer.subprocess.run, (lambda *a, **k: None)
+try:
+    _real_deliver({"id": "t-pc", "payload": {"from": OWNER["key"]}}, "I couldn't finish: it stopped. Open PowerShell and run schtasks /run to retry.")
+finally:
+    doer.subprocess.run = _old_run
+    if _old_rx is not None:
+        sys.modules["receipts"] = _old_rx
+    else:
+        sys.modules.pop("receipts", None)
+check("deliver itself strips the terminal step before it reaches chat", _said == ["I couldn't finish: it stopped."], repr(_said))
 import crm as _crm_doer  # noqa: E402
 check("prompt: the doer never refuses a job as a connector job (2026-10-20)", "already checked for a connector" in pm and f"connector job ({_crm_doer.name()}/Google)" not in pm and "never stop with" in pm)
 check("prompt: forced click after two stable timeouts, stop after the third", "waiting for element to be stable" in pm and "browser_evaluate" in pm and "Never loop on one control" in pm)
@@ -428,6 +470,22 @@ sys.argv = ["report.py", "note", "--ticket", TID, "--kind", "blocked", "the", "c
 check("report.py note is the CLI (words joined, kind kept)", report.main() == 0 and notes.last(TID)["kind"] == "blocked"
       and notes.last(TID)["text"] == "the cart page will not take a click" and "blocked: the cart page" in doer.STATUS.read_text(encoding="utf-8"))
 check("the note command is on the doer's allow list", "Bash(python assistant/doer/report.py note:*)" in doer.ALLOWED)
+# 2026-11-10: the evidence file is written by code (the vault path "the organization" has a space; a turn could not write it)
+import computer as _computer
+_spaced = TMP / "out dir with spaces" / "admin page.png"
+_spaced.parent.mkdir(parents=True, exist_ok=True); _spaced.write_bytes(b"PNG evidence")
+sys.argv = ["report.py", "evidence", "--ticket", TID, "--what", "new admin added", "--detail", "admin page lists pat@example.com (3 admins)",
+            "--file", str(_spaced), "--note", "added the admin"]
+check("report.py evidence is the CLI (a file path with spaces is fine)", report.main() == 0 and (report.OUT / TID / "evidence.json").is_file())
+_ev_lines, _ev_ok, _ev_n = _computer.verify_evidence(report.OUT / TID)
+check("the code-written evidence passes the re-check (file re-hashed, check kept)", _ev_ok and _ev_n == 2
+      and any("verified" in x for x in _ev_lines) and any("OK new admin added" in x for x in _ev_lines), str(_ev_lines))
+check("a second evidence row appends, a failed read-back is kept as failed",
+      report.evidence(TID, "price read", "cart shows $40, expected $35", ok=False) == "EVIDENCE=3" and not _computer.verify_evidence(report.OUT / TID)[1])
+check("evidence refuses a bad ticket, nothing to record, a missing file", report.evidence("nope", "x").startswith("REFUSED")
+      and report.evidence(TID).startswith("REFUSED") and report.evidence(TID, files=[str(TMP / "no such.png")]).startswith("REFUSED"))
+check("the evidence command is on the doer's allow list and in its prompt", "Bash(python assistant/doer/report.py evidence:*)" in doer.ALLOWED
+      and f"report.py evidence --ticket {TID}" in _bp and "never write it yourself" in _bp)
 check("the resume block lists the notes oldest first", notes.block(TID).startswith("1. [") and "order 2283704" in notes.block(TID).splitlines()[0]
       and notes.block(TID).splitlines()[-1].endswith("take a click"))
 
@@ -498,8 +556,8 @@ hline = report.checkpoint(TID, str(hsf))
 HQID = hline.split("=", 1)[1] if "=" in hline else ""
 hcard = next((c for c in cards.pending() if HO_SPEC["step"] in c["question"]), {})
 check("hand-off: browser brought on screen before the card", SHOWN == [1] and hline.startswith("CHECKPOINT="), hline)
-check("hand-off card says it is open on the screen, the last step is his, no Approve",
-      "open on your screen" in hcard.get("question", "") and "Approve" not in [o if isinstance(o, str) else o.get("label") for o in hcard.get("options", [])]
+check("hand-off card says it waits in the browser and Control PC opens it, the last step is his, no Approve",
+      "Control PC opens it from your phone" in hcard.get("question", "") and "your screen" not in hcard.get("question", "") and "Approve" not in [o if isinstance(o, str) else o.get("label") for o in hcard.get("options", [])]
       and report.HANDOFF_DONE in [o if isinstance(o, str) else o.get("label") for o in hcard.get("options", [])], str(hcard)[:300])
 check("hand-off card mints nothing on 'I finished it'", not report.build_question(TID, HO_SPEC, (True, "x")).get("exec"))
 check("hand-off read-back is kept for this card", json.loads((report.OUT / TID / "handoff.json").read_text(encoding="utf-8")).get("qid") == HQID)
@@ -512,16 +570,22 @@ tickets._transition(TID, "claimed", "test", "", None)
 delivered.clear()
 doer.run_ticket(tickets._load()[TID])
 check("hand-off: the browser is left open (the cart lives in it)", CLOSED == [], str(CLOSED))
-check("hand-off: told it is open on the screen, and the step is his", bool(delivered) and "open on your screen" in delivered[-1]
+check("hand-off: told it waits in the browser (Control PC opens it), and the step is his", bool(delivered) and "Control PC opens it from your phone" in delivered[-1]
       and "tap Approve" not in delivered[-1] and "I finished it" in delivered[-1], str(delivered[-1:]))
 _browser.show_on_screen = lambda: (False, "the window did not land on the main monitor (normal at -32000,-32000)")
-hline2 = report.checkpoint(TID, str(hsf))
+cards._retire(cards._read(cards.LIVE / f"{HQID}.json"), "consumed")     # the first hand-off card is done with: a second one is a new decision
+HO_SPEC2 = dict(HO_SPEC, step="Sign the rental agreement on the agreement page", values={"Agreement": "the weekend rental terms"})
+hsf2 = hsf.with_name("handoff2.json")
+hsf2.write_text(json.dumps(HO_SPEC2), encoding="utf-8")       # a different last step: the same question twice is refused, rightly
+hline2 = report.checkpoint(TID, str(hsf2))
 HQID2 = hline2.split("=", 1)[1] if "=" in hline2 else ""
+check("the second hand-off card posted", hline2.startswith("CHECKPOINT="), hline2)
+HO_SPEC = HO_SPEC2
 hcard2 = [c for c in cards.pending() if HO_SPEC["step"] in c["question"]][-1]
-check("hand-off not confirmed: the card never says 'open on your screen'", "open on your screen" not in hcard2["question"]
+check("hand-off not confirmed: the card never says it is in front", "opens it from your phone." not in hcard2["question"]
       and "could not confirm" in hcard2["question"], hcard2["question"][-300:])
 _s2 = doer._say("owner1", "DOER_CHECKPOINT", f"{HQID2} {HO_SPEC['step']}", tickets._load()[TID])
-check("hand-off not confirmed: the chat line never says it either", "open on your screen" not in _s2 and "could not confirm" in _s2, _s2)
+check("hand-off not confirmed: the chat line never says it either", "opens it from your phone." not in _s2 and "could not confirm" in _s2, _s2)
 CLOSED.clear()
 tickets._transition(TID, "claimed", "test", "", None)
 doer.run_turn = fake_turn("DOER_CHECKPOINT", f"{HQID2} {HO_SPEC['step']}")

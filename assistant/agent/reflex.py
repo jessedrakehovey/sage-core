@@ -70,7 +70,7 @@ BUILD_UNLANDED_MIN = 60
 REESCALATE_H = 24
 KEEP_DAYS = 30
 MAX_TIMEOUT_S = 900
-LIMIT = re.compile(r"(session|usage|rate) limit|hit your limit|limit reached|too many requests", re.I)
+LIMIT = re.compile(r"(session|usage|rate|weekly|daily|hourly|monthly|opus|sonnet) limit|hit your (?:\w+ )?limit|limit reached|too many requests", re.I)
 FOOTER = "<!-- reflex:"
 # transcript channels code writes but never posts (builder.note_owners: "nothing is posted", 2026-10-08)
 TRANSCRIPT_ONLY = ("builder",)
@@ -566,8 +566,20 @@ def d_corrections() -> list:
     return out
 
 
+def d_clock() -> list:
+    """The PC clock off from Google's by more than clock.ALARM_S (2026-11-01: it never left daylight time and every
+    Google sign-in was refused). clock.install already carries the agent through; the owner hears the fix once."""
+    import clock
+    off = clock.offset()
+    if abs(off) < clock.ALARM_S:
+        return []
+    return [{"key": "clock:skew", "kind": "clock_skew",
+             "what": f"the computer's clock is {abs(off) / 60:.0f} minutes {'fast' if off < 0 else 'slow'}",
+             "data": {"offset": off, "lane": "personal"}}]
+
+
 DETECTORS = {"job": d_jobs, "limit": d_limits, "build": d_builds, "gap": d_gaps, "leak": d_leaks, "card": d_system_cards,
-             "account": d_accounts, "correction": d_corrections}
+             "account": d_accounts, "correction": d_corrections, "clock": d_clock}
 
 
 def detect(only: tuple = ()) -> list:
@@ -770,6 +782,24 @@ def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
         return {"what": "a sign-in only the owner can do", "ok": False, "final": True}
     if data.get("kind") == "breaker":
         return {"what": "a channel paused on repeated failures; the owner decides", "ok": False, "final": True}
+    if step == 0 and str(data.get("sentinel_key") or "").startswith("staged:"):
+        # a stalled ticket's "Waiting Nd" card (a system card since 2026-11-09): its recommended button is "Hand it to
+        # Sage", a tap on the card itself (cards._act_on_sentinel mints the operator ticket), so the card is answered
+        # and the finding clears; it used to wait an hour with nothing pressed and file a build (card q52050f15f98a)
+        if dry:
+            return {"what": "would hand it to Sage", "ok": True}
+        try:
+            sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+            import cards
+            c = cards._read(cards.LIVE / f"{data.get('qid')}.json") or {}
+            opts = [str(o.get("label") or "") for o in ((c.get("questions") or [{}])[0].get("options") or [])]
+            label = next((o for o in opts if o.lower().startswith("hand it")), "Hand it to Sage (Recommended)")
+            r = cards.answer(str(data.get("qid")), label, by="reflex")
+        except Exception as e:  # noqa: BLE001
+            r = {"ok": False, "reason": f"{type(e).__name__}: {str(e)[:100]}"}
+        if r.get("ok"):
+            return {"what": "handed it to Sage from its card", "ok": True}
+        return {"what": f"could not hand it to Sage: {_short(r.get('reason'), 100)}", "ok": False}
     runnable = any(act.get(k) for k in ("spine_job", "task", "drain", "cmd"))
     if step == 0 and runnable:
         if dry:
@@ -829,7 +859,13 @@ def fix_correction(f: dict, d: dict, dry: bool) -> dict:
     return {"what": "filed the build request" + (f": {key}" if key else " (one is open already)"), "ok": bool(key), "build": key, "final": True}
 
 
-FIXES = {"job": fix_job, "limit_held": fix_limit_held, "limit_doer": fix_limit_doer, "build_unlanded": fix_build, "gap_stalled": fix_gap,
+def fix_clock(f: dict, d: dict, dry: bool) -> dict:
+    """Setting the clock is an admin step on this PC, not the agent's: compensated in code already, so straight to
+    the owner (final)."""
+    return {"what": "compensating in code; the clock itself needs an owner", "ok": False, "final": True}
+
+
+FIXES = {"clock_skew": fix_clock, "job": fix_job, "limit_held": fix_limit_held, "limit_doer": fix_limit_doer, "build_unlanded": fix_build, "gap_stalled": fix_gap,
          "leak": fix_leak, "system_card": fix_system_card, "account_out": fix_account_out, "correction_unfixed": fix_correction}
 REESCALATE = {"system_card": 7 * 24}       # hours before the same unfixable finding may be said to an owner again (default REESCALATE_H)
 
@@ -871,6 +907,9 @@ def _window_ok() -> bool:
 def _need_line(f: dict) -> str:
     """What the owner has to do, when the system cannot: '' when nothing (then only Mission Control hears)."""
     k = f.get("kind")
+    if k == "clock_skew":
+        return (f"The computer's clock is off by {abs(float(f['data'].get('offset') or 0)) / 60:.0f} minutes. I'm working around it, "
+                "so nothing breaks; I correct my own timestamps and will set the clock right myself when I next can.")
     if k == "limit_held":
         return "Both Claude accounts are at their usage limit; your questions run the minute one resets."
     if k == "account_out":
@@ -883,7 +922,7 @@ def _need_line(f: dict) -> str:
             pass
         import voice
         return (f"Neither of my Claude accounts will take a turn right now ({voice.plain(f['data'].get('error') or '')}). "
-                "I keep trying every hour and your questions wait with me; a fresh sign-in on the account is the fix if it stays this way.")
+                "I keep trying every hour and your questions wait with me; I'll say here the moment one is back.")
     if k == "system_card":
         data = f.get("data") or {}
         if data.get("kind") == "conn":
@@ -959,6 +998,17 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
                 _note(f"REFLEX fixed {key} in {mins:.0f} min: " + "; ".join(_short(x.get("what"), 80) for x in f.get("fixes") or []))
             continue
         out["open"] += 1
+        tries = [x for x in f.get("fixes") or [] if "hand it to Sage" in str(x.get("what") or "") or str(x.get("what") or "").startswith("handed it")]
+        if f.get("kind") == "system_card" and str((f.get("data") or {}).get("sentinel_key") or "").startswith("staged:") \
+                and len(tries) < 2 and not any(str(x.get("what") or "").startswith("handed it") for x in tries):
+            # a "Waiting Nd" card gets its hand-off tap before anything else, even one escalated before the tap existed
+            # (card q52050f15f98a, 2026-11-11); two failed taps and it takes the ordinary road (a build request)
+            r = fix_system_card(dict(f, step=0), d, dry)
+            f["fixes"].append({"ts": now, "what": r.get("what", ""), "ok": bool(r.get("ok")), "final": False, "build": ""})
+            f["step"], f["escalated"] = int(f.get("step") or 0) + 1, None
+            out["steps"] += 1
+            _log(f"{key} step {f['step']}: {r.get('what', '')}")
+            continue
         if f.get("escalated"):
             if now - float(f["escalated"]) >= REESCALATE.get(str(f.get("kind") or ""), REESCALATE_H) * 3600:
                 f["escalated"] = None            # a day (a week for a system card) later it may be said again
@@ -1008,6 +1058,8 @@ def fix_reply(reply: str, applied: list, refused: list) -> str:
         return text
     fixed = _CARD_CLAIM.sub("", text)
     fixed = re.sub(r"[ \t]{2,}", " ", fixed).strip()
+    if any("card" in str(ln).lower() for ln in refused):
+        return fixed                                    # the refusal's own line already says what happened to the card (2026-11-04: said twice)
     line = "The card didn't post on the first try, so I've handed the draft on; it comes here in a few minutes."
     return (fixed + ("\n\n" if fixed else "") + line) if line not in fixed else fixed
 

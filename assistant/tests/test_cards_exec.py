@@ -205,6 +205,28 @@ db = tickets._load()
 check("expired one-time personal text card closes its ticket, no re-post",
       db[jr["one-time"]]["status"] == "done" and "one-time personal text" in db[jr["one-time"]]["history"][-1]["note"], db[jr["one-time"]]["history"][-1])
 check("expired wedding text card still hands its ticket back", db[jr["client"]]["status"] == "new")
+
+# 14b3. open personal-text reply cards the gate no longer lets through are closed (dream 2026-10-11:
+#       owner's reply cards stayed open after her texts stopped being carded); asked / wedding ones stay
+_tg2 = (text_gate.owner_numbers, text_gate.household_numbers, text_gate.exception_cfg, text_gate.team_member)
+text_gate.owner_numbers, text_gate.household_numbers = (lambda: {"8055550177"}), (lambda: {"8055550177", "8055550166"})
+text_gate.team_member = lambda h: ""
+for qid, to, extra in (("q0000000000b1", "+18055550177", {}), ("q0000000000b2", "+18055550166", {}),
+                       ("q0000000000b3", "+18055550002", {}), ("q0000000000b4", "+18055550177", {"asked": True})):
+    (cards.LIVE / f"{qid}.json").write_text(json.dumps({"id": qid, "ts": time.time(), "owner": "test", "status": "open", **extra, "questions": [
+        {"header": "Text reply: someone", "lane": "personal", "question": "x", "options": [{"label": "Send"}, {"label": "Skip"}],
+         "exec": {"kind": "imessage_send", "payload": {"account": "owner1-iphone", "to": to, "body": "Thanks!"}}}]}), encoding="utf-8")
+text_gate.exception_cfg = lambda: {"enabled": True, "time": True, "money": True, "include_family": True}
+gone = set(text_gate.retire_personal())
+check("reply card to an owner closes; family stays while the exception includes family",
+      gone == {"q0000000000b1"} and (cards.DONE / "q0000000000b1.json").exists(), gone)
+text_gate.exception_cfg = lambda: {"enabled": False, "time": True, "money": True, "include_family": True}
+gone = set(text_gate.retire_personal())
+check("exception off: the family reply card closes too; wedding and owner-asked cards stay open",
+      gone == {"q0000000000b2"} and (cards.LIVE / "q0000000000b3.json").exists() and (cards.LIVE / "q0000000000b4.json").exists(), gone)
+for qid in ("q0000000000b3", "q0000000000b4"):
+    (cards.LIVE / f"{qid}.json").unlink(missing_ok=True)
+text_gate.owner_numbers, text_gate.household_numbers, text_gate.exception_cfg, text_gate.team_member = _tg2
 text_gate.business_only, text_gate.business_numbers = _tg
 
 # 14c. a card is answered once; decisions become tickets; nothing a card says is hidden
@@ -458,6 +480,35 @@ try:
     check("a job without its value is refused", False)
 except ValueError as e:
     check("a job without its value is refused", "couple" in str(e))
+
+# resend guard is explicit (the owner 2026-10-18): the word "resend" in an ordinary sentence lifts nothing; only
+# exec.resend true AND the literal [RESEND] marker (checked at post) let a second message to the same person mint
+def _resend_case(addr, sentence, flag, mark):
+    pay = dict(EXEC_Q["exec"]["payload"], to=addr)
+    done = es.enqueue("email_send", dict(pay), "owner1", "card:qprior-" + addr)
+    es.set_status(done["id"], "done", "SENT=1 test")
+    # a new message to the same person (the identical draft is refused at post by ALREADY_ANSWERED anyway)
+    q = json.loads(json.dumps(EXEC_Q).replace("sara@example.com", addr).replace(BODY, "One more thing: the shot list PDF is attached for your planner. - owner1"))
+    q["header"] = "Resend " + addr
+    q["question"] = sentence + "\n" + q["question"] + ("\n\n[RESEND] you asked for this one" if mark else "")
+    if flag:
+        q["exec"]["resend"] = True
+    return cards.post([q], "test")
+cards.UNDO_S = 0
+r = _resend_case("rs1@example.com", "They asked us to resend the timeline.", False, False)
+a = cards.answer(r["qid"], "Approve") if r.get("posted") else {}
+check("the word 'resend' in a sentence does not lift the duplicate guard", r.get("posted") and not a.get("ticket"), (r, a))
+r = _resend_case("rs2@example.com", "Resend it please.", True, False)
+check("exec.resend without the [RESEND] marker is refused at post", not r["posted"] and "EXEC_RESEND" in r["reason"], r)
+r = _resend_case("rs3@example.com", "Second note.", False, True)
+a = cards.answer(r["qid"], "Approve") if r.get("posted") else {}
+check("the [RESEND] marker without exec.resend lifts nothing", r.get("posted") and not a.get("ticket"), (r, a))
+r = _resend_case("rs4@example.com", "Second note.", True, True)
+a = cards.answer(r["qid"], "Approve") if r.get("posted") else {}
+check("exec.resend + [RESEND] marker mints the second message", r.get("posted") and a.get("ticket"), (r, a))
+arch = (cards._read(cards.ARCHIVE / f"{r['qid']}.json") or {}) if r.get("posted") else {}
+check("the flag survives on the posted card", ((arch.get("questions") or [{}])[0].get("exec") or {}).get("resend") is True, arch)
+cards.UNDO_S = 30
 
 print(f"\n{'ALL PASS' if not FAILS else 'FAILURES: ' + ', '.join(FAILS)} (scratch {TMP})")
 sys.exit(1 if FAILS else 0)

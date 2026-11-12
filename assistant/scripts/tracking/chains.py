@@ -487,6 +487,25 @@ def _stale_lead(ch: dict, ent: dict, due, st: dict, w: World) -> str:
     return ""
 
 
+_DAYS_AGO = re.compile(r"(\d+) days")
+
+
+def auto_archive_days(ch: dict | None = None) -> int:
+    """A lead this many days past its step is archived by itself, with no card (chain.applies.auto_archive_days;
+    0 = always ask). 2026-11-09: eleven "Archive this lead?" cards in one digest, for leads 104 to 287 days cold. A
+    card is for a decision; a lead nobody has touched in a season is not one. CRM activity still brings it back."""
+    try:
+        return int(((ch or {}).get("applies") or {}).get("auto_archive_days", 90))
+    except (TypeError, ValueError):
+        return 90
+
+
+def _goes_by_itself(row: dict, ch: dict | None) -> bool:
+    m = _DAYS_AGO.search(str(row.get("why") or ""))
+    n = auto_archive_days(ch)
+    return bool(m and n > 0 and int(m.group(1)) >= n)
+
+
 def _archive_question(row: dict) -> dict:
     """The one card a stale lead gets: held for the weekly digest (not an urgent header)."""
     return {"header": f"Archive this lead? · {row['title'][:30]}", "lane": row["lane"],
@@ -675,6 +694,14 @@ def tick(now=None, dry: bool = False, w: World | None = None, c: dict | None = N
         by_ent.setdefault((r["chain"], r["entity"]), []).append(r)
     for (chain, ent_id), ent_rows in by_ent.items():
         r = next((x for x in ent_rows if x["status"] == "stale"), None)
+        if r and not (st["gates"].get(r["key"]) or {}).get("stale_qid") and _goes_by_itself(r, (c.get("chains") or {}).get(chain) if isinstance(c, dict) else None):
+            if not dry:                                    # long cold: archived with no card; CRM activity brings it back
+                st["gates"].setdefault(r["key"], {"asks": 0}).update(
+                    stale_qid="auto", stale_answer="archive", status="dropped", lane=r["lane"], label=r["label"],
+                    title=r["title"], ts=C.now_local().strftime("%Y-%m-%dT%H:%M:%S"))
+            posted.append({"key": r["key"], "qid": "", "why": "auto-archived"})
+            C.log("chain_stale_auto_archived", key=r["key"], why=r["why"])
+            continue
         if r and not (st["gates"].get(r["key"]) or {}).get("stale_qid") and not (quiet and not dry):
             qid = _post(_archive_question(r), dry)
             if qid and not dry:

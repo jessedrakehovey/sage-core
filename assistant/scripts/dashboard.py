@@ -15,25 +15,31 @@ Ticket titles/summaries came from email: rendered escaped, as data.
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 import time
+import urllib.parse
 import webbrowser
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from alib import DATA, OUT, ROOT, VAULT, config, load_json, now_iso, secret
+from alib import DATA, OUT, ROOT, VAULT, _org, config, load_json, mc_read_only, now_iso, secret
 import crm
 
 WEB = ROOT / "web" / "index.html"
 CARDS = DATA / "cards.jsonl"
 LOG = Path(os.environ.get("WV_LOG_DIR") or (Path.home() / ".claude")) / "assistant-operator.log"
-TASKS = ["example-org Day Spine (assistant)", "example-org Comms Probe (assistant)", "example-org", "example-org",
-         "example-org"]
+# the organization's own scheduled tasks and lanes (org.json / config.json, 2026-11-03: never literals here)
+TASKS = [str(t) for t in (_org("watched_tasks", None) or [])]          # org.json -> watched_tasks; none = no task panel
 _task_cache = {"ts": 0.0, "states": {}}
-LANE_ORDER = ["wedding", "personal", "home", "money", "owner6"]
-# owner's iPhone Shortcut that pulls approved texts and sends them (phone_bridge.py)
-PHONE_SEND_URL = "shortcuts://run-shortcut?name=example%20Send%20Texts"
+LANE_ORDER = [str(l) for l in (config().get("lanes") or [])] or ["business", "personal", "home", "money"]
+# the owner's phone Shortcut that pulls approved texts and sends them (phone_bridge.py)
+PHONE_SEND_URL = "shortcuts://run-shortcut?name=" + urllib.parse.quote(str(_org("phone_send_shortcut", "") or "Send Texts"))
+# the project tracker's field names (config.json -> projects.fields): a studio's "couple" and "wedding_date", a trades
+# business's "customer" and "job_date"; the page reads them, never a business's own words
+_PF = dict({"label": "name", "date": "date", "delivery": "due", "label_head": "Project", "date_head": "Date", "next_date": "next date",
+            "delivery_head": "Due", "next_delivery": "next due"}, **((config().get("projects") or {}).get("fields") or {}))
 
 # brand: example.invalid (2026-09-22) - near-black green, off-white, sage
 CSS = """
@@ -55,7 +61,7 @@ section{margin:22px 0}.btns{margin:8px 0 4px}button.ans,button.undo,button.adski
 .item:first-child{border-top:0}.item .t{font-weight:500}.item .n{color:var(--muted);font-size:13px;grid-column:2}
 .item .age{color:var(--muted);font-size:12px;white-space:nowrap}
 .lane{font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:var(--sage);color:var(--ink);white-space:nowrap}
-.lane.personal{background:#3b4a5c}.lane.home{background:#5c4a3b}.lane.money{background:#5c3b4a}.lane.owner6{background:#6b5a3e}
+.lane.personal{background:#3b4a5c}.lane.home{background:#5c4a3b}.lane.money{background:#5c3b4a}.lane:nth-of-type(5n){background:#6b5a3e}
 .empty{color:var(--muted);font-style:italic}
 table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:6px 8px 6px 0}
 td{padding:7px 8px 7px 0;border-top:1px solid var(--line);vertical-align:top}
@@ -258,6 +264,21 @@ def _brand() -> str:
         return "Sage"
 
 
+def _note_box(qid: str) -> str:
+    """The typed note under a card; gone when Mission Control is read-only (all typing is in Google Chat, 2026-11-01)."""
+    if mc_read_only():
+        return ""
+    return f'<input class="note" placeholder="or type an answer / a note" data-qid="{html.escape(str(qid))}">'
+
+
+def _ask_box() -> str:
+    if mc_read_only():
+        return '<section><h2>Ask the assistant</h2><div class="card">Say it to the agent in Google Chat: nothing is typed on this page.</div></section>'
+    return ('<section><h2>Ask the assistant</h2><div class="card"><form id="ask"><input id="asktext" placeholder="Tell the operator what you need '
+            '(goes into the queue; nothing is sent without your tap)" style="width:78%"> <button>Queue it</button> <span id="askstatus" class="age"></span>'
+            '</form></div></section>')
+
+
 def _page_title() -> str:
     """profile.json page_title when the organization set one, else the agent's own name (a friendly default)."""
     try:
@@ -265,6 +286,16 @@ def _page_title() -> str:
         return str(prof.get("page_title") or prof.get("name") or "").strip() or "Home"
     except (OSError, ValueError):
         return "Home"
+
+
+def _nav_pages() -> str:
+    """Header links for the organization's own pages (config.json -> pages.modules[*].nav; mc_server serves them)."""
+    try:
+        mods = ((config().get("pages") or {}).get("modules") or {})
+    except SystemExit:
+        mods = {}
+    return "".join(f'<a class="navlink" href="/{_esc(k)}" style="margin-left:14px;color:#9DB392;font-size:14px">{_esc(str(v.get("nav")))}</a>'
+                   for k, v in mods.items() if isinstance(v, dict) and v.get("nav") and re.fullmatch(r"[a-z0-9-]+", str(k)))
 
 
 def _esc(s: str) -> str:
@@ -326,18 +357,18 @@ def build(crm_check=False):
             try:
                 d = date.fromisoformat(str(p.get(field, ""))[:10])
                 if d >= today:
-                    ds.append((d, p.get("couple") or k))
+                    ds.append((d, p.get(_PF["label"]) or k))
             except ValueError:
                 pass
         return min(ds) if ds else None
-    nshoot, ndeliv = next_date("wedding_date"), next_date("promised_delivery")
+    nshoot, ndeliv = next_date(_PF["date"]), next_date(_PF["delivery"])
     kp = [
         (len(_live_qids) + len(staged_nocard), "needs you", "hot" if (_live_qids or staged_nocard) else ""),
         (len(drafts), "drafts in gmail", ""),
         (len(queued), "queued for operator", ""),
         (len(active), "active bookings", ""),
-        (f"{(nshoot[0] - today).days}d" if nshoot else "—", "next shoot" + (f" · {nshoot[1]}" if nshoot else ""), ""),
-        (f"{(ndeliv[0] - today).days}d" if ndeliv else "—", "next delivery" + (f" · {ndeliv[1]}" if ndeliv else ""), "hot" if ndeliv and (ndeliv[0] - today).days < 0 else ""),
+        (f"{(nshoot[0] - today).days}d" if nshoot else "—", _PF["next_date"] + (f" · {nshoot[1]}" if nshoot else ""), ""),
+        (f"{(ndeliv[0] - today).days}d" if ndeliv else "—", _PF["next_delivery"] + (f" · {ndeliv[1]}" if ndeliv else ""), "hot" if ndeliv and (ndeliv[0] - today).days < 0 else ""),
     ]
     kpis = "".join(f'<div class="kpi {c}"><b>{esc(v)}</b><span>{esc(l)}</span></div>' for v, l, c in kp)
 
@@ -371,20 +402,21 @@ def build(crm_check=False):
     # ---- bookings
     if active:
         prow = []
-        for k, p in sorted(active.items(), key=lambda kv: str(kv[1].get("wedding_date", ""))):
+        for k, p in sorted(active.items(), key=lambda kv: str(kv[1].get(_PF["date"], ""))):
             def days(field):
                 try:
                     n = (date.fromisoformat(str(p.get(field, ""))[:10]) - today).days
-                    if field == "wedding_date":
-                        cls = "muted" if n < 0 else ("warn" if n <= 14 else "")   # a past wedding is just shot, not late
+                    if field == _PF["date"]:
+                        cls = "muted" if n < 0 else ("warn" if n <= 14 else "")   # a past event date is just done, not late
                     else:
                         cls = "bad" if n < 0 else ("warn" if n <= 14 else "")
                     return f'<span class="{cls}">{p.get(field)} ({n:+d}d)</span>'
                 except ValueError:
                     return "—"
-            prow.append(f'<tr><td>{esc(p.get("couple") or k)}</td><td>{days("wedding_date")}</td><td>{esc(p.get("stage", "?"))}</td>'
-                        f'<td>{days("promised_delivery")}</td><td class="muted">{esc(p.get("note", ""))}</td></tr>')
-        bookings = f'<table><tr><th>Couple</th><th>Wedding</th><th>Stage</th><th>Promised delivery</th><th>Note</th></tr>{"".join(prow)}</table>'
+            prow.append(f'<tr><td>{esc(p.get(_PF["label"]) or k)}</td><td>{days(_PF["date"])}</td><td>{esc(p.get("stage", "?"))}</td>'
+                        f'<td>{days(_PF["delivery"])}</td><td class="muted">{esc(p.get("note", ""))}</td></tr>')
+        bookings = (f'<table><tr><th>{esc(_PF["label_head"])}</th><th>{esc(_PF["date_head"])}</th><th>Stage</th><th>{esc(_PF["delivery_head"])}</th>'
+                    f'<th>Note</th></tr>{"".join(prow)}</table>')
     else:
         bookings = '<div class="empty">no active bookings in the tracker (scripts/projects/project_state.json)</div>'
 
@@ -445,7 +477,7 @@ def build(crm_check=False):
         return (f'<div class="item card-item" id="card-{esc(c["qid"])}">{lane_pill(c.get("lane") or "personal")}<div class="t"><b>{esc(c.get("header") or c["qid"])}</b>'
                 f'{" · EXEC" if c.get("exec") else ""} · {c["age_min"]:.0f}m{tag}<br><span style="white-space:pre-wrap">{esc(c.get("question", ""))}</span>'
                 + (f'<br><a href="{esc(c["image"])}" target="_blank"><img src="{esc(c["image"])}" alt="review page" style="max-width:100%;border-radius:8px;margin-top:6px;border:1px solid var(--line)"></a>' if c.get("image") else "")
-                + f'<div class="btns">{btns}</div><input class="note" placeholder="or type an answer / a note" data-qid="{esc(c["qid"])}">'
+                + f'<div class="btns">{btns}</div>{_note_box(c["qid"])}'
                 f'<small class="cli">{cli}</small></div><div class="age"></div></div>')
     open_cards_html = "".join(_card_html(c) for c in open_cards) or '<div class="empty">no open cards</div>'
     exec_html = ("<table>" + "".join(f'<tr><td>{esc(k)}</td><td>{esc(str(v))}</td></tr>' for k, v in sorted(exec_counts.items())) + "</table>"
@@ -455,11 +487,11 @@ def build(crm_check=False):
 <meta http-equiv="refresh" content="300"><title>{_esc(_brand())} · {_esc(_page_title())}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&family=Poppins:wght@400;500&display=swap" rel="stylesheet">
 <style>{CSS}</style></head><body>
-<header><span class="brand">{_esc(_brand())}</span><h1>{_esc(_page_title())}</h1><a class="navlink" href="/desk" style="margin-left:14px;color:#9DB392;font-size:14px">Desk &rarr;</a><a class="navlink" href="/chat" style="margin-left:14px;color:#9DB392;font-size:14px">Chat</a><a class="navlink" href="/setup" style="margin-left:14px;color:#9DB392;font-size:14px">Setup</a><span class="ts">built {datetime.now().strftime("%a %b %d, %H:%M")} · refreshes every 5 min</span></header>
+<header><span class="brand">{_esc(_brand())}</span><h1>{_esc(_page_title())}</h1><a class="navlink" href="/desk" style="margin-left:14px;color:#9DB392;font-size:14px">Desk &rarr;</a>{'' if mc_read_only() else '<a class="navlink" href="/chat" style="margin-left:14px;color:#9DB392;font-size:14px">Chat</a>'}<a class="navlink" href="/setup" style="margin-left:14px;color:#9DB392;font-size:14px">Setup</a>{_nav_pages()}<span class="ts">built {datetime.now().strftime("%a %b %d, %H:%M")} · refreshes every 5 min</span></header>
 <div class="kpis">{kpis}</div>
 <section><h2>Open cards ({len(open_cards)})</h2><div class="card">{open_cards_html}</div></section>
 <section><h2>Also waiting on you (no card)</h2><div class="card">{needs}</div></section>
-<section><h2>Ask the assistant</h2><div class="card"><form id="ask"><input id="asktext" placeholder="Tell the operator what you need (goes into the queue; nothing is sent without your tap)" style="width:78%"> <button>Queue it</button> <span id="askstatus" class="age"></span></form></div></section>
+{_ask_box()}
 {'<section><h2>Morning brief · ' + esc(brief_day) + '</h2><div class="card"><pre>' + esc(brief_text) + '</pre></div></section>' if brief_text else ''}
 <div class="grid2">
 <section><h2>Next {cfg["calendar"]["lookahead_days"]} days</h2><div class="card">{cal_html}</div></section>
@@ -499,7 +531,7 @@ def safe_page(err):
         btns = "".join(f'<button class="ans" data-qid="{esc(c["qid"])}" data-option="{esc(o)}">{esc(o)}</button>' for o in c.get("options") or [])
         items += (f'<div class="item card-item" id="card-{esc(c["qid"])}"><div class="t"><b>{esc(c.get("header") or c["qid"])}</b><br>'
                   f'<span style="white-space:pre-wrap">{esc(c.get("question", ""))}</span><div class="btns">{btns}</div>'
-                  f'<input class="note" placeholder="or type an answer / a note" data-qid="{esc(c["qid"])}"></div></div>')
+                  f'{_note_box(c["qid"])}</div></div>')
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_esc(_page_title())} (safe mode)</title><style>{CSS}</style></head><body><header><h1>{_esc(_page_title())}</h1>'
             f'<span class="ts">safe mode</span></header><section><div class="card"><div class="item"><div class="t bad">The full page failed to build: '

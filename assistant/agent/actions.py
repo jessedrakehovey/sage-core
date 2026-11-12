@@ -24,7 +24,7 @@ import routines  # noqa: E402
 import skills  # noqa: E402
 import wiki_writer  # noqa: E402
 
-CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "unschedule": 3}
+CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "unschedule": 3, "reschedule": 3}
 
 
 def _lanes() -> tuple:
@@ -144,6 +144,46 @@ def revise_card(qid: str, new_text: str, person: dict, ctx: dict) -> list:
     cards.supersede(qid, r["qid"], by=f"agent:{person['key']}")
     core.log_change("card_revise", f"card {qid} revised in thread -> {r['qid']}", {"op": "none"}, person["key"])
     return []
+
+
+def _plain_reason(reason) -> str:
+    """A guard's refusal in a person's words: no codes, no ids, no timestamps (voice.plain)."""
+    s = str(reason or "")
+    try:
+        import voice
+        s = voice.plain(s)
+    except Exception:  # noqa: BLE001
+        pass
+    s = re.sub(r"\(?\bq[0-9a-f]{10,}\b[^)]*\)?|\btk-[0-9a-f]{8,}\b|\b\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?\b", "", s)
+    s = re.sub(r"\s+", " ", s).strip(" ,;:.")
+    return re.sub(r"\s+(?:at|on|in)$", "", s)[:140] or "a guard stopped it"
+
+
+def _already_approved_line(reason: str) -> str:
+    """'' unless the card was refused because the same draft was already approved; then where that message really
+    is (a text: still waiting for the phone, with the send-now link, or picked up and when), so the owner is never
+    told a second card is coming when none can."""
+    if not str(reason or "").startswith(("ALREADY_ANSWERED: this draft was approved", "ALREADY_ANSWERED: a message to")):
+        return ""
+    m = re.search(r"ticket (tk-[0-9a-f]+)", str(reason))
+    where = ""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import phone_bridge
+        st = phone_bridge.state_words(m.group(1)) if m else ""
+        if st.startswith("STILL QUEUED"):
+            url = phone_bridge._run_url()
+            where = " It is still waiting for your phone to pick it up, so it has not gone yet." + (f" Tap this on your phone and it sends now: {url}" if url else "")
+        elif st.startswith("picked up"):
+            at = re.search(r"at (\d{1,2}:\d\d [AP]M)", st)
+            where = f" Your phone took it{' at ' + at.group(1) if at else ''}, so it has gone."
+        elif st.startswith("confirmed"):
+            where = " It went: " + st + "."
+        elif st.startswith("NOT SENT"):
+            return ""                                  # it never left: a fresh card is the right thing
+    except Exception:  # noqa: BLE001
+        where = ""
+    return "That same message was already approved, so I haven't made a second card that could send it twice." + where
 
 
 def _queue_task(lane: str, text: str, person: dict, ctx: dict | None = None) -> str:
@@ -272,10 +312,20 @@ def draft_blocker(lane: str, text: str, draft: dict, person: dict) -> str:
     return ("DRAFT_LINT: " + " | ".join(blocks)) if blocks else ""
 
 
+# a "resend" marker word an old caller put at the top of a body (2026-10-29: a card's text began "resend <the
+# venue> ..."): the same-day guard lifts on draft.resend, so the word never reaches a preview or a phone
+_MARKER = re.compile(r"^\s*re-?send\b\s*[:,;.\-–—]*\s*", re.I)
+
+
+def strip_marker(body: str) -> str:
+    """The body without a leading resend marker word: the card shows, and the tap sends, exactly this."""
+    return _MARKER.sub("", str(body or ""), count=1).strip()
+
+
 def _draft_question(lane: str, text: str, draft: dict, person: dict) -> dict:
     """The card question for a drafted message (draft_card posts it; draft_blocker checks it)."""
     ch = str(draft.get("channel") or "").lower()
-    to, body = str(draft.get("to") or "").strip(), str(draft.get("text") or "").strip()
+    to, body = str(draft.get("to") or "").strip(), strip_marker(str(draft.get("text") or ""))
     name = str(draft.get("name") or "").strip()
     lead = re.sub(r"\s+", " ", text).strip()[:220]
     if ch == "text":
@@ -309,6 +359,7 @@ def _draft_question(lane: str, text: str, draft: dict, person: dict) -> dict:
         mark = _resend_mark(ex)
         if mark:
             q += "\n\n" + mark
+            ex["resend"] = True             # cards.answer lifts the guard only on this flag + the [RESEND] marker
     sa = str(draft.get("send_at") or "").strip()
     if sa:
         # a send the owner wants LATER (2026-10-24): the card says the time in words, the tap mints a
@@ -331,9 +382,9 @@ def _draft_question(lane: str, text: str, draft: dict, person: dict) -> dict:
 
 def _resend_mark(ex: dict) -> str:
     """The RESEND line for a further message an owner asked for in chat to someone who already got one today
-    (or has one queued), '' otherwise. cards.answer reads the word and the first tap mints past the same-thread
-    guard (2026-10-25: an owner's asked-for follow-up was refused and cost a rebuilt card). The exact same
-    message never gets it, so a true duplicate is still refused; cards the system posts never come here."""
+    (or has one queued), '' otherwise. With exec.resend set, cards.answer reads the marker and the first tap
+    mints past the same-thread guard (2026-10-25: an owner's asked-for follow-up was refused and cost a rebuilt
+    card). The exact same message never gets it, so a true duplicate is still refused; cards the system posts never come here."""
     sys.path.insert(0, str(core.AGENT.parent / "scripts"))
     import exec_store as es
     kind, pay = str(ex.get("kind") or ""), ex.get("payload") or {}
@@ -352,7 +403,7 @@ def _resend_mark(ex: dict) -> str:
             when = when or "is on its way"
         elif t.get("status") == "done" and es._done_ts(t) >= cutoff:
             when = "went at " + time.strftime("%I:%M %p", time.localtime(es._done_ts(t))).lstrip("0")
-    return f"RESEND: you asked for this one; the earlier message to them {when}." if when else ""
+    return f"[RESEND] you asked for this one; the earlier message to them {when}." if when else ""
 
 
 def _remember_hold(qid: str, draft: dict, since: float = 0) -> None:
@@ -484,21 +535,45 @@ def made_events(days: int = 60) -> list:
     return out
 
 
-def find_made_event(match: str, date: str = "") -> tuple:
+def _plain_when(when: str) -> str:
+    """'2026-10-17' / '2026-10-17T17:25' -> 'Saturday Oct 17' / 'Saturday Oct 17 at 5:25 PM'."""
+    try:
+        from datetime import datetime as _dt
+        s = str(when or "").replace("T", " ")
+        d = _dt.strptime(s[:16], "%Y-%m-%d %H:%M") if len(s) >= 16 else _dt.strptime(s[:10], "%Y-%m-%d")
+        out = d.strftime("%A %b ") + str(d.day)
+        return out + (" at " + d.strftime("%I:%M %p").lstrip("0") if len(s) >= 16 else "")
+    except ValueError:
+        return ""
+
+
+def find_made_event(match: str, date: str = "", hint: str = "") -> tuple:
     """-> (event or None, reason). The agent may only touch events it created; `match` is a
-    title fragment (case-insensitive), `date` narrows to YYYY-MM-DD."""
+    title fragment (case-insensitive), `date` narrows to YYYY-MM-DD. `hint` (an event_change's new
+    start) only breaks a tie: when several match and exactly one is on that day, that one is meant.
+    Still more than one: one short plain question naming them, no dashes or ids (the owner 2026-10-17)."""
     cands = made_events()
     m = (match or "").strip().lower()
     if m:
         cands = [e for e in cands if m in e["title"].lower()]
     if date:
         cands = [e for e in cands if e["when"].startswith(date[:10])]
+    if len(cands) > 1:
+        for pick in ([e for e in cands if e["title"].strip().lower() == m],
+                     [e for e in cands if hint and e["when"].startswith(str(hint)[:10])]):
+            if len(pick) == 1:
+                return pick[0], ""
     if len(cands) == 1:
         return cands[0], ""
     if not cands:
         return None, (f"I don't have a calendar event of mine matching '{match}'" + (f" on {date[:10]}" if date else "")
                       + ". I can only change events I added; this one you'd change yourself.")
-    return None, "Which one: " + "; ".join(f"'{e['title']}' ({e['when']})" for e in cands[:4]) + "?"
+    names = []
+    for e in cands[:4]:
+        t = re.sub(r"\s*[-–—]+\s*", ", ", str(e["title"])).strip(" ,")
+        w = _plain_when(e["when"])
+        names.append(t + (f" on {w}" if w else ""))
+    return None, "Which one did you mean, " + (", or ".join(names) if len(names) < 3 else ", ".join(names[:-1]) + ", or " + names[-1]) + "?"
 
 
 EVENT_RETRY = core.DATA / "event_retry.json"     # calendar adds that timed out, retried by the bridge's tick
@@ -639,7 +714,7 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
         r = r if isinstance(r, dict) else {"rule": str(r)}
         res = core.rule_add(r.get("rule", ""), f"{person['name']}: {r.get('why', '')}".strip(), by=by)
         line = {"applied": "", "folded": "",
-                "pending": "That one loosens a safety rule, so it's waiting for your hand on Mission Control rather than mine.",
+                "pending": "I've put that one in front of you to okay first, since it loosens one of my safety rules.",
                 }.get(res["status"], f"I couldn't save that rule ({res.get('reason')}).")
         if line:
             out.append(line)
@@ -656,6 +731,18 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
     for mid in _list(sug.get("forget"))[:CAPS["forget"]]:
         if not core.mem_forget(str(mid), f"{person['name']} in chat", by=by):
             out.append(f"I don't have a fact {mid} to forget.")
+    for rv in _list(sug.get("revoke"))[:3]:
+        what = rv.get("what") if isinstance(rv, dict) else str(rv or "")
+        if not what or not (core.is_owner(person) and core.can(person, "approve")):
+            continue
+        try:
+            import grants_chat
+            line = grants_chat.revoke(str(what), person)
+            LAST_APPLIED.append({"kind": "revoke", "what": str(what)[:160], "ref": ""})
+        except Exception as e:  # noqa: BLE001
+            line = f"I couldn't take that back ({type(e).__name__})."
+        if line and not line.startswith("Done"):
+            out.append(line)
     for idn in _list(sug.get("identify"))[:CAPS.get("identify", 5)]:
         if not isinstance(idn, dict):
             continue
@@ -727,10 +814,34 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
         except Exception as e:  # noqa: BLE001
             r = {"status": "error", "reason": f"{type(e).__name__}: {str(e)[:120]}"}
         LAST_APPLIED.append({"kind": "blocked", "what": str(b.get("what") or "")[:160], "ref": str(r.get("build") or "")})
+        try:                       # a connection that is typed in: its Chat form, never a Mission Control page (2026-11-01)
+            sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+            import chat_forms
+            if chat_forms.post_for(b, ctx or {}):
+                LAST_APPLIED.append({"kind": "form", "what": str(b.get("connection") or b.get("what") or "")[:120], "ref": ""})
+        except Exception:  # noqa: BLE001
+            pass
         if r.get("build"):
             LAST_APPLIED.append({"kind": "build", "what": str(b.get("what") or "")[:120], "ref": str(r["build"])})
         elif r.get("status") == "error":
             out.append(f"I couldn't file the build for that step ({r.get('reason')}).")
+
+    # an owner's answer to a Discovery / Training question asked in chat (assistant/onboarding.py, 2026-11-03): the same
+    # state the terminal's `discover` / `train` write; the next ONBOARDING line moves on by itself
+    obs = sug.get("onboard")
+    for ob in (obs if isinstance(obs, list) else [obs] if obs else []):
+        if not isinstance(ob, dict):
+            continue
+        try:
+            sys.path.insert(0, str(core.AGENT.parent))
+            import onboarding
+            res = onboarding.answer(ob.get("kind"), ob.get("id"), ob.get("field"), ob.get("value"), by=by)
+        except Exception as e:  # noqa: BLE001
+            res = {"ok": False, "line": f"{type(e).__name__}: {str(e)[:120]}"}
+        if res.get("ok"):
+            LAST_APPLIED.append({"kind": "onboard", "what": str(res.get("line") or "")[:160], "ref": ""})
+        else:
+            out.append(f"I couldn't record that onboarding answer ({res.get('line')}).")
 
     # what the owners teach the agent about the organization itself (org.py): name, lanes,
     # services, duties, never-list. Applied quietly; ledgered; undoable.
@@ -755,8 +866,18 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
             if res["status"] != "applied":
                 out.append(f"I couldn't set that schedule ({res.get('reason')}).")
     for sid in _list(sug.get("unschedule"))[:CAPS["unschedule"]]:
-        if not routines.disable(str(sid), by=by):
-            out.append(f"I don't have an active schedule {sid} to stop.")
+        # the deed records {"id": "s8"} (intents.py) and a model may say the title: both are a schedule (routines.find).
+        # 2026-11-06: str({'id': 's8'}) matched nothing, so an hourly reminder could not be stopped for five days.
+        if not routines.disable(sid, by=by):
+            name = sid.get("id") or sid.get("title") if isinstance(sid, dict) else sid
+            out.append(f"I don't have an active schedule {name} to stop.")
+    for rs in _list(sug.get("reschedule"))[:CAPS["reschedule"]]:
+        if isinstance(rs, dict) and core.can(person, "schedule"):
+            res = routines.update(rs.get("id") or rs.get("title") or "", {k: v for k, v in rs.items() if k not in ("id", "title")}, by=by)
+            if res["status"] != "applied":
+                out.append(f"I couldn't change that schedule ({res.get('reason')}).")
+            else:
+                LAST_APPLIED.append({"kind": "reschedule", "what": f"{res['id']} now next {res.get('next_due', '')}"[:160], "ref": res.get("change", "")})
     for sw in _list(sug.get("switch"))[:2]:
         if isinstance(sw, dict) and core.can(person, "schedule"):
             import switches
@@ -817,7 +938,7 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
     for ev in _list(sug.get("event_change"))[:4]:
         if not isinstance(ev, dict) or not core.can(person, "schedule"):
             continue
-        found, why = find_made_event(str(ev.get("match") or ""), str(ev.get("date") or ""))
+        found, why = find_made_event(str(ev.get("match") or ""), str(ev.get("date") or ""), str(ev.get("start") or ""))
         if not found:
             out.append(why)
             continue
@@ -860,13 +981,27 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
         qid = str(ap.get("qid") or "")
         if ap.get("reopen") and re.fullmatch(r"q[0-9a-f]{12}", qid):
             # "Fix it and send" after an approved send failed (2026-10-28): the same card comes back, answered just below
+            if ap.get("recall"):
+                # still waiting in the phone outbox: pulled first, so the resend can never make it go twice
+                try:
+                    import exec_store as es
+                    import phone_bridge
+                    if phone_bridge.recall(str(ap["recall"])):
+                        es.mark_recalled(str(ap["recall"]), "resend asked in chat: pulled from the phone outbox before the phone fetched it")
+                except Exception:  # noqa: BLE001
+                    pass
             try:
                 rr = cards.reopen(qid, f"{str(ap.get('why') or 'it failed')[:120]}; {person['name']} said to send it again",
-                                  by=f"{by}:chat")
+                                  by=f"{by}:chat", resend=bool(ap.get("resend")))
             except Exception as e:  # noqa: BLE001
                 rr = {"ok": False, "reason": f"{type(e).__name__}: {str(e)[:120]}"}
             if not rr.get("ok") and rr.get("reason") != "already open":
                 out.append(f"I couldn't bring that send back ({str(rr.get('reason') or '')[:140]}), so nothing went out.")
+                continue
+            if ap.get("resend"):
+                # a text only lined up on the phone (2026-11-06): the card is back as a fresh send card, their tap sends it
+                LAST_APPLIED.append({"kind": "card", "what": "text card back for a resend", "ref": qid})
+                core.log_change("card_reopen", f"card {qid} back for a resend on {person['name']}'s words", {"op": "none"}, by)
                 continue
         card = cards._read(cards.LIVE / f"{qid}.json") if re.fullmatch(r"q[0-9a-f]{12}", qid) else None
         if not card or card.get("status") != "open":
@@ -888,9 +1023,12 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
             continue
         label = str((q.get("exec") or {}).get("approve_label") or "Approve")
         try:
-            r = cards.answer(qid, label, by=f"{by}:chat" + (f" ({words})" if words else ""), send_at=str(ap.get("at") or ""))
+            r = cards.answer(qid, label, by=f"{by}:chat" + (f" ({words})" if words else ""), send_at=str(ap.get("at") or ""),
+                             grant=str(ap.get("grant") or ""), until=str(ap.get("until") or ""))
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "reason": f"{type(e).__name__}: {str(e)[:120]}"}
+        if r.get("ok") and r.get("grant"):
+            LAST_APPLIED.append({"kind": "grant", "what": f"standing yes: {str(q.get('header') or '')[:100]}", "ref": r["grant"]})
         if r.get("ok") and not r.get("mint_error"):
             if ap.get("hold_if_reply") and ap.get("at"):
                 pay = (q.get("exec") or {}).get("payload") or {}
@@ -919,8 +1057,14 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
                 if draft.get("hold_if_reply") and draft.get("send_at") and r.get("qid"):
                     _remember_hold(str(r["qid"]), draft)
                 continue
+            already = _already_approved_line(str(r.get("reason") or ""))
+            if already:
+                # the same draft was approved before: a second card could send it twice, and handing it on only
+                # ends in a silent refusal (2026-11-04 16:17: "one still comes", and none ever did). The truth, now.
+                out.append(already)
+                continue
             # the card was refused: hand the same ask to the operator so a card still comes (one line says so)
-            out.append(f"The card didn't post ({str(r.get('reason') or '')[:140]}); I've handed the draft on instead, so one still comes.")
+            out.append(f"The card didn't post ({_plain_reason(r.get('reason'))}); I've handed the draft on instead, so one still comes.")
         try:
             tid = _queue_task(lane, str(task["text"]).strip(), person, ctx or {})
         except Exception as e:  # noqa: BLE001
@@ -973,6 +1117,21 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
     rev = sug.get("card")
     if isinstance(rev, dict) and str(rev.get("revise") or "").strip() and core.can(person, "approve"):
         out.extend(revise_card(str(rev.get("qid") or ""), str(rev["revise"]).strip(), person, ctx or {}))
+
+    # the money talk (scripts/money/brief.py, 2026-11-03): an owner's answer becomes a rule, a target, a move; ledgered, undoable
+    for m in _list(sug.get("money"))[:4]:
+        if not (isinstance(m, dict) and m.get("op") and core.is_owner(person) and core.can(person, "teach")) or m.get("op") in ("history", "bills"):
+            continue                                            # history / bills are read only; its figures went to the model already
+        try:
+            sys.path.insert(0, str(core.VAULT / "assistant" / "scripts" / "money"))
+            import brief
+            r = brief.apply(str(m["op"]), m, by=str(person.get("key") or person.get("name") or ""))
+        except Exception as e:  # noqa: BLE001
+            r = {"ok": False, "line": f"{type(e).__name__}: {str(e)[:100]}"}
+        if r.get("ok"):
+            core.log_change("money", f"money {m['op']}: {r.get('line', '')}", r.get("undo") or {"op": "none"}, str(person.get("key") or ""))
+        else:
+            out.append(f"That didn't take: {r.get('line', '')}")
 
     for do in _list(sug.get("do"))[:3]:
         if not (isinstance(do, dict) and str(do.get("text") or "").strip() and core.can(person, "task")):

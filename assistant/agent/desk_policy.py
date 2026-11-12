@@ -129,11 +129,31 @@ def command_decision(cmd: str) -> tuple[bool, str]:
     return True, "ok"
 
 
+def egress_decision(text: str) -> tuple[bool, str]:
+    """Every URL in a fetch or a shell line against the desk's egress list (assistant/doer/egress.py, upgrade 14):
+    in allow_list mode a host not named is refused; learn mode notes it. Fail open on an egress error."""
+    try:
+        sys.path.insert(0, str(ROOT / "doer"))
+        import egress
+        for u in egress.urls_in(text):
+            ok, why = egress.allowed(u, "desk")
+            if not ok:
+                return False, why
+    except Exception:  # noqa: BLE001
+        return True, "egress check unavailable"
+    return True, "egress ok"
+
+
 def decide(evt: dict) -> tuple[bool, str]:
     tool = str(evt.get("tool_name") or "")
     inp = evt.get("tool_input") or {}
+    if tool in ("WebFetch", "WebSearch"):
+        return egress_decision(json.dumps(inp))
     if tool in ("Bash", "PowerShell"):
-        return command_decision(str(inp.get("command") or ""))
+        ok, why = command_decision(str(inp.get("command") or ""))
+        if not ok:
+            return ok, why
+        return egress_decision(str(inp.get("command") or ""))
     if tool in WRITE_TOOLS:
         p = str(inp.get("file_path") or inp.get("notebook_path") or inp.get("path") or "")
         if not p:

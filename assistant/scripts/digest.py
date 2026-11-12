@@ -132,13 +132,34 @@ def _chunks(items: list, n: int) -> list:
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
+MAX_MESSAGES_DEFAULT = 2        # the ceiling (2026-11-09: a 96-card Monday went out as ten parts); config cards.max_messages
+
+
+def max_messages(pol: dict | None = None) -> int:
+    try:
+        from alib import config
+        return max(1, int((config().get("cards") or {}).get("max_messages", MAX_MESSAGES_DEFAULT)))
+    except Exception:  # noqa: BLE001
+        return MAX_MESSAGES_DEFAULT
+
+
 def messages(now: datetime | None = None, pol: dict | None = None) -> list:
-    """[{space, key, qids, body}] - the digest message(s), built, not posted."""
+    """[{space, key, qids, body, overflow}] - the digest message(s), built, not posted. At most max_messages per space:
+    the cards past the ceiling are not rendered; they are counted in the last message's subtitle with the Mission
+    Control link (`overflow`), and post() counts them as shown so they still drop after their carry-over week."""
     import chat_push
     pol = pol or cards.delivery_policy()
+    cap = max_messages(pol)
     out = []
     for space, d in _by_space(held()).items():
-        groups = _chunks(d["cards"], pol["max_per_message"])
+        per = max(2, int(pol["max_per_message"] or 10))
+        groups = _chunks(d["cards"], per)
+        overflow = []
+        if len(groups) > cap:
+            # over the ceiling: the shown messages are filled to max_per_message (not split evenly), the rest overflow
+            shown = d["cards"][:cap * per]
+            groups = [shown[i:i + per] for i in range(0, len(shown), per)]
+            overflow = d["cards"][cap * per:]
         for i, g in enumerate(groups, 1):
             title = chat_push.DIGEST_TITLE
             if len(groups) > 1:
@@ -146,10 +167,13 @@ def messages(now: datetime | None = None, pol: dict | None = None) -> list:
             # rendered with the count it will have once posted, so a carried-over member reads "2nd week"
             members = [(dict(c, digest_count=int(c.get("digest_count") or 0) + 1), "open", None) for c in g]
             subtitle = f"next digest {next_slot(now, pol):%a %b %d, %H:%M}"
+            if overflow and i == len(groups):
+                subtitle += f" · {len(overflow)} more wait on Mission Control ({chat_push.MC_URL}); the ones you leave drop next week"
             lead = LEAD if i == 1 else ""
             body = chat_push.stack_body(members, title=title, lead=lead, subtitle=subtitle)
             out.append({"space": space, "key": d["key"], "qids": [c["id"] for c in g], "body": body,
-                        "title": title, "subtitle": subtitle, "lead": lead})
+                        "title": title, "subtitle": subtitle, "lead": lead,
+                        "overflow": [c["id"] for c in overflow] if i == len(groups) else []})
     return out
 
 
@@ -216,6 +240,14 @@ def post(now: datetime | None = None, dry: bool = False, force: bool = False) ->
                 c["digest_ts"] = stamp
                 c["digest_count"] = int(c.get("digest_count") or 0) + 1
                 cards._write(cards.LIVE / f"{qid}.json", c)
+            for qid in m.get("overflow") or []:
+                # past the ceiling: counted as shown (the subtitle said how many wait), so it drops after its carry-over week
+                c = cards._read(cards.LIVE / f"{qid}.json")
+                if isinstance(c, dict):
+                    c["digest_ts"] = stamp
+                    c["digest_count"] = int(c.get("digest_count") or 0) + 1
+                    c["digest_overflow"] = True
+                    cards._write(cards.LIVE / f"{qid}.json", c)
             chat_push._stack_remember(m["space"], name, list(m["qids"]), title=m["title"], subtitle=m["subtitle"], lead=m["lead"])
         cards.note("digest", f"weekly digest: {n_cards} card(s) in {posted} message(s)")
     # the week's scorecard, one plain paragraph under the digest (WP6): the Monday drop-down is also the review
@@ -227,6 +259,19 @@ def post(now: datetime | None = None, dry: bool = False, force: bool = False) ->
             cards.say("digest", "", scorecard.render(sc))
     except Exception as e:  # noqa: BLE001
         chat_push._log(f"scorecard failed: {type(e).__name__}: {str(e)[:120]}")
+    # ideas (agent/ideas.py, upgrade 12): a few plain lines under the digest, each said once, never a card
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent"))
+        import ideas
+        new = ideas.fresh()
+        if new:
+            if chat_push.enabled():
+                cards.say("digest", "", ideas.render(new))
+            else:
+                cards.note("digest", ideas.render(new))
+            ideas.mark(new)
+    except Exception as e:  # noqa: BLE001
+        chat_push._log(f"ideas failed: {type(e).__name__}: {str(e)[:120]}")
     st.update(last_slot=s, last_posted=now.isoformat(timespec="seconds"), messages=names, cards=n_cards)
     _save(st)
     es.ledger("card_digest", slot=s, cards=n_cards, messages=posted)

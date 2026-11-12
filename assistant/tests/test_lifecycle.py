@@ -188,6 +188,14 @@ check("Keep on the archive card turns the stale check off", chains._stale_lead(C
 posted_q = []
 _orig_post = chains._post
 chains._post = lambda q, dry: posted_q.append(q) or f"qs{len(posted_q)}"
+# 2026-11-11: a lead cold past applies.auto_archive_days (default 90) is archived with no card at all
+_cold = crm_stale["projects"][-1]["name"].split("'")[0]
+st = {"gates": {}, "lane_day": {}}
+chains.tick(now=ws.now, w=world(now=ws.now, crm_snap=crm_stale, state=st), c=CFG)
+check("tick: a long-cold lead is archived by itself, with no card of any kind",
+      not any(_cold in q["header"] for q in posted_q) and any(g.get("stale_qid") == "auto" and g.get("status") == "dropped" for g in st["gates"].values()), posted_q)
+posted_q.clear()
+CFG["chains"]["lead"].setdefault("applies", {})["auto_archive_days"] = 0      # the card path below: always ask
 try:
     st = {"gates": {}, "lane_day": {}}
     chains.tick(now=ws.now, w=world(now=ws.now, crm_snap=crm_stale, state=st), c=CFG)
@@ -204,6 +212,7 @@ try:
     check("Archive drops the lead's gate (latched until the CRM moves)", st["gates"][key]["status"] == "dropped", st["gates"][key])
 finally:
     chains._post = _orig_post
+    CFG["chains"]["lead"]["applies"].pop("auto_archive_days", None)
 
 # ------------------------------------------------------------------ the world model
 model = entities.build(world(), CFG and C.cfg(), wiki=[{"name": "Morgan Ironwood", "birthday": "", "updated": "2026-10-08", "lead": False},
@@ -261,14 +270,43 @@ its = dayplan.items_for(day, cal=CAL, entities=ents, gaps=[{"due": "2026-10-16",
                         fus=FUS, chase_state={"c1": {"status": "snoozed", "snooze_until": "2026-10-16 08:00", "title": "Insurance renewal", "owner": "owner1"}},
                         crm_tasks=[{"status": "pending", "due_date": "2026-10-16", "description": "Send Custom Packages Guide", "project": "Finley Larkspur's Project"}], d=D)
 kinds = [x["kind"] for x in its]
-check("items: timed events + calls + deadlines + reminders + chases + HB tasks; all-day listed but not counted",
-      kinds.count("event") == 3 and "call" in kinds and kinds.count("deadline") == 3 and "followup" in kinds and "chase" in kinds
+check("items: timed events + calls + deadlines + a bill + reminders + chases + HB tasks; all-day listed but not counted",
+      kinds.count("event") == 3 and "call" in kinds and kinds.count("deadline") == 2 and kinds.count("bill") == 1 and "followup" in kinds and "chase" in kinds
       and sum(1 for x in its if x["counts"]) == len(its) - 1, its)
 check("timed items first, in time order", [x["text"][:9] for x in its[:3]] == ["UPS packa", "reminder:", "Phone cal"], [x["text"] for x in its[:4]])
 msg = dayplan.message(day, its, D)
-check("message: tomorrow's blocks, 'Also due', owner6's own line", msg.startswith("Tomorrow, Friday 10/16:") and "Morning: 9am UPS package" in msg and "Afternoon:" not in msg
-      and "Also due:" in msg and "owner6: 2pm Dentist" in msg and "Verizon bill" in msg, msg)
-joh_free = [x for x in its if x["owner"] != "owner6"]
+OWNER1, OWNER2 = list(C.owners())[0], (list(C.owners()) + ["partner"])[1]          # the organization's owners (people.json)
+NAME2 = C.owners().get(OWNER2, "Partner")
+check("message: a short dash list, calendar then bills, the other owner on their own line, capped at max_lines",
+      msg.startswith("Tomorrow, Friday 10/16\nOn the calendar:\n- 9am UPS package") and f"- {NAME2}: 2pm Dentist" in msg
+      and "Bills due:\n- Verizon bill" in msg and "- and " in msg and sum(1 for x in msg.splitlines() if x.startswith("- ")) <= D["max_lines"]
+      and "; " not in msg and "Also due" not in msg, msg)
+# the owner, 2026-11-01 19:27, on the 11/02 look-ahead: "What is this mess? It looks terrible. If it's important it
+# shouldn't look like a waste of space in my chat." The real night: four forecast card charges and one reminder.
+nov = [{"id": "fu_a", "sop": "money", "step": "bill-due", "status": "waiting", "lane": "money", "created_by": "money.forecast",
+        "subject": f"{m} due 2026-11-02", "fire_at": "2026-11-04T23:08:30", "action": {"instruction": f"{m} is due 2026-11-02 (${a})."}}
+       for m, a in (("Adobe (monthly)", "69.99"), ("Harbor Meat (weekly)", "27.10"), ("Next Insur Gen (weekly)", "31.67"), ("Microsoft Xbox (monthly)", "19.99"))]
+nov.append({"id": "fu_b", "sop": "money", "step": "bill-due", "status": "waiting", "lane": "money", "created_by": "mail_arm",
+            "subject": "SCE electric bill due 11/02/2026", "fire_at": "2026-10-30T17:00:00", "action": {"instruction": "SCE is due ($212.40)."}})
+nrows = entities.money_rows(nov, {}, datetime(2026, 11, 1, 19, 0))
+check("bills: the amount comes from the follow-up's instruction; forecast card charges are autopay, a mailed bill is not",
+      [r["amount"] for r in nrows] == [69.99, 27.10, 31.67, 19.99, 212.40] and [r["autopay"] for r in nrows] == [True] * 4 + [False], nrows)
+nday = datetime(2026, 11, 2)
+auto_only = dayplan.items_for(nday, cal=[{"date": "2026-11-02", "time": "17:00", "title": "Reminder", "owner": OWNER1}], entities=nrows[:4],
+                              gaps=[], fus=nov, chase_state={}, crm_tasks=[], d=D)
+check("autopay never counts: the 11/02 night (4 card charges + a 5pm reminder) posts nothing",
+      sum(1 for x in auto_only if x["counts"]) == 1 and dayplan.tick(now=datetime(2026, 11, 1, 19, 0), dry=True, items=auto_only, d=D).get("silent"))
+nits = dayplan.items_for(nday, cal=[{"date": "2026-11-02", "time": "17:00", "title": "Call with the caterer", "owner": OWNER1},
+                                    {"date": "2026-11-02", "time": "10:00", "title": "Dentist", "owner": OWNER2}],
+                         entities=nrows, gaps=[], fus=nov, chase_state={}, crm_tasks=[], d=D)
+nmsg = dayplan.message(nday, nits, D)
+sys.path.insert(0, str(HERE.parent / "agent"))
+import voice  # noqa: E402
+check("the look-ahead reads like a person wrote it: name, amount, no '(monthly)', no 'pay / confirm', no raw date, one autopay line",
+      nmsg == (f"Tomorrow, Monday 11/2\nOn the calendar:\n- {NAME2}: 10am Dentist\n- 5pm Call with the caterer\n"
+               "Bills due:\n- SCE electric bill, $212.40\nAutopay, nothing to do: Adobe, Harbor Meat, Next Insur Gen, Microsoft Xbox"), nmsg)
+check("the look-ahead passes the voice gate untouched", voice.classify(nmsg) == "" and voice.polish(nmsg) == nmsg, nmsg)
+joh_free = [x for x in its if x["owner"] != OWNER2]
 check("no owner6 line on a day she has nothing", "owner6:" not in dayplan.message(day, joh_free, D))
 C.save_state("dayplan", {})
 r = dayplan.tick(now=NOW.replace(hour=18), dry=True, items=its, d=D)

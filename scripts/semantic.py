@@ -18,13 +18,32 @@ Model: BAAI/bge-small-en-v1.5 (fastembed/ONNX). Index is git-ignored, local-only
 """
 
 import io
+import os
 import re
 import sys
 import json
 import datetime
 from pathlib import Path
 
-VAULT = Path(__file__).resolve().parent.parent
+def _main_vault(p: Path) -> Path:
+    """A git worktree's .git is a FILE naming the main checkout's .git dir; the index and its build lock belong to
+    the main vault, so a build launched from a worktree copy (the builder's) waits on the same lock instead of
+    embedding beside the main build with its own .semantic_store (ported 2026-11-10)."""
+    g = p / ".git"
+    if g.is_file():
+        try:
+            line = g.read_text(encoding="utf-8").strip()
+            if line.startswith("gitdir:"):
+                gd = Path(line.split(":", 1)[1].strip())
+                gd = gd if gd.is_absolute() else (p / gd)
+                if gd.parent.name == "worktrees" and gd.parent.parent.name == ".git" and gd.parent.parent.parent.is_dir():
+                    return gd.parent.parent.parent
+        except OSError:
+            pass
+    return p
+
+
+VAULT = _main_vault(Path(__file__).resolve().parent.parent)
 WIKI = VAULT / "Wiki"
 MEMORY = VAULT / "Memory"
 STORE = VAULT / "scripts" / ".semantic_store"
@@ -123,8 +142,18 @@ def iter_chunks():
 
 # ---- model ------------------------------------------------------------------
 
-def get_model():
+# onnxruntime takes every core by default; a build is background work, so it gets a few threads and the
+# dashboard, the chat bridge and the owner's own programs keep the rest (ported 2026-11-10 from the family template).
+BUILD_THREADS = max(2, min(4, (os.cpu_count() or 4) // 6))
+
+
+def get_model(threads=None):
     from fastembed import TextEmbedding
+    if threads:
+        try:
+            return TextEmbedding(model_name=MODEL_NAME, threads=threads)
+        except TypeError:                      # an older fastembed without `threads`
+            pass
     return TextEmbedding(model_name=MODEL_NAME)
 
 
@@ -137,14 +166,62 @@ def _normalize(arr):
 
 # ---- commands ---------------------------------------------------------------
 
+BUILD_LOCK = STORE / "build.lock"
+BUILD_AGAIN = STORE / "build.again"
+
+
+def _try_lock(fh) -> bool:
+    """Non-blocking exclusive lock on an open file; the OS drops it if the process dies."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def cmd_build_single():
+    """One build at a time (2026-11-04: three notes written back to back started three 2.3 GB builds
+    and pinned the CPU at 100%). A build asked for while one runs marks build.again and exits; the
+    running build then goes round once more, so the newest notes still land in the index."""
+    STORE.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "win32":          # background job: yield the CPU to whatever the owner is doing
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            # HANDLE is 64-bit: untyped, the pseudo-handle (-1) arrives zero-extended and the call silently fails.
+            k32.GetCurrentProcess.restype = ctypes.c_void_p
+            k32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+            k32.SetPriorityClass(k32.GetCurrentProcess(), 0x00004000)   # BELOW_NORMAL_PRIORITY_CLASS
+        except Exception:
+            pass
+    fh = open(BUILD_LOCK, "a+")
+    try:
+        if not _try_lock(fh):
+            BUILD_AGAIN.touch()
+            print("build: another build is running; it will rerun once when done")
+            return
+        while True:
+            BUILD_AGAIN.unlink(missing_ok=True)
+            cmd_build()
+            if not BUILD_AGAIN.exists():
+                break
+    finally:
+        fh.close()
+
+
 def cmd_build():
     import numpy as np
     rows = list(iter_chunks())
     if not rows:
         sys.exit("build: no source notes found")
     print(f"build: embedding {len(rows)} chunks from {len(source_files())} notes "
-          f"with {MODEL_NAME} ...")
-    model = get_model()
+          f"with {MODEL_NAME} ({BUILD_THREADS} threads) ...")
+    model = get_model(threads=BUILD_THREADS)
     texts = [r[2] for r in rows]
     embs = _normalize(list(model.embed(texts, batch_size=64)))
     STORE.mkdir(parents=True, exist_ok=True)
@@ -252,7 +329,7 @@ def main():
     cmd = sys.argv[1]
     try:
         if cmd == "build":
-            cmd_build()
+            cmd_build_single()
         elif cmd == "search":
             cmd_search(" ".join(sys.argv[2:]))
         elif cmd == "hook":

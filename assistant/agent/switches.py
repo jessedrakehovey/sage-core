@@ -76,20 +76,53 @@ def config_state(j: dict) -> bool | None:
     if not (j.get("config") and j.get("field")):
         return None
     try:
-        v = json.loads(_path(j).read_text(encoding="utf-8")).get(j["field"])
+        v = json.loads(_path(j).read_text(encoding="utf-8-sig"))
+        for part in str(j["field"]).split("."):          # "leads.auto_send" reaches into the object (2026-11-04)
+            v = v.get(part) if isinstance(v, dict) else None
     except (OSError, ValueError):
         return None
     return v if isinstance(v, bool) else None
+
+
+def _object_span(text: str, parents: list) -> tuple:
+    """(start, end) of the JSON object reached by the parent keys ("leads" in "leads.auto_send"), by brace counting on
+    the file's own text so the one field flips in place and the rest of the file keeps its formatting. The whole
+    file for no parents; (-1, -1) when a parent is not found."""
+    lo, hi = 0, len(text)
+    for key in parents:
+        m = re.compile(r'"' + re.escape(key) + r'"\s*:\s*\{').search(text, lo, hi)
+        if not m:
+            return -1, -1
+        depth, i = 1, m.end()
+        while i < hi and depth:
+            ch = text[i]
+            if ch == '"':
+                i += 1
+                while i < hi and text[i] != '"':
+                    i += 2 if text[i] == "\\" else 1
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            i += 1
+        lo, hi = m.end(), i
+    return lo, hi
 
 
 def _set_config(j: dict, on: bool) -> str:
     """Flip the one field in place. -> '' or the reason it was refused."""
     p = _path(j)
     text = p.read_text(encoding="utf-8")
-    pat = re.compile(r'("' + re.escape(j["field"]) + r'"\s*:\s*)(true|false)')
-    if len(pat.findall(text)) != 1:
+    parts = str(j["field"]).split(".")
+    lo, hi = _object_span(text, parts[:-1])
+    if lo < 0:
+        return f"{j['field']}: its object was not found in {j['config']}"
+    pat = re.compile(r'("' + re.escape(parts[-1]) + r'"\s*:\s*)(true|false)')
+    hits = [m for m in pat.finditer(text) if lo <= m.start() < hi]
+    if len(hits) != 1:
         return f"{j['field']} is not a single true/false in {j['config']}"
-    new = pat.sub(lambda m: m.group(1) + ("true" if on else "false"), text, count=1)
+    m = hits[0]
+    new = text[:m.start()] + m.group(1) + ("true" if on else "false") + text[m.end():]
     json.loads(new)                                     # never write a config that no longer parses
     p.write_text(new, encoding="utf-8")
     return ""

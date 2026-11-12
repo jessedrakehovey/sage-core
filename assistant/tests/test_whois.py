@@ -291,6 +291,10 @@ out = gmcp.call("who_is", {"query": "my dad"})
 check("gmcp who_is: Dad with the evidence", out.startswith("Dad (") and "because:" in out, out[:200])
 out = gmcp.call("texts_search", {"query": "Thanksgiving", "days": 3650})
 check("gmcp texts_search: labels come from whois", "Dad (" in out, out[:200])
+# "Marisa texted, let's respond": her thread has no saved name, so the name the people index knows finds it
+out = gmcp.call("texts_search", {"query": "Marisa", "days": 3650})
+check("gmcp texts_search 'Marisa texted': her own text and number come back by name",
+      "from Marisa Silverlake-example" in out and "555-051-5951" in out and "family gift exchange at Christmas" in out, out[:400])
 owner = {"key": "owner1", "name": "owner1", "role": "owner"}
 ok, line, pay = intents.validate("identify", {"handle": "+1 555-010-9010", "name": "Will", "relation": "owner1's friend"}, owner, {"convo": "dm:owner1"})
 check("intents identify: accepted with a clean payload", ok and pay["handle"] == "+1 555-010-9010" and pay["name"] == "Will" and "Will" in line, line)

@@ -1,0 +1,23 @@
+{
+ "_doc": "Seed E (causes): the labels an owner may tap on a close card to say what stalled a chase. Data, not code: assistant/agent/causes.py reads it (load_vocab). At most six labels plus skip; a label that carries a `never` stem is dropped at load (a cause is never about the people the organization serves). `words` are the plain words a card shows; `hints` are the keywords a free text is clustered by (zero-LLM, the shadow test's read-back). A pack copies this file and may shorten or rename the list.",
+ "labels": ["vendor_no_reply", "vendor_no_show", "parts_wait", "approval_waited", "key_missing", "wrong_channel"],
+ "skip": "skip",
+ "never": ["resident", "tenant", "household", "occupant", "renter", "lessee", "customer", "client"],
+ "words": {
+  "vendor_no_reply": "Vendor did not reply",
+  "vendor_no_show": "Vendor did not show",
+  "parts_wait": "Waited on parts",
+  "approval_waited": "Waited on an approval",
+  "key_missing": "No key",
+  "wrong_channel": "Wrong channel",
+  "skip": "Skip"
+ },
+ "hints": {
+  "vendor_no_reply": ["no reply", "no answer", "never answered", "didn't answer", "did not answer", "silent", "ghosted", "no response", "not responding", "never got back", "hasn't replied", "has not replied"],
+  "vendor_no_show": ["no show", "no-show", "didn't show", "did not show", "never came", "didn't come", "did not come", "never showed", "didn't turn up", "did not turn up"],
+  "parts_wait": ["part", "parts", "backorder", "back order", "ordered", "shipping", "delivery", "material", "supplies"],
+  "approval_waited": ["approval", "approve", "approved", "sign off", "sign-off", "ok from", "waiting on me", "my ok", "bid", "quote", "estimate"],
+  "key_missing": ["key", "keys", "lock", "locked", "access", "no entry", "couldn't get in", "could not get in", "gate code"],
+  "wrong_channel": ["wrong channel", "wrong number", "text instead", "email instead", "call instead", "didn't see", "did not see", "never saw", "missed the message", "other phone", "wrong thread", "wrong person"]
+ }
+}

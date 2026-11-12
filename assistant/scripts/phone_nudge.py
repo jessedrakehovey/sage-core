@@ -83,6 +83,16 @@ def _ready_count() -> int:
         return 0
 
 
+def _ready_any_hour() -> int:
+    """Texts waiting that an owner approved on a card: quiet hours do not hold those (exec_store.quiet_exempt)."""
+    try:
+        import json
+        box = json.loads((Path(os.environ.get("ASSISTANT_DATA") or (HERE.parent / "data")) / "phone_outbox.json").read_text(encoding="utf-8"))
+        return sum(1 for i in box.get("items", []) if i.get("status") == "ready" and i.get("any_hour"))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _defer(seconds: float) -> None:
     """One pending re-nudge at a time; fires only if texts are still waiting."""
     try:
@@ -183,16 +193,21 @@ def renudge_if_waiting(now: float | None = None) -> bool:
         st = {}
     n = _ready_count()
     if not n:
-        if st.get("renudges"):
+        if st.get("renudges") or st.get("spell_missed"):
             STATE.parent.mkdir(parents=True, exist_ok=True)
-            STATE.write_text(json.dumps({**st, "renudges": 0}), encoding="utf-8")
+            STATE.write_text(json.dumps({**st, "renudges": 0, "spell_missed": False}), encoding="utf-8")
         return False
-    if h >= 21 or h < 7:                      # exec_store quiet hours; the morning fetch takes it
+    if (h >= 21 or h < 7) and not _ready_any_hour():   # exec_store quiet hours; the morning fetch takes it
         return False
     last = max(float(st.get("ts") or 0), float(st.get("renudge_ts") or 0))
     if _ready_oldest_age_s(now) < RENUDGE_S or now - last < RENUDGE_S:
         return False
     if int(st.get("renudges") or 0) >= RENUDGE_MAX:
+        if not st.get("spell_missed"):        # every nudge of this spell went out and the phone still has not fetched
+            st["spell_missed"], st["missed"], st["missed_ts"] = True, int(st.get("missed") or 0) + 1, now
+            STATE.parent.mkdir(parents=True, exist_ok=True)
+            STATE.write_text(json.dumps(st), encoding="utf-8")
+            _log(f"wake-up not working: {RENUDGE_MAX} re-nudges and the phone did not fetch (miss {st['missed']})")
         return False
     st["renudges"] = int(st.get("renudges") or 0) + 1
     st["renudge_ts"] = now                    # counts even when the SMS itself fails: never more than one try per window
@@ -201,6 +216,37 @@ def renudge_if_waiting(now: float | None = None) -> bool:
     ok = fire(n, force=True)
     _log(f"re-nudge {st['renudges']}/{RENUDGE_MAX}: {n} ready, oldest {_ready_oldest_age_s(now) / 60:.0f} min -> {'sent' if ok else 'not sent'}")
     return ok
+
+
+WOKE_WITHIN_S = 150      # a fetch this soon after a nudge is the nudge working
+
+
+def woke(now: float | None = None) -> None:
+    """The phone fetched its outbox (phone_bridge.fetch_outbox): the waiting spell is over, and a fetch right
+    after a nudge proves the wake-up path works, which clears the missed count. Never raises."""
+    import json
+    now = now or time.time()
+    try:
+        st = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
+        last = max(float(st.get("ts") or 0), float(st.get("renudge_ts") or 0))
+        st["renudges"], st["spell_missed"] = 0, False
+        if last and now - last <= WOKE_WITHIN_S:
+            st["missed"], st["woke_ts"] = 0, now
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+        STATE.write_text(json.dumps(st), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def health() -> dict:
+    """{"missed": spells in a row where every nudge went out and the phone never fetched, "since": epoch of the
+    latest one}. 0 missed = the wake-up path is working (or has not been needed)."""
+    import json
+    try:
+        st = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
+    except (OSError, ValueError):
+        st = {}
+    return {"missed": int(st.get("missed") or 0), "since": float(st.get("missed_ts") or 0), "to": str(st.get("to") or "")}
 
 
 if __name__ == "__main__":

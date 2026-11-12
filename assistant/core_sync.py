@@ -284,18 +284,61 @@ def vault_people(vault: Path, cfg: dict) -> dict:
                 if a in firsts:
                     raw.add(f"{a} {b}")
     skip = {str(s).lower() for s in (cfg.get("people_allow") or [])}
+    common = common_words(vault, cfg)
     full, surnames = set(), set()
     for nm in raw:
         nm = re.sub(r"\s+", " ", nm).strip()
         nm = re.sub(r"'s (?:project|wedding|event)$", "", nm, flags=re.I)       # a CRM project title carries its client's name
         if not _NAME_SHAPE.match(nm) or nm.lower() in skip:
             continue
+        words = nm.split()
+        # a record whose first or last word is an ordinary word of the engine's own text is a merchant, a task or a phrase
+        # ("Relay Operating", "Meal Prep Sunday", "Send Form", "Blue Apron"), not a person (2026-11-03: those "surnames" -
+        # Owner, Operating, Sunday, Form - held brain.py, money.json and the READMEs out of the template for a day)
+        if words[0].lower() in common or words[-1].lower() in common:
+            continue
         full.add(nm)
-        last = nm.split()[-1]
+        last = words[-1]
         if len(last) >= 4 and last.lower() not in skip:
             surnames.add(last)
     _PEOPLE = {"full": full, "surnames": surnames, "tokens": tokens}
     return _PEOPLE
+
+
+_COMMON = None
+_COMMON_SKIP = {"data", "out", "state", "learnings", "__pycache__", ".git", "node_modules", ".cache", ".semantic_store", "graphify-out",
+                "Wiki", "Memory", "Raw", "Context"}
+_WORD_RX = re.compile(r"(?<![A-Za-z0-9'@.])[a-z]{3,}(?![A-Za-z0-9'@])")       # never the parts of an e-mail address
+TEXT_SUFFIXES_ALL = CODE_SUFFIXES + (".md", ".json", ".txt", ".yaml", ".yml", ".xml", ".ini", ".cfg", ".toml")
+
+
+def common_words(vault: Path, cfg: dict) -> set:
+    """The lowercase whole words the vault's own engine text uses in at least two files ("owner", "operating", "sunday",
+    "form", "relay"): a person's surname is written capitalized and is not one of them, so a record "name" that carries
+    one is a word, not a person. Read once per run from core_sync.json -> common_word_roots (default: the engine
+    folders), pack data and the knowledge folders skipped; a word in only one file (a slug, an address) never counts."""
+    global _COMMON
+    if _COMMON is not None:
+        return _COMMON
+    seen: dict = {}
+    for root in (cfg.get("common_word_roots") or ["assistant", "scripts", ".claude"]):
+        base = vault / str(root)
+        if not base.is_dir():
+            continue
+        for p in base.rglob("*"):
+            try:
+                rel = p.relative_to(vault).parts
+                if any(part in _COMMON_SKIP for part in rel) or not p.is_file() or p.suffix.lower() not in TEXT_SUFFIXES_ALL:
+                    continue
+                if p.stat().st_size > 1_500_000:
+                    continue
+                txt = p.read_text(encoding="utf-8-sig", errors="replace")
+            except OSError:
+                continue
+            for w in set(_WORD_RX.findall(txt)):
+                seen[w] = seen.get(w, 0) + 1
+    _COMMON = {w for w, n in seen.items() if n >= 2}
+    return _COMMON
 
 
 class _AnyOf:
@@ -974,8 +1017,71 @@ def _changed(vault: Path, sha: str) -> list:
 
 
 def _added_lines(vault: Path, sha: str, rel: str) -> list:
+    """The lines a commit ADDED to a file. A line the same diff also takes out with the same words (only its line
+    ending, its indent or its place changed) was already there: it is not an addition (2026-11-04: one commit that
+    flipped a file's line endings turned every older flagged line of seven files into a hold)."""
     r = git(["diff", "-U0", "--no-color", _parent(vault, sha), sha, "--", rel], vault)
-    return [ln[1:] for ln in (r.stdout or "").splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    plus, minus = [], {}
+    for ln in (r.stdout or "").splitlines():
+        if ln.startswith("+") and not ln.startswith("+++"):
+            plus.append(ln[1:])
+        elif ln.startswith("-") and not ln.startswith("---"):
+            k = norm(ln[1:])
+            minus[k] = minus.get(k, 0) + 1
+    out = []
+    for ln in plus:
+        k = norm(ln)
+        if k and minus.get(k):
+            minus[k] -= 1
+            continue
+        out.append(ln)
+    return out
+
+
+def settle_holds(eng, vault: Path, core: Path, cfg: dict, st: dict, ident: list, dry: bool = False) -> list:
+    """Holds that were never additions: a held line that stood in the file, word for word, before the commit the hold
+    began at is an older line, not a change of that commit. Such lines leave the hold; a hold left with none is
+    released (the file is exported from the last synced commit like any applied change). [(rel, why)]."""
+    out, touched = [], []
+    export_bytes = export_bytes_for(eng, cfg)
+    for rel, h in list(st["holds"].items()):
+        lines = h.get("lines") or {}
+        if not lines or h.get("verify") or h.get("core_only") or not h.get("since"):
+            continue
+        full = (git(["rev-parse", "--verify", "-q", str(h["since"])], vault).stdout or "").strip()
+        if not full:
+            continue
+        before = _rev_text(vault, _parent(vault, full), rel)
+        if before is None:
+            continue
+        had = {norm(ln) for ln in _decode(before).splitlines() if ln.strip()}
+        stale = [k for k in lines if k in had]
+        if not stale:
+            continue
+        if len(stale) < len(lines):
+            if not dry:
+                for k in stale:
+                    lines.pop(k, None)
+            continue
+        raw = _rev_text(vault, st["last_commit"], rel)
+        if raw is None:
+            continue
+        data = export_bytes(rel, raw)
+        if eng.verify(rel, data, ident) or guard_core_only(core, rel, data, st):
+            continue
+        why = f"its {len(stale)} flagged line(s) were there before {str(h['since'])[:7]}"
+        if not dry:
+            dst = core / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists() or dst.read_bytes() != data:
+                dst.write_bytes(data)
+                touched.append(rel)
+            st["holds"].pop(rel, None)
+            ledger({"commit": str(st["last_commit"])[:7], "file": rel, "action": "released", "why": why})
+        out.append((rel, why))
+    if touched and not dry:
+        _commit_core(eng, core, touched, f"released: lines that were never additions (at {str(st['last_commit'])[:7]})")
+    return out
 
 
 def _subject(vault: Path, sha: str) -> str:
@@ -1561,7 +1667,10 @@ def run(eng, vault: Path, core: Path, cfg: dict, dry: bool = False, no_build: bo
     rc = relay_cfg(cfg, vault, eng)
     if not st["core_base"]:             # direct template changes are looked for from here on (older ones were reconciled by hand)
         st["core_base"] = _core_head(core)
+    settled = settle_holds(eng, vault, core, cfg, st, ident, dry)
     if head == st["last_commit"]:
+        if settled and not dry:
+            note(eng, "released (their flagged lines were never additions):\n" + "\n".join(f"- {rel}" for rel, _ in settled), cfg)
         ports = relay_inbox(eng, cfg, st, rc, dry) if rc.get("enabled") else []
         direct = file_core_direct(eng, core, st, cfg) if not dry else []
         if not dry:
@@ -1580,7 +1689,7 @@ def run(eng, vault: Path, core: Path, cfg: dict, dry: bool = False, no_build: bo
     if limit:
         shas = shas[:limit]
     before_holds = set(st["holds"])
-    reps, released, filed = [], [], []
+    reps, released, filed = [], list(settled), []
     for sha in shas:
         try:
             rep = apply_commit(eng, vault, core, sha, cfg, st, ident, niche, allow, dry, rc)

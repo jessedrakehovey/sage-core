@@ -148,6 +148,11 @@ def record(tid: str, text: str, kind: str = "progress", by: str = "turn") -> str
         return f"REFUSED {e}"
     set_now(("blocked: " if kind == "blocked" else "") + row["text"])
     post_line(t, row["text"])
+    try:                                   # the live card in chat redraws with this step (livecard.py, 2026-11-03)
+        import livecard
+        livecard.touch(tid)
+    except Exception as e:  # noqa: BLE001
+        _log(f"live card touch failed: {type(e).__name__}")
     return f"NOTE={len(read(tid))}"
 
 

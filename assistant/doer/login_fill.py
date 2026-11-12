@@ -58,10 +58,10 @@ NEXT_TEXT = re.compile(r"^(next|continue|sign in|log in|login|submit|verify|conf
 ERR_TEXT = re.compile(r"incorrect|invalid|wrong|doesn.t match|try again|not recognized|couldn.t find|unable to sign", re.I)
 CAPTCHA = re.compile(r"captcha|recaptcha|hcaptcha|i.m not a robot|verify you are human", re.I)
 VERIFY_PAGE = re.compile(r"verification code|verify your (?:phone|identity|account)|send (?:a |the |you a )?code|how would you like to receive", re.I)
-SMS_CHOICE = re.compile(r"text me|text message|sms|send (?:a )?text", re.I)
+SMS_CHOICE = re.compile(r"text me|text message|\bsms\b|send (?:a )?text", re.I)
 GO_TEXT = re.compile(r"^\W*(continue|send|send code|next|submit)\W*$", re.I)
 SIGNIN_LINK = re.compile(r"^\W*(sign ?in|log ?in|login|my ?account|account|my\w* log ?in)\W*$", re.I)
-SEARCHY = re.compile(r"search|query|q|lookup|find", re.I)
+SEARCHY = re.compile(r"search|query|\bq\b|lookup|find", re.I)
 
 
 def _is_login_field(el) -> bool:
@@ -293,7 +293,7 @@ def fill_page(page, url: str, code: str = "", learn: bool = True) -> str:
 
     for _round in range(3):
         if CAPTCHA.search(_body_text(page)) and not _visible(page, PASS_SEL):
-            return "FAILED captcha on the login page; the owner has to sign in by hand (browser.py --show)"
+            return "FAILED captcha on the login page; a person has to pass it"
         pw_el = _visible(page, pb.get("pass_sel", "")) or _visible(page, PASS_SEL)
         if pw_el:
             used["pass_sel"] = pb.get("pass_sel") or PASS_SEL
@@ -369,7 +369,7 @@ def fill_page(page, url: str, code: str = "", learn: bool = True) -> str:
         if ERR_TEXT.search(body):
             return "FAILED the site says the login is wrong; the vault entry needs updating"
         if CAPTCHA.search(body):
-            return "FAILED captcha after the password; the owner has to sign in by hand (browser.py --show)"
+            return "FAILED captcha after the password; a person has to pass it"
         return "FAILED still on the login page after submitting"
     if learn:
         _learn(host, used, start_url)
@@ -388,6 +388,10 @@ def fill(url: str, cdp: str, code: str = "") -> str:
         if page is None:
             return "FAILED no open page"
         line = fill_page(page, url, code)
+        if line.startswith(("FAILED", "NEEDS_CODE")):
+            h = vault.hint_for_url(page.url) or vault.hint_for_url(url)     # the owner's own words about this login (upgrade 15)
+            if h:
+                line += f" | hint from the vault: {h}"
         _mark(vault.host_of(page.url) or vault.host_of(url), line)
         return line
 

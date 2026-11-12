@@ -3,9 +3,10 @@ the shape is example's day_plan.py, without the texts: nothing here asks anyone 
 
 At tracking.json -> dayplan.plan_at, once per target day: count tomorrow's timed items (calendar
 events with a time, calls, deadlines from the world model and the chains, follow-ups that fire,
-chases due back). min_timed_items or more -> ONE plain message to the shared space laying the
-day out in blocks (morning / afternoon / evening); owner's items in their own line, only on days
-she has any (ruling 16). Fewer -> silence (logged, nothing posted). Zero LLM.
+chases due back, bills that need paying). min_timed_items or more -> ONE short message to the shared
+space: a dash line per item under "On the calendar:" and "Bills due:" ("Adobe, $69.99"), owner's
+items as her own dash lines, autopay folded into one line (it never counts, it needs nobody); about
+six lines at most (the owner 2026-11-01: "What is this mess?"). Fewer -> silence (logged). Zero LLM.
 
   python assistant/scripts/tracking/dayplan.py            # tick (what the spine runs)
   python assistant/scripts/tracking/dayplan.py --dry-run  # print tomorrow's plan, post nothing
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -34,6 +36,7 @@ DEFAULTS = {
     "blocks": [{"label": "Morning", "until": "12:00"}, {"label": "Afternoon", "until": "17:00"}, {"label": "Evening", "until": "24:00"}],
     "call_words": ["call", "zoom", "meeting", "consult", "phone"],
     "max_chars": 900,
+    "max_lines": 6,
 }
 
 
@@ -74,13 +77,18 @@ def items_for(day, cal=None, entities=None, gaps=None, fus=None, chase_state=Non
         kind = "call" if any(w in title.lower() for w in d["call_words"]) else "event"
         loc = str(e.get("location") or "").strip()
         out.append({"time": t, "kind": kind, "text": title[:70] + (f" ({loc[:30]})" if loc and loc.lower() not in title.lower() else ""),
-                    "owner": str(e.get("owner") or "owner1"), "counts": bool(t) or bool(d.get("count_all_day"))})
+                    "owner": str(e.get("owner") or C.primary_owner()), "counts": bool(t) or bool(d.get("count_all_day"))})
     ents = entities if entities is not None else list((C.state("entities", {}) or {}).get("rows") or [])
     for r in ents:
         if str(r.get("deadline") or "") != ds or r.get("kind") in ("appointment",):
             continue
+        if r.get("kind") == "obligation":            # a bill: its name and amount, never the boilerplate
+            auto = bool(r.get("autopay"))
+            out.append({"time": None, "kind": "bill", "text": _bill(r.get("title"), r.get("amount")), "autopay": auto,
+                        "owner": str(r.get("owner") or C.primary_owner()), "counts": not auto})
+            continue
         out.append({"time": None, "kind": "deadline", "text": f"{r.get('title')}: {r.get('next_action')}"[:90],
-                    "owner": str(r.get("owner") or "owner1"), "counts": True})
+                    "owner": str(r.get("owner") or C.primary_owner()), "counts": True})
     gs = gaps if gaps is not None else list((C.state("chain_gaps", {}) or {}).get("rows") or [])
     seen = {x["text"] for x in out}
     for g in gs:
@@ -88,57 +96,70 @@ def items_for(day, cal=None, entities=None, gaps=None, fus=None, chase_state=Non
             continue
         txt = f"{g.get('title')}: {g.get('label')} due"[:90]
         if txt not in seen and not any(str(g.get("title")) in x["text"] for x in out if x["kind"] == "deadline"):
-            out.append({"time": None, "kind": "deadline", "text": txt, "owner": "owner1", "counts": True})
+            out.append({"time": None, "kind": "deadline", "text": txt, "owner": C.primary_owner(), "counts": True})
     fus = fus if fus is not None else list((C.followups_state().get("items") or {}).values())
     for f in fus:
-        if str(f.get("status") or "") != "waiting" or str(f.get("fire_at") or "")[:10] != ds:
-            continue
+        if str(f.get("status") or "") != "waiting" or str(f.get("fire_at") or "")[:10] != ds or f.get("sop") == "money":
+            continue                                   # a bill's reminder is the bill line itself
         out.append({"time": _t(str(f.get("fire_at"))[11:16]), "kind": "followup", "text": f"reminder: {str(f.get('subject') or '')[:70]}",
-                    "owner": "owner6" if f.get("lane") == "owner6" else "owner1", "counts": True})
+                    "owner": str(f.get("lane")) if f.get("lane") in C.owners() else C.primary_owner(), "counts": True})
     cs = chase_state if chase_state is not None else (C.state("chase", {}) or {}).get("items") or {}
     for it in cs.values():
         if it.get("status") == "snoozed" and str(it.get("snooze_until") or "")[:10] == ds:
             out.append({"time": None, "kind": "chase", "text": f"you asked to be reminded: {str(it.get('title') or '')[:60]}",
-                        "owner": str(it.get("owner") or "owner1"), "counts": True})
+                        "owner": str(it.get("owner") or C.primary_owner()), "counts": True})
     tasks = crm_tasks if crm_tasks is not None else (crm.snapshot().get("tasks") or [])
     for t in tasks:
         if str(t.get("status") or "") == "pending" and str(t.get("due_date") or "") == ds:
             out.append({"time": None, "kind": "deadline", "text": f"{crm.name()} task: {t.get('description')} ({str(t.get('project') or '').replace(chr(39) + 's Project', '')})"[:90],
-                        "owner": "owner1", "counts": True})
+                        "owner": C.primary_owner(), "counts": True})
     out.sort(key=lambda x: (x["time"] is None, x["time"] or (0, 0), x["kind"]))
     return out
 
 
+_DATE = re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\b")
+
+
+def _bill(title, amount) -> str:
+    """'Adobe (monthly) due 2026-11-02', 69.99 -> 'Adobe, $69.99': no period, no due words, no raw date."""
+    name = re.sub(r"\s*\([^)]*\)", "", str(title or ""))
+    name = re.sub(r"\s+(?:is\s+)?due\b.*$", "", name, flags=re.I)
+    name = " ".join(_DATE.sub("", name).split()).strip(" :-,") or "A bill"
+    try:
+        a = float(amount)
+    except (TypeError, ValueError):
+        return name
+    return f"{name}, ${a:,.0f}" if a == int(a) else f"{name}, ${a:,.2f}"
+
+
 # ------------------------------------------------------------------ the message
-def _block_of(t: tuple, blocks: list) -> int:
-    for i, b in enumerate(blocks):
-        u = _t(b.get("until") or "24:00") or (24, 0)
-        if t < u:
-            return i
-    return len(blocks) - 1
-
-
 def message(day, items: list, d: dict | None = None) -> str:
+    """Two plain groups of dash lines, max_lines items in all (an overflow becomes '- and N more')."""
     d = d or dcfg()
-    blocks = [dict(b, items=[]) for b in d["blocks"]]
-    untimed, joh = [], []
+    cal, bills, auto = [], [], []
     for it in items:
-        if it["owner"] == "owner6":
-            joh.append(it); continue
-        if it["time"] is None:
-            untimed.append(it); continue
-        blocks[_block_of(it["time"], blocks)]["items"].append(it)
-    lines = [f"Tomorrow, {day.strftime('%A %m/%d').replace(' 0', ' ')}:"]
-    for b in blocks:
-        if b["items"]:
-            lines.append(f"{b['label']}: " + "; ".join(f"{_fmt(x['time'])} {x['text']}" for x in b["items"]) + ".")
-    if untimed:
-        lines.append("Also due: " + "; ".join(x["text"] for x in untimed) + ".")
-    if joh:
-        lines.append("owner6: " + "; ".join((f"{_fmt(x['time'])} " if x["time"] else "") + x["text"] for x in joh) + ".")
+        if it["kind"] == "bill":
+            (auto if it.get("autopay") else bills).append(it["text"]); continue
+        line = (f"{_fmt(it['time'])} " if it["time"] else "") + it["text"]
+        who = str(it.get("owner") or "")        # another owner's item carries their name; the primary owner's none
+        cal.append((f"{C.owners().get(who, who.title())}: " if who and who != C.primary_owner() else "") + line)
+    left = max(2, int(d.get("max_lines") or 6))
+    lines = [f"Tomorrow, {day.strftime('%A %m/%d').replace(' 0', ' ').replace('/0', '/')}"]
+    for head, rows in (("On the calendar:", cal), ("Bills due:", bills)):
+        if not rows:
+            continue
+        room = max(1, left - (1 if bills and head != "Bills due:" else 0))   # the bills keep at least one line
+        room = len(rows) if len(rows) <= room else room - 1
+        lines.append(head)
+        lines += [f"- {x}" for x in rows[:room]]
+        if len(rows) > room:
+            lines.append(f"- and {len(rows) - room} more")
+        left -= min(len(rows), room + 1)
+    if auto and (cal or bills):
+        lines.append("Autopay, nothing to do: " + ", ".join(x.split(",")[0] for x in auto[:4]) + (" and more" if len(auto) > 4 else ""))
     text = "\n".join(lines)
-    cap = int(d.get("max_chars") or 900)
-    return text if len(text) <= cap else text[:cap - 1].rstrip() + "…"
+    mc = int(d.get("max_chars") or 900)
+    return text if len(text) <= mc else text[:mc - 1].rstrip() + "…"
 
 
 def _post(text: str, dry: bool) -> bool:
@@ -147,7 +168,7 @@ def _post(text: str, dry: bool) -> bool:
     try:
         sys.path.insert(0, str(C.ROOT / "agent"))
         import bridge  # noqa: E402
-        bridge.post("owner1", text, channel="dayplan")
+        bridge.post(C.primary_owner(), text, channel="dayplan")
         return True
     except Exception as e:  # noqa: BLE001
         C.log("dayplan_post_error", error=f"{type(e).__name__}: {str(e)[:160]}")

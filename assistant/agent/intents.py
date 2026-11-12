@@ -35,17 +35,20 @@ import core  # noqa: E402
 TURNS = core.DATA / "ask" / "turns"
 KEEP_S = 86400
 
-LIST_KINDS = {"learn", "unlearn", "remember", "forget", "schedule", "unschedule", "event", "event_change",
-              "event_remove", "followups", "switch", "identify", "job", "approve", "blocked", "project"}
+LIST_KINDS = {"learn", "unlearn", "remember", "forget", "schedule", "unschedule", "reschedule", "event", "event_change",
+              "event_remove", "followups", "switch", "identify", "job", "approve", "blocked", "project", "money", "onboard", "revoke"}
 # tool name -> the SUGGEST key actions.apply reads (unchanged shapes, so nothing downstream moves)
 KEY_OF = {"remember": "remember", "forget": "forget", "learn": "learn", "unlearn": "unlearn", "note": "note",
-          "skill": "skill", "org": "org", "schedule": "schedule", "unschedule": "unschedule", "followup": "followups",
+          "skill": "skill", "org": "org", "schedule": "schedule", "unschedule": "unschedule", "reschedule": "reschedule", "followup": "followups",
           "event": "event", "event_change": "event_change", "event_remove": "event_remove", "task": "task",
           "call": "call", "do": "do", "card_revise": "card", "addressed": "addressed", "decide": "decide",
-          "switch": "switch", "identify": "identify", "job": "job", "approve": "approve", "blocked": "blocked", "project": "project"}
-CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "schedule": 2, "unschedule": 3, "event": 8,
+          "switch": "switch", "identify": "identify", "job": "job", "approve": "approve", "blocked": "blocked", "project": "project", "revoke": "revoke",
+          "money": "money", "onboard": "onboard"}
+CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "schedule": 2, "unschedule": 3, "reschedule": 3, "event": 8,
         "event_change": 4, "event_remove": 4, "followup": 4, "task": 3, "do": 3, "note": 2, "skill": 2, "decide": 2, "switch": 2,
-        "identify": 5, "job": 2, "approve": 2, "blocked": 3, "project": 3}
+        "identify": 5, "job": 2, "approve": 2, "blocked": 3, "project": 3, "money": 4, "onboard": 3, "revoke": 3}
+# the money deeds (scripts/money/brief.py, 2026-11-03): an owner's answer in the money talk becomes a rule, a target, a move
+MONEY_OPS = ("place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills")
 PROJECT_OPS = ("open", "update", "park", "close", "resume")
 # a project step that pays, moves money, deletes or handles a credential is never a job of the system's (the money lane never pays)
 _PROJECT_OWNER_ONLY = re.compile(r"\b(?:pay|pays|paying|paid|transfer|wire|venmo|zelle|withdraw|purchase|buy|delete|erase|wipe|format|password|passcode|credential)\b", re.I)
@@ -116,6 +119,51 @@ def failed_send(qid: str = "", hours: float = 24.0) -> tuple:
             continue
         hits.append((q, last))
     return hits[0] if len(hits) == 1 else ("", {})
+
+
+def cards_mod():
+    sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+    import cards
+    return cards
+
+
+def phone_run_url() -> str:
+    """Mission Control's "Send now from phone" page (a tap there runs the phone's send shortcut)."""
+    try:
+        import chat_push
+        return str(chat_push.MC_URL).rstrip("/") + "/phone/run"
+    except Exception:  # noqa: BLE001
+        return "the Send now from phone button on the card"
+
+
+def unconfirmed_text(qid: str = "", hours: float = 24.0) -> tuple:
+    """(qid, ticket, outbox status) of an approved text card whose text nothing confirms went: the card is consumed,
+    its ticket done, and the phone outbox still has it waiting, picked up with no ack, or dropped (2026-11-06: the
+    text to a team member was picked up, said "Texted", and never arrived). Without a qid: the ONE such card in the last `hours`."""
+    sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+    import cards
+    import exec_store as es
+    try:
+        import phone_bridge
+        box = phone_bridge.load_json(phone_bridge.OUTBOX, {"items": []})["items"]
+    except Exception:  # noqa: BLE001
+        return "", {}, ""
+    hits, cutoff = [], time.time() - hours * 3600
+    for tk in es.fold().values():
+        ref = str(tk.get("approval_ref") or "")
+        if tk.get("kind") != "imessage_send" or tk.get("status") != "done" or not ref.startswith("card:"):
+            continue
+        q = ref[5:]
+        if (qid and q != qid) or (not qid and es._done_ts(tk) < cutoff):
+            continue
+        it = next((i for i in box if i.get("ticket") == tk.get("id")), None)
+        st = str((it or {}).get("status") or "")
+        if st not in ("ready", "handed", "expired"):
+            continue
+        if (cards._read(cards.DONE / f"{q}.json") or {}).get("status") != "consumed" or cards._read(cards.LIVE / f"{q}.json"):
+            continue
+        hits.append((q, tk, st))
+    return hits[0] if len(hits) == 1 else ("", {}, "")
 
 
 # ------------------------------------------------------------------ the turn file
@@ -271,11 +319,11 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
     """-> (ok, line for the model, cleaned payload). Reads only; the one place a refusal is phrased."""
     if not isinstance(payload, dict):
         payload = {"text": _s(payload)} if kind in ("task", "do") else {}
-    if kind in ("learn", "unlearn", "remember", "forget", "addressed", "org", "identify", "project") and not core.can(person, "teach"):
+    if kind in ("learn", "unlearn", "remember", "forget", "addressed", "org", "onboard", "identify", "project") and not core.can(person, "teach"):
         return False, "refused: only an owner can change what I know or do.", payload
     if kind in ("note", "skill") and not core.can(person, "note"):
         return False, "refused: only an owner can file that.", payload
-    if kind in ("schedule", "unschedule", "event", "event_change", "event_remove", "followup", "switch") and not core.can(person, "schedule"):
+    if kind in ("schedule", "unschedule", "reschedule", "event", "event_change", "event_remove", "followup", "switch") and not core.can(person, "schedule"):
         return False, "refused: only an owner can set that.", payload
     if kind in ("task", "do", "call", "decide", "job") and not core.can(person, "task"):
         return False, "refused: only an owner can hand work on.", payload
@@ -291,8 +339,23 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
             return False, "refused: a build request is the owners' to file. Say so in one line.", payload
     if kind == "card_revise" and not core.can(person, "approve"):
         return False, "refused: only an owner can revise a card.", payload
+    if kind == "money":
+        if not (core.is_owner(person) and core.can(person, "teach")):
+            return False, "refused: only an owner can place their money.", payload
+        return _validate_money(payload)
     if kind == "approve" and not core.can(person, "approve"):
         return False, "refused: only an owner can approve a card.", payload
+    if kind == "revoke":
+        if not (core.is_owner(person) and core.can(person, "approve")):
+            return False, "refused: only an owner can take a standing yes back.", payload
+        import grants_chat
+        what = _s(payload.get("what"))
+        hits = grants_chat.find(what)
+        if not what or not hits:
+            return False, "refused: no standing yes matches those words; STANDING GRANTS lists what stands (say so in one line).", payload
+        if len(hits) > 1 and not grants_chat._ALL.match(what):
+            return False, "refused: several standing yeses match (" + "; ".join(str(g.get("header")) for g in hits[:4]) + "); name one.", payload
+        return True, f"accepted: {len(hits)} standing yes(es) taken back after this reply; I ask each time again. Say it in one clause.", {"what": what}
 
     if kind == "learn":
         rule = _s(payload.get("rule"))
@@ -300,7 +363,7 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
             return False, "refused: a rule needs one full sentence.", payload
         if core.is_protected(rule) and not core.tightens(rule):
             return False, ("refused: that would loosen a safety rule (sending, money, credentials, approvals), which only an owner "
-                           "changes by hand on Mission Control. Say so in one line; do not say it is saved."), payload
+                           "changes with their own tap on its card in chat. Say so in one line; do not say it is saved."), payload
         return True, "accepted: I'll hold to that from the next message on. Acknowledge it in your own words; no rule numbers.", payload
     if kind == "unlearn":
         rid = _s(payload.get("id"))
@@ -350,17 +413,32 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         if bk == "capability":
             return True, ("accepted: the build for that step starts right after this reply and the ask comes back to you when it lands. "
                           "Say in one clause that it is being built; do every other step now."), payload
+        if bk in ("connection", "signin") and _s(payload.get("connection")):
+            return True, ("accepted: recorded. If that connection is typed in (keys, a token, an app password), its form is posted in this "
+                          "chat right after your reply: say so in one clause. Never point at Mission Control or a page to type anything. "
+                          "Do every other step now."), payload
         return True, ("accepted: recorded. Say Tried / Blocked because / Need from you in one line each, with the shortest way from the "
                       "phone; once. Do every other step now."), payload
     if kind == "org":
         if not payload:
             return False, "refused: nothing to record.", payload
         return True, "accepted: recorded about the organization after this reply.", payload
+    if kind == "onboard":
+        k, v = _s(payload.get("kind")), _s(payload.get("value"))
+        if k not in ("features", "tool", "tracks", "stage") or not v:
+            return False, "refused: onboard needs kind (features | tool | tracks | stage) and value (their words).", payload
+        if k in ("tool", "stage") and not _s(payload.get("id")):
+            return False, "refused: onboard needs the id from the ONBOARDING line.", payload
+        if k == "stage" and _s(payload.get("field")) not in ("trigger", "actor", "channel", "template", "clock", "verifier"):
+            return False, "refused: a stage answer needs its field (trigger | actor | channel | template | clock | verifier).", payload
+        if re.search(r"(?i)\b(password|passcode|pin|token|secret)\b\s*[:=]|\b\d{12,}\b", v):
+            return False, "refused: never a secret; the connection's form in chat takes those.", payload
+        return True, "accepted: recorded after this reply; onboarding moves on.", payload
     if kind == "schedule":
         import routines
         when = payload.get("when")
         if not isinstance(when, dict) or not _s(payload.get("title")):
-            return False, "refused: a schedule needs a title and a when ({\"daily\": \"07:30\"} / {\"weekly\": \"mon 07:30\"} / {\"once\": \"2026-10-12 09:00\"} / {\"every_hours\": 4}).", payload
+            return False, "refused: a schedule needs a title and a when ({\"daily\": \"07:30\"} / {\"weekly\": \"mon 07:30\"} / {\"once\": \"2026-10-12 09:00\"} / {\"every_hours\": 4} / {\"on\": \"card|approved|declined|done|failed|grant|work\", \"match\": \"words\"}).", payload
         if not (_s(payload.get("say")) or _s(payload.get("prompt"))):
             return False, "refused: a schedule needs `say` (fixed text) or `prompt` (what to look up each time).", payload
         try:
@@ -369,13 +447,40 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
                 return False, "refused: that `when` never comes due; check the format.", payload
         except Exception as e:  # noqa: BLE001
             return False, f"refused: bad `when` ({str(e)[:80]}).", payload
+        if _s(payload.get("space")):
+            if not routines.team_space(payload["space"])[0]:
+                return False, "refused: I don't see that team space; give its name as it shows in Chat.", payload
+            if not _s(payload.get("say")):
+                return False, "refused: a team space schedule posts fixed `say` text, addressed by name (\"Name, ...\").", payload
         payload.setdefault("to", person.get("key", "both"))
+        if "on" in when and not (_s(payload.get("say")) or _s(payload.get("prompt"))).strip():
+            return False, "refused: an event schedule needs `say` (what to tell them; what happened is added by code).", payload
         return True, f"accepted: scheduled after this reply ({routines.describe(when)}). Say it in one clause.", payload
     if kind == "unschedule":
+        import routines
         sid = _s(payload.get("id"))
-        if not re.fullmatch(r"s\d+", sid):
-            return False, "refused: name the schedule id (s2) from YOUR SCHEDULES.", payload
-        return True, f"accepted: {sid} stops after this reply.", {"id": sid}
+        r = routines.find(sid)
+        if not r:
+            return False, "refused: no active schedule by that id or title; use one from YOUR SCHEDULES.", payload
+        return True, f"accepted: {r['id']} ({r.get('title', '')}) stops after this reply.", {"id": r["id"]}
+    if kind == "reschedule":
+        import routines
+        r = routines.find(_s(payload.get("id")))
+        if not r:
+            return False, "refused: no active schedule by that id or title; use one from YOUR SCHEDULES.", payload
+        ch = {k: payload.get(k) for k in ("when", "to", "say", "prompt", "until") if payload.get(k) not in (None, "")}
+        if "when" in ch:
+            if not isinstance(ch["when"], dict):
+                return False, "refused: when must be {\"daily\": \"07:30\"} / {\"weekly\": \"mon 07:30\"} / {\"once\": \"2026-10-12 09:00\"} / {\"every_hours\": 4}.", payload
+            try:
+                from datetime import datetime
+                if routines.next_due(ch["when"], datetime.now()) is None:
+                    return False, "refused: that `when` never comes due; check the format.", payload
+            except Exception as e:  # noqa: BLE001
+                return False, f"refused: bad `when` ({str(e)[:80]}).", payload
+        if not ch:
+            return False, "refused: say what changes: when, to, say, prompt or until.", payload
+        return True, f"accepted: {r['id']} ({r.get('title', '')}) is changed after this reply ({', '.join(ch)}). Say it in one clause.", dict(ch, id=r["id"])
     if kind == "switch":
         import switches
         j = switches.find(_s(payload.get("job")))
@@ -405,12 +510,13 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         if not _s(payload.get("title")) or not _s(payload.get("start")):
             return False, "refused: an event needs a title and a start (YYYY-MM-DD HH:MM, or YYYY-MM-DD with all_day).", payload
         if not google_api.accounts_of(owner):
-            return False, f"refused: {owner}'s Google calendar is not connected (the Setup page has the button). Say so in one line; do not say it is on the calendar.", payload
+            return False, f"refused: {owner}'s Google calendar is not connected (they can say 'connect my calendar' and its card comes up in chat). Say so in one line; do not say it is on the calendar.", payload
         payload["calendar"] = owner
         return True, f"accepted: it goes on {owner}'s calendar right after this reply. Say it in one clause, as something you've put on.", payload
     if kind in ("event_change", "event_remove"):
         import actions
-        found, why = actions.find_made_event(_s(payload.get("match")), _s(payload.get("date") or payload.get("start")))
+        found, why = actions.find_made_event(_s(payload.get("match")), _s(payload.get("date") or (payload.get("start") if kind == "event_remove" else "")),
+                                               _s(payload.get("start")))
         if not found:
             return False, "refused: " + why, payload
         return True, f"accepted: '{found['title']}' ({found['when']}) is {'changed' if kind == 'event_change' else 'removed'} after this reply.", payload
@@ -501,6 +607,23 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         # needing the tap, so a stray "send it" about something else can never fire it.
         qid = _s(payload.get("qid")) or _s(t.get("card"))
         skip = payload.get("skip") is True or _s(payload.get("skip")).lower() == "true"
+        if payload.get("resend") is True or _s(payload.get("resend")).lower() == "true":
+            # "I don't see the text was sent" / "the send from phone now button is not working either" (the owner 2026-11-06):
+            # a text only lined up on the phone is never closed as done on its say-so; the same card comes back as a
+            # fresh send card for their tap, and a copy still waiting in the outbox is pulled first so it never goes twice
+            uq, utk, ust = unconfirmed_text(qid if re.fullmatch(r"q[0-9a-f]{12}", qid) else "")
+            if not uq:
+                return False, ("refused: no approved text here is still unconfirmed (it went, was answered, or there are "
+                               "several; name the card id)."), payload
+            cm = cards_mod()
+            head = _s(((cm._read(cm.DONE / f"{uq}.json") or {}).get("questions") or [{}])[0].get("header")) or "the text card"
+            return True, (f"accepted: '{head}' comes back in this thread as a fresh send card for their tap"
+                          + ("; the copy still waiting for the phone is pulled first, so it goes only once" if ust == "ready" else "")
+                          + f". Also give them this link to open on the phone, which runs the send shortcut: {phone_run_url()}. "
+                            "Say it in two short lines; never say the text was sent."), \
+                   {"qid": uq, "reopen": True, "resend": True, "recall": utk.get("id") if ust == "ready" else "",
+                    "why": f"the text was {'still waiting for the phone' if ust == 'ready' else 'not confirmed by the phone'}",
+                    "words": _s(payload.get("words"))[:200]}
         if not re.fullmatch(r"q[0-9a-f]{12}", qid) and not skip:
             qid, _ = failed_send()
         if not re.fullmatch(r"q[0-9a-f]{12}", qid) and not skip:
@@ -565,8 +688,22 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         when = f"it goes out at {es.when_text(at)}, not before" if at else "it goes out right after this reply (30 s undo)"
         if hold:
             when += ", and only if nothing came in from them by then (code checks their texts, mail and client service first)"
-        return True, (f"accepted: '{head}' is approved on their words; {when}. Say that in one clause; never repeat the message text "
-                      "and never say they have to tap."), {"qid": qid, "at": at, "hold_if_reply": hold, "words": _s(payload.get("words"))[:200]}
+        # grant types (scripts/policy.py, 2026-11-08): "always" / "until" in their words make the yes stand; the policy
+        # refuses it for a send, money or a login and the card is still answered once
+        always = payload.get("always") is True or _s(payload.get("always")).lower() == "true"
+        until = _s(payload.get("until"))
+        grant = "always" if always else ("until" if until else "")
+        stands = ""
+        if grant:
+            import policy
+            if grant not in policy.grant_scopes(q, _s(q.get("lane"))):
+                stands = " This kind always needs a tap, so it is approved this once only (say so in a few words)."
+                grant, until = "", ""
+            else:
+                stands = " Their yes stands for later cards like it" + (f" until {until}" if until else "") + " (say so in a few words; /undo takes it back)."
+        return True, (f"accepted: '{head}' is approved on their words; {when}.{stands} Say that in one clause; never repeat the message text "
+                      "and never say they have to tap."), {"qid": qid, "at": at, "hold_if_reply": hold, "words": _s(payload.get("words"))[:200],
+                                                           "grant": grant, "until": until}
     if kind == "card_revise":
         qid = _s(payload.get("qid")) or _s(t.get("card"))
         new = _s(payload.get("text") or payload.get("revise"))
@@ -612,6 +749,68 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
     if kind == "project":
         return _validate_project(payload, person)
     return False, f"refused: unknown deed {kind!r}.", payload
+
+
+def _validate_money(payload: dict) -> tuple:
+    """The money talk's deeds, checked against the ledger before the model says anything (brief.py)."""
+    sys.path.insert(0, str(core.VAULT / "assistant" / "scripts" / "money"))
+    try:
+        import brief
+    except Exception as e:  # noqa: BLE001
+        return False, f"refused: the money records are not readable right now ({type(e).__name__}).", payload
+    op = _s(payload.get("op")).lower()
+    if op not in MONEY_OPS:
+        return False, f"refused: op must be one of {', '.join(MONEY_OPS)}.", payload
+    out = {"op": op}
+    if op == "history":                     # read only: what a card owed back then and every charge since (2026-11-08)
+        h = brief.history(_s(payload.get("account")), int(brief._amt(payload.get("days")) or 30))
+        if not h["ok"]:
+            return False, f"refused: {h['line']}", payload
+        return True, ("accepted, read only (nothing changes): the ledger says\n" + h["line"] + "\nAnswer from these figures in a few plain "
+                      "sentences: then and now, the biggest charges that explain the rise, which already sit in business envelopes. "
+                      "If a charge has no envelope, ask which one it is."), out
+    if op == "bills":                       # read only: the bills coming due, how each is known, balance against them (2026-11-09)
+        h = brief.bills(int(brief._amt(payload.get("days")) or 0))
+        if not h["ok"]:
+            return False, f"refused: {h['line']}", payload
+        return True, ("accepted, read only (nothing changes): the forecast says\n" + h["line"] + "\nAnswer from these figures: "
+                      "say plainly whether a bill they ask about is really due (and that the date is predicted from past charges), "
+                      "then the breakdown per account, balance against bills. Never 'I can't move money' to a question."), out
+    if op == "place":
+        g = brief.resolve_merchant(_s(payload.get("merchant")))
+        env = brief.resolve_envelope(_s(payload.get("envelope")))
+        if not g:
+            return False, f"refused: I don't see an unplaced merchant like '{_s(payload.get('merchant'))[:40]}'; use the name as MONEY QUESTIONS shows it.", payload
+        if not env or env == "ready":
+            return False, f"refused: no envelope called '{_s(payload.get('envelope'))[:40]}'; use a name from MONEY's envelope names.", payload
+        out.update({"merchant": g["merchant"], "envelope": env})
+        return True, f"accepted: every charge from {str(g['example'].get('description') or g['merchant'])[:40]} ({g['n']} so far) goes to that envelope from now on, applied when your reply posts. Say it in one clause.", out
+    if op == "target":
+        env, amt = brief.resolve_envelope(_s(payload.get("envelope"))), brief._amt(payload.get("amount"))
+        if not env or env == "ready" or amt is None:
+            return False, "refused: a target needs an envelope name from MONEY and a monthly amount.", payload
+        out.update({"envelope": env, "amount": amt})
+        return True, f"accepted: that envelope's monthly target becomes {amt:,.0f}. Say it in one clause.", out
+    if op in ("move", "assign", "cover"):
+        dst = brief.resolve_envelope(_s(payload.get("to") or payload.get("envelope")))
+        src = brief.resolve_envelope(_s(payload.get("from") or "ready")) or ""
+        if not dst or dst == "ready":
+            return False, "refused: name the envelope the money goes to (a name from MONEY).", payload
+        if _s(payload.get("from")) and not src:
+            return False, f"refused: no envelope called '{_s(payload.get('from'))[:40]}' to take from.", payload
+        out.update({"to": dst, "from": src or "ready"})
+        if op != "cover":
+            amt = brief._amt(payload.get("amount"))
+            if amt is None:
+                return False, "refused: a move needs the amount.", payload
+            out["amount"] = amt
+        return True, "accepted: the envelopes change when your reply posts. Say it in one clause.", out
+    if op == "reconciled":
+        return True, "accepted: today's bank balances become the baseline for every account. Say it in one clause.", out
+    if op == "fund":
+        out["side"] = _s(payload.get("side")).lower()
+        return True, "accepted: the envelopes are refilled to their targets when your reply posts. Say it in one clause.", out
+    return False, "refused: unknown money op.", payload
 
 
 def _validate_project(payload: dict, person: dict) -> tuple:

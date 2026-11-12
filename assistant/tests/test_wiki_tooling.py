@@ -138,6 +138,53 @@ check("the UserPromptSubmit hook stays silent (valid JSON, exit 0) without the p
 rc, out, err = run(["scripts/semantic.py", "status"], env_extra=env)
 check("status answers without an index and without the packages", rc == 0 and "no index built yet" in out, out + err)
 
+# ---------------------------------------------------------------- semantic.py in a git worktree copy: one index, one lock (the main vault's)
+import importlib.util
+wt = TMP / "wt_copy"
+(wt / "scripts").mkdir(parents=True)
+shutil.copy2(VAULT / "scripts" / "semantic.py", wt / "scripts" / "semantic.py")
+(TMP / ".git" / "worktrees" / "wt_copy").mkdir(parents=True)
+(wt / ".git").write_text(f"gitdir: {(TMP / '.git' / 'worktrees' / 'wt_copy').as_posix()}\n", encoding="utf-8")
+
+
+def _sem_vault(path):
+    spec = importlib.util.spec_from_file_location(f"sem_{abs(hash(str(path)))}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+m = _sem_vault(wt / "scripts" / "semantic.py")
+check("a worktree copy of semantic.py builds into the main vault's index and waits on its build lock",
+      m.VAULT.resolve() == TMP.resolve() and m.BUILD_LOCK.resolve() == (TMP / "scripts" / ".semantic_store" / "build.lock").resolve(), str(m.VAULT))
+m = _sem_vault(TMP / "scripts" / "semantic.py")
+check("a plain checkout's semantic.py keeps its own folder", m.VAULT.resolve() == TMP.resolve(), str(m.VAULT))
+
+# ---------------------------------------------------------------- semantic build: a few threads, never every core (ported 2026-11-10)
+calls = []
+
+
+class _FakeTE:
+    def __init__(self, model_name, **kw):
+        calls.append(kw)
+        if "threads" in kw and len(calls) == 1 and getattr(_FakeTE, "old", False):
+            raise TypeError("unexpected keyword 'threads'")
+
+
+fake_fe = type(sys)("fastembed")
+fake_fe.TextEmbedding = _FakeTE
+sys.modules["fastembed"] = fake_fe
+m.get_model(threads=m.BUILD_THREADS)
+check("the build's embedder gets a capped thread count (2..4), not every core",
+      2 <= m.BUILD_THREADS <= 4 and calls == [{"threads": m.BUILD_THREADS}], str(calls))
+calls.clear(); _FakeTE.old = True
+m.get_model(threads=3)
+check("an older fastembed without `threads` still loads the model", calls == [{"threads": 3}, {}], str(calls))
+calls.clear(); _FakeTE.old = False
+m.get_model()
+check("a search (no thread cap asked) loads the model as before", calls == [{}], str(calls))
+del sys.modules["fastembed"]
+
 print()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}", f"({TMP})")
 if not FAILS:

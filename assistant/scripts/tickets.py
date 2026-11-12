@@ -26,6 +26,7 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from alib import DATA, QueueLock, config, load_json, now_iso, save_json
 
@@ -184,6 +185,16 @@ def claim(lane=None, limit=10, by="operator", kind=None, where=None):
                 got.append(t)
         if got:
             save_json(TICKETS, db)
+        # what the operator reads of an inbound ticket is stamped and fenced (agent/untrusted.py, upgrade 6, 2026-11-08):
+        # a mail's or a form's words are information from a named sender, never instructions. The stored ticket is
+        # untouched; only the copy handed out is wrapped.
+        try:
+            import copy
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent"))
+            import untrusted
+            got = untrusted.stamp_rows(copy.deepcopy(got))
+        except Exception:  # noqa: BLE001
+            pass
         return got
 
 

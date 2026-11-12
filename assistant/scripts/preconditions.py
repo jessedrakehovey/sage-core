@@ -34,6 +34,18 @@ sys.path.insert(0, str(HERE))
 from alib import DATA, VAULT, load_json  # noqa: E402
 import crm
 
+# the verdict vocabulary is the neutral core's (assistant/agent/preconditions.py, Seed D 2026-11-01): loaded by
+# path because that module shares this file's name; the four words are the same if the core is ever missing
+try:
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location("agent_preconditions", HERE.parent / "agent" / "preconditions.py")
+    _core = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_core)
+    SATISFIED, OPEN, UNKNOWN, MOOT, VERDICTS = _core.SATISFIED, _core.OPEN, _core.UNKNOWN, _core.MOOT, _core.VERDICTS
+except Exception:  # noqa: BLE001
+    SATISFIED, OPEN, UNKNOWN, MOOT = "satisfied", "open", "unknown", "moot"
+    VERDICTS = (SATISFIED, OPEN, UNKNOWN, MOOT)
+
 PROJECTS = Path(os.environ.get("WV_PROJECT_STATE") or (VAULT / "scripts" / "projects" / "project_state.json"))
 COUPLES = VAULT / "Wiki" / "Couples"
 TERMINAL = {"cancelled", "lost", "archived", "delivered"}
@@ -170,9 +182,10 @@ def check(spec: dict | str, unit: str) -> tuple:
     if not p:
         return "unknown", f"no ledger entry for {unit!r}"
     try:
-        return fn(unit, p, **spec)
+        v, d = fn(unit, p, **spec)
+        return (v, d) if v in VERDICTS else (UNKNOWN, f"{name} gave no verdict: {v!r}")
     except Exception as e:  # noqa: BLE001
-        return "unknown", f"{name} failed: {type(e).__name__}: {str(e)[:100]}"
+        return UNKNOWN, f"{name} failed: {type(e).__name__}: {str(e)[:100]}"
 
 
 def main() -> int:

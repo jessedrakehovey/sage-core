@@ -76,6 +76,31 @@ def repeat_greeting(text: str, to: str) -> list:
              "fix": "Already wrote to them today%s. Open with the point, not a second greeting." % ((" at " + when) if when else "")}]
 
 
+def _forbid_match(rule: dict, text: str):
+    """First match of a forbid rule whose SENTENCE is not covered by one of the rule's optional `allow`
+    regexes (ported 2026-11-05 from the property OS, 4.3 C): a forbid can spare a required disclosure
+    without loosening its pattern."""
+    allow = rule.get("allow") or []
+    for m in re.finditer(rule["pattern"], text, re.I | re.M):
+        if not allow:
+            return m
+        a = max(text.rfind(x, 0, m.start()) for x in (". ", "\n", "! ", "? "))
+        ends = [i for i in (text.find(x, m.end()) for x in (". ", "\n", "! ", "? ")) if i != -1]
+        sentence = text[a + 1 if a >= 0 else 0:min(ends) if ends else len(text)]
+        if not any(re.search(rx, sentence, re.I) for rx in allow):
+            return m
+    return None
+
+
+_SIGNATURE_RE = re.compile(r"\n\s*(?:best regards|regards|thank you,|thanks,|sincerely|best,|warm regards|kind regards)\b.*$",
+                           re.I | re.S)
+
+
+def body_words(text: str) -> int:
+    """Words in an email body with the signature block cut off (boilerplate, not a sentence to shorten)."""
+    return len(_SIGNATURE_RE.sub("", str(text or "")).split())
+
+
 def lint(text: str, audience: str, channel: str, enforcing: bool = False, rules: dict | None = None, to: str = "") -> list:
     rules = rules or load_rules()
     text = str(text or "")
@@ -86,7 +111,7 @@ def lint(text: str, audience: str, channel: str, enforcing: bool = False, rules:
             continue
         kind = r.get("kind", "forbid")
         if kind == "forbid":
-            m = re.search(r["pattern"], text, re.I | re.M)
+            m = _forbid_match(r, text)
             if m:
                 out.append({"rule": r["id"], "severity": r["severity"], "match": m.group(0).strip(), "fix": r["fix"]})
         elif kind == "needs_any":
@@ -106,8 +131,8 @@ def lint(text: str, audience: str, channel: str, enforcing: bool = False, rules:
                         "fix": "Shorten. Keep only what they need to act on."})
     else:
         cap = int(lim.get("email_words", 0))
-        if cap and len(text.split()) > cap:
-            out.append({"rule": "too-long", "severity": "warn", "match": "%d words (cap %d)" % (len(text.split()), cap),
+        if cap and body_words(text) > cap:
+            out.append({"rule": "too-long", "severity": "warn", "match": "%d words before the signature (cap %d)" % (body_words(text), cap),
                         "fix": "Shorten. Facts and one ask."})
     return out
 

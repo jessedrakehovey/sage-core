@@ -176,9 +176,8 @@ box = {"items": []}
 hand(ago(6))
 pb.save_json(pb.OUTBOX, box)
 found = [f for f in sentinels.collect() if f["key"].startswith("phone:")]
-ok(len(found) == 1 and found[0].get("once") is True and "never confirms sends" in found[0]["text"] and "Shortcuts" in found[0]["text"],
-   "the phone finding names the missing ack step on the phone and is marked once")
-ok("/".join(ago(6)[5:10].split("-")) in found[0]["text"] or ago(6)[:10] == time.strftime("%Y-%m-%d"), "a text handed on another day carries its date")
+ok(not [f for f in found if f["key"] != "phone:wakeup"],
+   "a text handed to the iPhone is treated as sent: no 'never confirmed, check Messages' finding (owner1 2026-10-18)")
 sentinels.LATCH.parent.mkdir(parents=True, exist_ok=True)
 sentinels.save_json(sentinels.LATCH, {})
 import tickets
@@ -222,14 +221,16 @@ mem["facts"].append({"fact": "As of Oct 14, 2026, the CRM's Google Calendar sync
 ok(sentinels._resolved(cal_t), "the calendar-sync item is dropped once memory records the sync on")
 ok(not sentinels._resolved({"id": "x", "title": "Sloane edit waiting on review"}), "an unrelated staged ticket is never dropped")
 nt = sentinels._no_terminal("staged 5d: the AcmeCRM connector is down, re-auth in a terminal with /mcp")
-ok("terminal" not in nt and "/mcp" not in nt and "Setup on Mission Control" in nt and nt.startswith("staged 5d: the AcmeCRM connector is down"), nt)
+ok("terminal" not in nt and "/mcp" not in nt and "say 'set it up' in chat" in nt and nt.startswith("staged 5d: the AcmeCRM connector is down"), nt)
 nt = sentinels._no_terminal("scheduled task 'X' failed its last run (exit 1) - check its log in ~/.claude/")
-ok(nt.startswith("scheduled task 'X' failed its last run (exit 1) - open Setup"), nt)
+ok(nt.startswith("scheduled task 'X' failed its last run (exit 1) - say 'set it up'"), nt)
+nt = sentinels._no_terminal("mail sensor down. Fix (owner1): python assistant/scripts/setup_creds.py mail x")
+ok(nt == "mail sensor down - say 'set it up' in chat and its card comes up", f"no dangling 'Fix (owner1)' left behind: {nt}")
 ok(sentinels._no_terminal("card open 40h unanswered") == "card open 40h unanswered", "a plain line is left alone")
 feed["items"] = [{"key": "sensor:mail:x", "text": "mail sensor down. Fix (owner1): python assistant/scripts/setup_creds.py mail x"}]
 sentinels.run()
 dig = [c for c in cards.pending() if "mail sensor" in str(c.get("question") or "")]
-ok(dig and "python" not in dig[-1]["question"] and "Setup" in dig[-1]["question"],
+ok(dig and "python" not in dig[-1]["question"] and "Fix (" not in dig[-1]["question"] and "set it up" in dig[-1]["question"],
    "the sentinel card carries no command line (WP2: a card by code, not a digest ticket)")
 
 # ---------------------------------------------------------------- 6. imports and refusals

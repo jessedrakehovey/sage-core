@@ -123,6 +123,8 @@ def accounts_of(person_key: str) -> list:
 
 
 def _creds(name: str):
+    import clock
+    clock.install()
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     # scopes=None: the token is loaded with the scopes stored in its file (what was granted), so

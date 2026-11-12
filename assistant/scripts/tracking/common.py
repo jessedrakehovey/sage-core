@@ -69,7 +69,28 @@ def lanes() -> list:
 
 def owner_for(lane: str, c: dict | None = None) -> str:
     ch = (c or cfg())["chase"]
-    return str((ch.get("lane_owner") or {}).get(lane) or ch.get("default_owner") or "owner1")
+    return str((ch.get("lane_owner") or {}).get(lane) or ch.get("default_owner") or primary_owner())
+
+
+_OWNERS: dict | None = None
+
+
+def owners() -> dict:
+    """{key: first name} of the organization's owners (assistant/agent/people.json, role owner), in file order: the
+    first is the primary owner, whose items carry no name in a plan; another owner's items carry theirs."""
+    global _OWNERS
+    if _OWNERS is None:
+        try:
+            d = json.loads((ROOT / "agent" / "people.json").read_text(encoding="utf-8-sig"))
+            _OWNERS = {str(k): (str(u.get("name") or k).split() or [str(k)])[0]
+                       for k, u in (d.get("users") or {}).items() if str(u.get("role") or "owner") == "owner"}
+        except (OSError, ValueError, AttributeError):
+            _OWNERS = {}
+    return _OWNERS
+
+
+def primary_owner() -> str:
+    return next(iter(owners()), "owner")
 
 
 def now_local() -> datetime:

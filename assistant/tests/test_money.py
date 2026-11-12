@@ -53,6 +53,10 @@ LEARN_MD = TMP / "learnings_money.md"
 
 # ------------------------------------------------------------------ config
 c = C.cfg()
+c["categorize"]["weekly_card"] = True                 # the organization's money.json switches the forms off (money talk); the engine tests them
+c["categorize"]["bulk_card"] = True
+c["budget"]["fund_card"] = True
+c["reconcile"]["card"] = True
 c["categorize"]["learn_to"] = str(LEARN_MD.relative_to(C.VAULT)) if str(LEARN_MD).startswith(str(C.VAULT)) else str(LEARN_MD)
 _cfg_orig = C.cfg
 C.cfg = lambda: c
@@ -234,6 +238,55 @@ ft2 = forecast.tick(now=NOW + timedelta(hours=1))
 check("warnings latched, follow-ups deduped", ft2["posted"] == 0 and len([i for i in fu.load_state()["items"].values() if i["step"] == "bill-due"]) == len(bd), ft2)
 ft3 = forecast.tick(now=datetime(2026, 10, 16, 23, 30), dry=True)
 check("dry-run posts nothing", ft3["posted"] >= 0 and C.state().get("warned"))
+
+# merchant classes (2026-11-01): the Nov 1 feed raised price cards on Costco, Trader Joe's and Amazon. the owner: "You might
+# be counting one time purchases as reoccurring." Only a subscription or bill is recurring or can say "price went up".
+NOV1 = date(2026, 11, 1)
+
+
+def series(desc, aid, start, every, amts, bucket=""):
+    return {f"{desc}-{aid}-{i}": {"id": f"{desc}-{aid}-{i}", "account_id": aid, "description": desc, "amount": -a, "pending": False,
+                                  "posted": (start + timedelta(days=every * i)).isoformat(), "bucket": bucket}
+            for i, a in enumerate(amts)}
+
+
+led2 = {"accounts": {"sofi": {"name": "Checking", "kind": "personal"}, "cc": {"name": "Card", "kind": "card"}}, "transactions": {}}
+for desc, aid, start, every, amts, bucket in (
+        ("Costco", "sofi", date(2026, 2, 1), 30, [22.7, 140.1, 15.2, 61.0, 22.7, 9.5, 33.3, 22.7, 18.0, 86.48], ""),
+        ("Trader Joe's", "sofi", date(2026, 10, 4), 7, [41.05, 38.2, 44.9, 47.08], "personal:groceries"),
+        ("Amazon", "sofi", date(2026, 2, 1), 30, [7.97, 31.5, 7.97, 3.2, 12.0, 7.97, 25.4, 7.97, 14.95], ""),
+        ("COX", "sofi", date(2026, 4, 1), 30, [50.0, 31.24, 31.24, 31.24, 193.12], ""),
+        ("Southern California Edison", "sofi", date(2026, 1, 21), 28, [31.29, 46.17, 42.57, 51.72], "personal:utilities"),
+        ("Blue Apron", "cc", date(2026, 7, 15), 7, [258.29, 255.43, 319.52], ""),
+        ("Barbara", "sofi", date(2026, 1, 3), 7, [15.0, 9.0, 16.0, 16.0, 10.0, 11.0, 8.0, 6.0, 16.0], ""),
+        ("Payment to card ending in 0670", "sofi", date(2026, 7, 1), 30, [500.0, 500.0, 500.0, 650.0], "")):
+    led2["transactions"].update(series(desc, aid, start, every, amts, bucket))
+jumps = {b["merchant"] for b in forecast.recurring(led2, c, NOV1) if b["jump"]}
+check("Costco, Trader Joe's and Amazon raise no price card (variable shopping)", not jumps & {"Costco", "Trader Joe'S", "Amazon"}, jumps)
+check("Cox, Edison, Blue Apron and Barbara still do", {"Cox", "Southern California Edison", "Blue Apron", "Barbara"} <= jumps, jumps)
+cls = {k: forecast.merchant_class(k, [t for t in led2["transactions"].values() if C.merchant_key(t["description"]) == k], c)[0]
+       for k in ("costco", "trader joe's", "amazon", "cox", "barbara", C.merchant_key("Payment to card ending in 0670"))}
+check("classes: stores by name and bucket, bills by bucket and steady amounts, own-card payment a transfer",
+      cls == {"costco": "stores", "trader joe's": "stores", "amazon": "stores", "cox": "bill", "barbara": "bill", C.merchant_key("Payment to card ending in 0670"): "transfer"}, cls)
+check("an own-card payment is never a recurring bill", not any(b["merchant"].startswith("Payment") for b in forecast.recurring(led2, c, NOV1)))
+led3 = {"accounts": {"x": {"name": "X"}}, "transactions": series("Meat Stall", "x", date(2026, 8, 1), 7, [9.12, 50.0, 11.2, 33.4, 21.2, 40.0])}
+check("a steady interval with wild amounts is not a bill", not forecast.recurring(led3, c, NOV1))
+led4 = {"accounts": {"x": {"name": "X"}}, "transactions": {"t1": {"id": "t1", "account_id": "x", "description": "Payment to card ending in 0670",
+                                                                   "amount": -500.0, "posted": "2026-10-01", "bucket": ""}}}
+categorize.apply(led4, c=c)
+check("categorize: an unmatched own-card payment is a transfer, never spending", led4["transactions"]["t1"]["bucket"] == "transfer")
+import contextlib, io  # noqa: E401,E402
+_buf = io.StringIO()
+with contextlib.redirect_stdout(_buf):
+    forecast.post_warnings([w for w in forecast.warnings(forecast.recurring(led2, c, NOV1), led2, c, NOV1) if w["kind"] == "price_jump"][:1],
+                           {}, c, datetime(2026, 11, 1, 10, 0), True)
+check("the price card offers 'Not a bill'", forecast.NOT_A_BILL in _buf.getvalue(), _buf.getvalue()[:300])
+st4 = {"jump_cards": {"qcox": {"merchant_key": "cox", "ts": time.time()}, "qold": {"merchant_key": "barbara", "ts": time.time()}}}
+n4 = forecast.harvest(st4, [{"qid": "qcox", "option": forecast.NOT_A_BILL}, {"qid": "qold", "option": "Keep (Recommended)"}])
+check("the owner's 'Not a bill' overrides the class; 'Keep' changes nothing",
+      n4 == 1 and C.rules()["merchant_classes"] == {"cox": "other"} and not st4["jump_cards"], (n4, C.rules().get("merchant_classes")))
+check("after 'Not a bill' Cox raises no card", "Cox" not in {b["merchant"] for b in forecast.recurring(led2, c, NOV1) if b["jump"]})
+check("repo money_rules.json has no merchant_classes written by the test", "merchant_classes" not in json.loads(RULES_SRC.read_text(encoding="utf-8-sig")))
 
 
 # ------------------------------------------------------------------ quarterly math

@@ -111,8 +111,8 @@ ok(len(POSTS) == 1 and PATCHES and "4411" in PATCHES[-1][1], "a second report on
 
 # ---------------------------------------------------------------- 5. honest timing copy
 ok("about 36 s" in chat_push.goes_out_line("imessage_send", hour=12) and "phone" in chat_push.goes_out_line("imessage_send", hour=12), "a text says about 36 s to the phone")
-ok("within 10 minutes" in chat_push.goes_out_line("email_send", hour=12) and "overnight" in chat_push.goes_out_line("email_send", hour=12), "an email says the next pass, within 10 minutes, held overnight")
-ok("Held until 7:00 AM" in chat_push.goes_out_line("imessage_send", hour=22) and "phone" in chat_push.goes_out_line("imessage_send", hour=22), "a text tapped at night says it is held until 7:00 AM (owner1 2026-10-24)")
+ok("within 10 minutes" in chat_push.goes_out_line("email_send", hour=12) and "overnight" not in chat_push.goes_out_line("email_send", hour=12), "an email says the next pass, within 10 minutes (an approved send is not held overnight)")
+ok("Held until" not in chat_push.goes_out_line("imessage_send", hour=22) and "phone" in chat_push.goes_out_line("imessage_send", hour=22), "a text tapped at night goes to the phone, not held until morning (the owner, 2026-11-08)")
 ok("35 s" not in chat_push.goes_out_line("acme_note"), "nothing says 35 s any more")
 
 # ---------------------------------------------------------------- 6. notes: new lines while a job runs, capped, in the thread (2026-10-28)

@@ -174,6 +174,20 @@ check("harvest: Handled / Remind me / Drop it land in the ledger", n == 3 and st
       and st["items"]["fu:f1"]["status"] == "snoozed" and st["items"]["fu:f1"].get("snooze_until") and st["items"]["card:qold"]["status"] == "dropped", st)
 check("harvest is idempotent", chase.harvest(st, answers=[{"qid": "qa", "option": "Handled (Recommended)", "ts": "x"}]) == 0)
 
+# a typed postpone with an "until" snoozes the item to that day (example's chaser, br-6a443d97)
+check("postpone: 'until November' resumes 11/1", chase.postpone_resume("Postpone checking in on this until November", "2026-10-28T09:00:00") == "2026-11-01")
+check("postpone: 'until 11/5' resumes 11/5", chase.postpone_resume("hold off on it until 11/5", "2026-10-28T09:00:00") == "2026-11-05")
+check("postpone: a month already past means next year", chase.postpone_resume("don't ask until march", "2026-10-28T09:00:00") == "2027-03-01")
+check("postpone: no 'until' or a plain tap is not a postpone", chase.postpone_resume("postpone it", "2026-10-28") == "" and chase.postpone_resume("remind me tomorrow") == "")
+st = {"items": {"ticket:tk1": {"kind": "ticket", "lane": "wedding", "sends": 2, "status": "awaiting", "qid": "qp"}}, "lane_day": {}}
+chase.harvest(st, answers=[{"qid": "qp", "option": "Other", "text": "Postpone checking in on this until November", "ts": "2026-10-28T09:00:00"}])
+it = st["items"]["ticket:tk1"]
+check("postpone: the typed answer snoozes the item until 11/1 08:00 with a fresh count",
+      it["status"] == "snoozed" and it["snooze_until"] == "2026-11-01 08:00" and it["sends"] == 0, it)
+check("postpone: not asked again before that day", chase.pick(st, cands, "wedding", datetime(2026, 10, 30, 9, 0), c["chase"]) is None
+      or chase.pick(st, cands, "wedding", datetime(2026, 10, 30, 9, 0), c["chase"])["key"] != "ticket:tk1")
+check("postpone: asked again once the day comes", (chase.pick(st, cands, "wedding", datetime(2026, 11, 1, 9, 0), c["chase"]) or {}).get("key") == "ticket:tk1")
+
 # the card a chase posts
 q = chase._question(cands[0], {"sends": 1})
 check("nudge card: header, lane, advice, chase_of, four buttons led by a recommended action",

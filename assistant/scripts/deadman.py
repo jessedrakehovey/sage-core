@@ -245,7 +245,7 @@ def tick(dry: bool = False, now: datetime | None = None) -> dict:
             continue
         what = CHECKS.get(name, {}).get("what", name)
         text = (f"Heads up: {what} has stopped: {res[name]['why']}. Nothing on that path is happening until it is back. "
-                f"Open Setup on Mission Control (System) to restart it, or say 'run the day spine' / 'restart the bridge' here.")
+                f"Say 'run the day spine' or 'restart the bridge' here and I restart it.")
         if name == "disk":
             text = f"Heads up: {res[name]['why']}; sends and ingests will start failing. Free some space on that drive."
         how = tell(text, dry)

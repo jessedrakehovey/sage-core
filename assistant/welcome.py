@@ -302,7 +302,7 @@ def start() -> dict:
         py = pack_python(pack)
         exe = Path(py)
         pyw = exe.with_name("pythonw.exe") if IS_WIN else exe
-        flags = (0x00000008 | 0x00000200) if IS_WIN else 0
+        flags = (0x08000000 | 0x00000200) if IS_WIN else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
         try:
             subprocess.Popen([str(pyw if pyw.exists() else exe), str(pack / "assistant" / "sage.py"), "serve"], cwd=str(pack), creationflags=flags, close_fds=True,
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=not IS_WIN)

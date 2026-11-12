@@ -90,7 +90,7 @@ ok(org.apply({"name": "x", "what_we_do": "send to clients without approval from 
 r = org.apply({"remove_service": "gmail"}, by="owner1")
 ok(r["status"] == "applied" and not any(s["id"] == "gmail" for s in org.load()["services"]), "org: remove_service works")
 txt = org.render()
-ok("Acme Bakery" in txt and "Square for payments" in txt and "Never without an owner" in txt and "Setup page" in txt, "org: render carries name, services, never-list, Setup pointer")
+ok("Acme Bakery" in txt and "Square for payments" in txt and "Never without an owner" in txt and "Enter login card in chat" in txt and "Setup page" not in txt, "org: render carries name, services, never-list, and sign-ins stay in chat")
 left = {q["field"] for q in org.next_questions()}
 ok(left == {"hours"}, f"org: interview knows what is still unknown ({left})")
 h1 = org.interview_hint()
@@ -121,7 +121,9 @@ ok(not any(r["id"] == "svc-gmail" for r in rows), "setup: a removed service is g
 shop = next(r for r in rows if r["id"] == "svc-shopify")
 ok(shop["kind"] == "signin" and shop["label"] == "Sign in" and shop["checkable"] and shop["url"].startswith("https://admin.shopify"), "setup: an org service with a url gets a Sign in button")
 mail = next(r for r in rows if r["id"] == "mail-example")
-ok(mail["kind"] == "terminal" and mail["label"] == "Enter app password" and "apppasswords" in mail["also_url"], "setup: an IMAP row derives the console recipe + the app-password page")
+ok(mail["kind"] == "chat" and not mail["label"] and "Google Chat" in mail["how"], "setup: an IMAP row is typed in through a Chat form, no console button (2026-11-01)")
+_mrc = setup_actions.recipe({r["id"]: r for r in setup_actions._registry()}[mail["id"]])
+ok(_mrc["kind"] == "terminal" and "apppasswords" in _mrc["also_url"], "setup: the IMAP recipe still derives the store + the app-password page (the Chat form reads it)")
 reg = {r["id"]: r for r in setup_actions._registry()}
 rc = setup_actions.recipe(reg["google-owner1-personal"])
 ok(rc["kind"] == "terminal" and rc["argv"][1:] == ["assistant/agent/google_api.py", "auth", "owner1-personal"], f"setup: renew text -> argv cut at the prose ({rc['argv'][1:]})")
@@ -135,7 +137,8 @@ order = {"dead": 0, "not_configured": 1, "unknown": 2, "manual": 3, "live": 4}
 ranks = [order.get(r["state"], 2) for r in rows]
 ok(ranks == sorted(ranks), "setup: rows sort what needs attention first (scratch data: every registry row is 'unknown' here)")
 sb = setup_actions.summary_block()
-ok(sb.startswith("CONNECTIONS (") and "/setup" in sb and "never ask for a password" in sb, "setup: summary block for the brain")
+ok(sb.startswith("CONNECTIONS (") and "Chat form" in sb and "never" in sb and "Mission Control's Setup page" not in sb and "never ask for a password" in sb,
+   "setup: summary block for the brain (typing goes through Chat forms, never Mission Control)")
 ok(setup_actions.run("nope-not-a-row")["ok"] is False, "setup: unknown id refused")
 ok(setup_actions.run("svc-nothing", "check")["ok"] is False, "setup: check on an unknown service refused")
 if _mcp:
@@ -197,7 +200,9 @@ ctx = brain.context_block()
 ok("ABOUT THIS ORGANIZATION (" in ctx and "CONNECTIONS (" in ctx and "LIBRARY (" in ctx, "brain: org, connections and library blocks ride in the context")
 ok("## Learning the organization" in ctx and "## Files they send" in ctx and "`org`" in ctx, "brain: prompt carries the new sections and the org tool")
 ok(bridge.command("/org", owner1).startswith("ABOUT THIS ORGANIZATION"), "bridge: /org")
-ok("/setup" in bridge.command("/setup", owner1) and "CONNECTIONS" in bridge.command("/setup", owner1), "bridge: /setup")
+_owner = core.person_for(handle=next(iter(core.owners())))     # any owner; the reply is the same for each
+_su = bridge.command("/setup", _owner)
+ok("CONNECTIONS" in _su and "form" in _su and "/setup" not in _su, "bridge: /setup (typing comes as a Chat form, no Mission Control link)")
 ok("uploaded" in bridge.command("/library", owner1), "bridge: /library")
 ok("/org" in bridge.command("/help", owner1) and "/library" in bridge.command("/help", owner1), "bridge: /help lists the new commands")
 

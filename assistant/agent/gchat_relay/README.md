@@ -61,6 +61,49 @@ Google side (owner's account, owner3@example.invalid; the script lives in the ow
 6. Tap a button on a Sage card: Mission Control log shows `gchat event via relay` then
    `click answer q…`, and the card turns into the answer with Undo.
 
+## Leased events and the ack: a lost poll loses nothing (2026-11-04)
+
+the owner tapped a setup button and Chat said "Unable to process request"; Mission Control never saw the tap. The
+poller's read had timed out while Apps Script was slow (it happens a few hundred times a day), and `popEvents_`
+had already REMOVED the events it was handing over, so the tap was gone for good and the relay's reply for an
+unknown function was `{}`. Now `poll` LEASES events (`lease_<id>`, LEASE_S = 12 s) and the PC posts `op=ack` with
+the ids once Mission Control took them (`relay_poll.py`, which also keeps `data/agent/relay_seen.json` so an event
+handed over twice runs once); an un-acked event comes back on the next poll. The poller's read timeout dropped to
+30 s. And every function has an optimistic reply: a setup button (`form_action`) shows "Got it, my computer is
+picking this up" (Mission Control then puts the real working card up by REST when the late tap arrives), a form
+dialog closes with "got it", `form_open` says busy. Deployed as add-on version 8 and web app version 10 (the web
+app deployment carries `doGet`/`doPost`, so it must be redeployed too: `chat_console.py deploy` does both).
+
+The second "Unable to process request" the same day was simpler: Apps Script's execution log said
+`Script function not found: form_action`. The add-on runtime dispatches a tap to the function NAMED in the button,
+and `form_open` / `form_submit` / `form_action` (chat_forms.py, 2026-11-01) had never been added to this file. Added,
+add-on version 11. `tests/test_home_tab.py` now checks that every button function the PC's cards use is defined
+here, so a new button name cannot ship without its relay function again. The executions page
+(`script.google.com/home/projects/<id>/executions`) is the first place to look when Chat says that line.
+
+## The Home tab and the registered commands (2026-11-04, Phase 2 of the desk window)
+
+`Code.gs` gained `onAppHome` (the Home tab asks for its card) and `home_action` (every chip and button on
+that card), both stamped and relayed like a tap; `slim_` now forwards `chat.appCommandPayload` (a registered
+slash or quick command) and `onAppCommand` stamps itself. The PC answers all three from `scripts/home_tab.py`
+with no model: `gchat_events.home_open` returns RenderActions `pushCard`, `home_click` returns `updateCard`
+(or `updateMessageAction` when the same card was posted into a space by a command), `command_event`
+answers `/desk /jobs /approvals /watch /stop /login /settings /help` with a card message and hands any
+other registered command to the brain as a plain message. While the PC is slow the relay shows a
+"slow to answer, tap Desk again" card (never held: NEVER_HELD_).
+
+To turn it on: **tap "Set up the Home tab" in chat** (say "set up the home tab"; connection `chat-home`,
+setup kind `job`). `scripts/chat_console.py` then does the Google clicks in the agent's own browser:
+`deploy` pastes `Code.gs` into the Apps Script project (the Monaco model, not keystrokes) and deploys a
+new version of the add-on deployment; `configure` ticks **Support App Home**, sets its trigger to
+`onAppHome`, adds every row of `home_tab.COMMANDS` that is missing (ids 1-8 slash, 11-14 quick) and
+saves. Idempotent. When Google re-asks the owner's password (the console does, every few hours) the run
+stops with NEEDS_SIGNIN, puts the browser on the PC screen at that page (Control PC shows it from a
+phone) and the card says to sign in there and tap again. Never types a password. `sage doctor` row
+"chat home tab" reads `data/chat_console_state.json`. By hand: `<wedding-web venv> assistant/scripts/chat_console.py all`.
+Done here on 2026-11-04 (add-on version 7, App Home on, 12 commands). In the Sage DM: the **Home** tab
+shows the desk; the ⚡ menu shows the quick commands; `/desk` answers with the same card in the conversation.
+
 ## Edit & send (2026-10-06)
 
 Every card whose approve would send text (email body, iMessage body, note) carries an
@@ -112,3 +155,13 @@ Deploying v5 (owner's account): paste `Code.gs` over the old code, add the scope
 `https://www.googleapis.com/auth/script.scriptapp` to `appsscript.json` (already in the copy
 here), Deploy → Manage deployments → pencil → New version → Deploy (same ID), then run
 `installFlushTrigger` once in the editor and accept the permission prompt.
+
+## 2026-11-04: no error of the relay's own ever reaches Chat
+
+"Unable to process request" on a tap that then went through anyway was the script lock: `waitLock` throws when another run
+holds it too long, and the exception became Chat's own error. The queue now takes its lock with `lock_()` (`tryLock`, never
+throws; a run that cannot get it goes on without it), and `relay_()` catches everything and answers with the same reply as
+when the computer is slow. `LEASE_S` is 12 s (a poll whose answer was lost no longer keeps a tap past Chat's wait). The
+poller (`scripts/relay_poll.py`) waits 8 s per request instead of 30, asks again at once after a dropped poll, handles each
+event on its own thread so the next poll is never kept waiting, and runs 56 s of every minute (it covers the next minute
+too when a hand-over made it outlast its own).

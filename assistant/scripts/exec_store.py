@@ -10,7 +10,7 @@ Zero-LLM, stdlib-only. Never sends anything itself.
 
 Kinds (whitelist):
   email_send     {from, to, subject, body, cc?, in_reply_to?, references?}  lane email   OUTBOUND
-  imessage_send  {account, to, body}                                       lane phone   OUTBOUND
+  imessage_send  {account, to, body, group?, chat_id?}                     lane phone   OUTBOUND
                  (handed to owner's iPhone outbox by phone_bridge.py; the phone's Shortcut sends it)
   calendar_hold  {title, date, time?, duration_min?, note?}                lane local   (own calendar, nobody notified)
   ads_apply      {proposal_id, total, steps[{op, target, amount?, desc}]}  lane ads     (Meta budget moves + pauses only)
@@ -183,6 +183,33 @@ def due(t: dict, now=None) -> bool:
     nb = str(t.get("not_before") or "")
     return not nb or nb <= (now or datetime.now()).strftime(_NB_FMT)
 
+
+def owner_approved(t: dict) -> bool:
+    """True for a ticket an owner approved on a card (their tap, or their words in the card's thread). A standing
+    send (no card, payload.standing) is never one: nobody chose this minute for it."""
+    t = t or {}
+    return str(t.get("approval_ref") or "").startswith("card:") and not (t.get("payload") or {}).get("standing")
+
+
+def quiet_holds(t: dict, now=None) -> bool:
+    """Do quiet hours hold this outbound ticket right now? An owner's approval is the say on timing: what they
+    approved on a card goes at any hour (2026-11-08: a text tapped at 9:55 PM went at 7:00 AM, after the owner had
+    said twice it must not wait). Quiet hours hold only what goes out by itself. config.json -> exec.quiet_holds_approved
+    true brings the old hold back for an organization that wants it."""
+    from datetime import datetime
+    h = (now or datetime.now()).hour
+    return (h >= QUIET_START or h < QUIET_END) and not quiet_exempt(t)
+
+
+def quiet_exempt(t: dict) -> bool:
+    """An owner-approved ticket is not held by quiet hours (unless the organization turned the hold back on)."""
+    if not owner_approved(t):
+        return False
+    try:
+        return not (_alib().config().get("exec") or {}).get("quiet_holds_approved")
+    except Exception:  # noqa: BLE001
+        return True
+
 # The only identities this OS may ever send from. A other-business.invalid address can
 # never appear here (the owner 2026-09-28: "WE CAN NEVER LET THAT EMAIL CROSS OVER").
 
@@ -271,6 +298,17 @@ def validate_payload(kind: str, payload: dict) -> str:
         import phone_bridge
         if not phone_bridge.valid_handle(str(payload["to"])):
             return "imessage_send 'to' must be one phone number (+1XXXXXXXXXX) or one iMessage email"
+        if payload.get("group") or payload.get("chat_id"):
+            # a reply into a group chat (2026-10-08): only from a phone whose Shortcut can address one, never
+            # quietly turned into a one-on-one text; the sender is one of the members
+            if not phone_bridge.group_send_ok(str(payload.get("account") or "").strip().lower()):
+                return ("imessage_send: this phone can't text into a group chat yet; drop group/chat_id and say on the "
+                        "card that the reply goes to the person alone")
+            members = payload.get("group") or []
+            if not isinstance(members, list) or not all(phone_bridge.valid_handle(str(h)) for h in members):
+                return "imessage_send 'group' must be a list of phone numbers / iMessage emails"
+            if members and phone_bridge.norm_handle(payload["to"]) not in [phone_bridge.norm_handle(h) for h in members]:
+                return "imessage_send 'to' must be one of the group's members"
     if kind == "sheet_set":
         return _validate_sheet_set(payload)
     if kind == "agent_run":
@@ -420,9 +458,66 @@ class _LedgerLock:
                 pass
 
 
-def ledger(event: str, **fields):
-    """Append one hash-chained link. Fail-open: a ledger error never blocks a ticket."""
+# ------------------------------------------------------------------ who started it (upgrade 4, 2026-11-08)
+# Every ledger row says what KIND of actor set the action off, so an audit is one grep: owner (a person's tap or
+# words), staff (a team member's ask), schedule (the spine, a routine, the dream, a sweep), inbound (a mail, a form,
+# a text that arrived), standing (a grant or a graduated class answering by code), system (the machinery itself).
+INITIATORS = ("owner", "staff", "schedule", "inbound", "standing", "system")
+_SCHEDULE_SCRIPTS = {"spine", "drain", "digest", "routines", "dream", "followups", "outcomes", "sentinels", "graduation", "reflex",
+                     "send_hold", "client_texts", "comms_state", "projects", "learn", "heartbeat", "deadman", "startup", "builds_requeue"}
+_INBOUND_SCRIPTS = {"mail", "form_ingest", "sense_typeform", "sense_local", "sense_editor", "comms_probe", "triage_next", "phone_bridge",
+                    "gchat_events", "relay_poll"}                # ... and any pack's own "<something>_ingest" script
+_initiator = threading.local()
+
+
+def set_initiator(kind: str) -> None:
+    """The actor kind for the ledger rows this THREAD writes next ('' clears). brain.ask sets owner / staff per turn;
+    routines.tick and the spine set schedule; the env SAGE_INITIATOR covers a whole process (the spine's jobs)."""
+    _initiator.kind = kind if kind in INITIATORS else ""
+
+
+def initiator_kind(by: str = "") -> str:
+    """The actor kind of a ledger row: an explicit `by` wins (a person's key -> their role; policy:* -> standing),
+    then the thread's set_initiator, then the process env, then the running script's name."""
+    b = re.sub(r"^gchat:|:chat.*$|\s*\(.*$", "", str(by or "").strip().lower())
+    if b:
+        if b.startswith(("policy", "standing", "graduation")):
+            return "standing"
+        if b in ("drain", "code", "spine", "sweep", "cards.sweep", "digest", "reflex", "dream"):
+            return "schedule" if b in ("spine", "sweep", "cards.sweep", "digest", "dream") else "system"
+        try:
+            users = (_people().get("users") or {})
+            u = users.get(b)
+            if u is None:
+                u = next((v for v in users.values() if b in {str(e).lower() for e in (v.get("emails") or [])}), None)
+            if isinstance(u, dict):
+                return "owner" if str(u.get("role") or "owner") == "owner" else "staff"
+        except Exception:  # noqa: BLE001
+            pass
+    k = getattr(_initiator, "kind", "")
+    if k in INITIATORS:
+        return k
+    env = str(os.environ.get("SAGE_INITIATOR") or "").strip().lower()
+    if env in INITIATORS:
+        return env
     try:
+        import sys as _sys
+        script = Path(_sys.argv[0]).stem.lower()
+    except Exception:  # noqa: BLE001
+        script = ""
+    if script in _SCHEDULE_SCRIPTS:
+        return "schedule"
+    if script in _INBOUND_SCRIPTS or script.endswith("_ingest"):
+        return "inbound"
+    return "system"
+
+
+def ledger(event: str, **fields):
+    """Append one hash-chained link. Fail-open: a ledger error never blocks a ticket. Every row carries
+    `initiator` (initiator_kind) unless the caller set it."""
+    try:
+        if "initiator" not in fields:
+            fields["initiator"] = initiator_kind(str(fields.get("by") or fields.get("approved_by") or ""))
         with _LedgerLock():       # read-prev + append must be one step across processes, or the chain forks
             prev = _last_ledger_hash()
             row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **fields, "prev": prev}
@@ -461,6 +556,8 @@ def _outbound_target(kind, payload):
         return f"email|{to}|{payload.get('in_reply_to') or subj}"
     if kind == "imessage_send":
         import phone_bridge
+        if payload.get("group") or payload.get("chat_id"):     # a group reply is its own conversation, not the sender's
+            return f"imsg|group|{payload.get('chat_id') or ','.join(sorted(phone_bridge.norm_handle(h) for h in payload.get('group') or []))}"
         return f"imsg|{phone_bridge.norm_handle(payload.get('to'))}"
     if _alib() is not None:
         return str(_alib().plugin_call("outbound_target", kind, payload) or "")
@@ -498,6 +595,15 @@ def recent_done_by_payload_sha(kind, payload, days=30.0):
 
 
 # ------------------------------------------------------------------ mint / status
+def boot_id() -> str:
+    """A stamp that changes when the machine restarts (the clock minus the monotonic clock, to the ten seconds). A
+    ticket left 'running' by a drain that was on a different boot cannot still be running (upgrade 5, 2026-11-08)."""
+    try:
+        return str(int((time.time() - time.monotonic()) // 10))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def enqueue(kind: str, payload: dict, approved_by: str, approval_ref: str, resend_ok: bool = False,
             not_before: str = "") -> dict:
     """Create ONE ticket for ONE approved action. Hard-refuses without provenance. `not_before`

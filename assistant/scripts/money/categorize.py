@@ -16,6 +16,13 @@ the lesson in assistant/learnings/money.md. Zero LLM anywhere.
   python assistant/scripts/money/categorize.py --dry-run  # print what would be posted, write nothing
   python assistant/scripts/money/categorize.py --force    # post the card now (still once per week)
   python assistant/scripts/money/categorize.py unknowns   # list the unplaced rows
+  python assistant/scripts/money/categorize.py bulk       # the merchant-level card now (--dry-run to print it)
+
+The bulk card (2026-11-02): when a backlog of unplaced rows repeats the same merchants, ONE card lists the
+top merchants (count, total, an example line) instead of single transactions; one typed answer per merchant
+becomes the learned rule that places every row of that merchant, past and future. Posted by the tick when at
+least categorize.bulk_min_merchants merchants have bulk_min_count or more unplaced rows, latched
+bulk_latch_days; answered through the same harvest as the weekly card.
 """
 from __future__ import annotations
 
@@ -114,6 +121,10 @@ def apply(led: dict, r: dict | None = None, c: dict | None = None, only_unplaced
             if t.get("bucket") != hit["bucket"] or t.get("rule_id") != hit.get("id"):
                 placed += 1
             t.update({"bucket": hit["bucket"], "bucket_src": "learned" if hit.get("learned") else "rule", "rule_id": str(hit.get("id") or "")})
+        elif not t.get("bucket") and C.is_transfer(t.get("description"), c):
+            # a card payment, a round-up, an online transfer: own money moving, never spending (2026-11-01)
+            t.update({"bucket": "transfer", "bucket_src": "transfer", "rule_id": ""})
+            placed += 1
         elif not t.get("bucket"):
             t.update({"bucket": "", "bucket_src": "none", "rule_id": ""})
     placed += pair_transfers(led, int(c["categorize"].get("transfer_window_days") or 3))
@@ -156,6 +167,75 @@ def card(led: dict, c: dict | None = None) -> tuple:
          "options": [{"label": "Placed in this thread (Recommended)", "description": "I typed the numbers and buckets below"},
                      {"label": "Skip this week", "description": "the same rows come back next Friday"}]}
     return q, [{"txn_id": t["id"], "description": t.get("description", ""), "amount": t["amount"]} for t in rows]
+
+
+BULK_HEADER = "Money: place the repeat merchants"
+
+
+def bulk_rows(led: dict, c: dict | None = None, r: dict | None = None) -> list:
+    """Unplaced merchants with at least bulk_min_count rows, most rows first:
+    [{merchant, n, total, example (a txn), accounts}]."""
+    c = c or C.cfg()
+    k = c["categorize"]
+    groups = {}
+    for t in led["transactions"].values():
+        if t.get("bucket") or t.get("pending") or C.is_transfer(t.get("description") or "", c):
+            continue
+        key = C.merchant_key(t.get("description") or "")
+        if not key:
+            continue
+        g = groups.setdefault(key, {"merchant": key, "n": 0, "total": 0.0, "example": t, "accounts": set()})
+        g["n"] += 1
+        g["total"] += float(t.get("amount") or 0)
+        g["accounts"].add(str((led["accounts"].get(t.get("account_id")) or {}).get("name") or "")[:18])
+    rows = [g for g in groups.values() if g["n"] >= int(k.get("bulk_min_count") or 3)]
+    rows.sort(key=lambda g: (-g["n"], g["merchant"]))
+    return rows[:int(k.get("bulk_max_rows") or 30)]
+
+
+def bulk_card(led: dict, c: dict | None = None, r: dict | None = None) -> tuple:
+    """(question, rows) for the merchant-level card, or (None, []) when the backlog is small."""
+    c = c or C.cfg()
+    r = r or C.rules()
+    rows = bulk_rows(led, c, r)
+    if len(rows) < int(c["categorize"].get("bulk_min_merchants") or 8):
+        return None, []
+    n_txn = sum(g["n"] for g in rows)
+    keys = sorted(k for k in r["buckets"] if not k.startswith("_"))
+    lines = [f"{i}. {g['example'].get('description', '')[:32]}  {g['n']} rows  {C.money(g['total'])}  ({', '.join(sorted(g['accounts']))[:40]})"
+             for i, g in enumerate(rows, 1)]
+    q = {"header": BULK_HEADER, "lane": "money",
+         "question": f"{len(rows)} merchants cover {n_txn} of the transactions nobody has placed. One word each places all of them, now and "
+                     f"from here on: reply like \"1 groceries, 2 shopping, 3 skip\" (skip = ask again later; ignore = never count it). The numbered list is in the details.",
+         "details": "\n".join(lines) + "\n\nBuckets: " + ", ".join(keys),
+         "advice": f"💡 Type the placements: every envelope target and the Schedule C totals wait on these {n_txn} rows; nothing here moves money.",
+         "options": [{"label": "Placed in this thread (Recommended)", "description": "I typed the numbers and buckets below"},
+                     {"label": "Skip for now", "description": "the same merchants come back in two weeks"}]}
+    return q, [{"txn_id": g["example"]["id"], "description": g["example"].get("description", ""), "amount": g["example"].get("amount"), "merchant": g["merchant"], "n": g["n"]} for g in rows]
+
+
+def post_bulk(led: dict, st: dict, c: dict, now, dry: bool, force: bool) -> str:
+    """The bulk card when due (latched categorize.bulk_latch_days). Returns the qid or ''."""
+    k = c["categorize"]
+    if not k.get("bulk_card", True) and not force:
+        return ""
+    if not force and time.time() - float(st.get("bulk_ts") or 0) < int(k.get("bulk_latch_days") or 14) * 86400:
+        return ""
+    q, rows = bulk_card(led, c)
+    if not q:
+        return ""
+    if dry:
+        print("WOULD POST CARD " + json.dumps(q, ensure_ascii=False)[:2500])
+        return "dry"
+    import cards
+    res = cards.post([q], owner="money.categorize", lane="money")
+    if res.get("posted"):
+        st.setdefault("unknowns_cards", {})[res["qid"]] = {"ts": time.time(), "rows": rows, "bulk": True}
+        st["bulk_ts"] = time.time()
+        C.log("bulk_card", qid=res["qid"], rows=len(rows), txns=sum(x["n"] for x in rows))
+        return res["qid"]
+    C.log("bulk_refused", reason=str(res.get("reason"))[:200])
+    return ""
 
 
 # ------------------------------------------------------------------ learning from the typed answer
@@ -284,6 +364,8 @@ def harvest(led: dict, st: dict, answers: list | None = None) -> int:
                     if t:
                         t.update({"bucket": bucket, "bucket_src": "manual", "rule_id": ""})
             learned += len(added)
+            if added or pending[qid].get("bulk"):
+                apply(led, C.rules())                   # the new rules place every row of those merchants
             C.log("unknowns_learned", qid=qid, placed=len(placements), rules=len(added), bad=bad)
         elif bad:
             C.log("unknowns_unparsed", qid=qid, bad=bad)
@@ -305,6 +387,8 @@ def tick(now=None, dry: bool = False, force: bool = False) -> dict:
     wk = C.iso_week(now)
     due = force or (C.DOW[now.weekday()] == str(k.get("unknowns_day") or "fri").lower()[:3]
                     and (now.hour, now.minute) >= C.hm(k.get("unknowns_after") or "15:00"))
+    if not k.get("weekly_card", True) and not force:
+        due = False                                     # the money talk asks instead (brief.py)
     if due and st.get("unknowns_week") != wk:
         q, rows = card(led, c)
         if q:
@@ -322,6 +406,7 @@ def tick(now=None, dry: bool = False, force: bool = False) -> dict:
                     C.log("unknowns_refused", reason=str(res.get("reason"))[:200])
         elif not dry:
             st["unknowns_week"] = wk
+    out["bulk_qid"] = post_bulk(led, st, c, now, dry, False)
     if not dry:
         C.save_ledger(led)
         C.save_state(st)
@@ -331,7 +416,7 @@ def tick(now=None, dry: bool = False, force: bool = False) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", nargs="?", default="tick", choices=["tick", "unknowns"])
+    ap.add_argument("cmd", nargs="?", default="tick", choices=["tick", "unknowns", "bulk"])
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
@@ -339,6 +424,15 @@ def main() -> int:
         led = C.ledger()
         for i, t in enumerate(unplaced(led), 1):
             print(_row(i, t, led))
+        return 0
+    if a.cmd == "bulk":
+        led, st = C.ledger(), C.state()
+        apply(led)
+        qid = post_bulk(led, st, C.cfg(), C.now_local(), a.dry_run, True)
+        if not a.dry_run:
+            C.save_ledger(led)
+            C.save_state(st)
+        print("BULK " + json.dumps({"qid": qid}))
         return 0
     tick(dry=a.dry_run, force=a.force)
     return 0

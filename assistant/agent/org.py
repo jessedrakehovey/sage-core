@@ -216,7 +216,7 @@ def render() -> str:
     if o.get("lanes"):
         L.append("- Lanes: " + "; ".join(f"{x['key']}" + (f" = {x['about']}" if x.get("about") else "") for x in o["lanes"]))
     if o.get("services"):
-        L.append("- Services and sites (the Setup page on Mission Control has a Sign in button for each): "
+        L.append("- Services and sites (a sign-in any of them needs is yours to do from your vault; a missing login is an Enter login card in chat): "
                  + "; ".join(f"{s['name']}" + (f" for {s['for']}" if s.get("for") else "") + (f" ({s['url']})" if s.get("url") else "")
                              for s in o["services"]))
     if o.get("duties"):
@@ -240,13 +240,28 @@ def interview_hint(max_per_day: int = 3) -> str:
     at most once a day, and at most `max_per_day` questions a day, so the interview feels like
     conversation, not a form."""
     qs = next_questions()
-    if not qs:
-        return ""
     asked = _asked()
     today = time.strftime("%Y-%m-%d")
     today_n = sum(1 for v in asked.values() if str(v).startswith(today))
     if today_n >= max_per_day:
         return ""
+    if not qs:
+        # the organization's own facts are known: Discovery and Training (assistant/onboarding.py) go on in chat the same
+        # way, one question a turn, each at most once a day (2026-11-03: "easy google chat onboarding")
+        try:
+            sys.path.insert(0, str(core.AGENT.parent))
+            import onboarding
+            hint = onboarding.chat_hint()
+        except Exception:  # noqa: BLE001
+            return ""
+        if not hint:
+            return ""
+        key = "onboarding:" + hint.split('id "', 1)[-1].split('"', 1)[0] + ":" + hint.split('field "', 1)[-1].split('"', 1)[0]
+        if str(asked.get(key, "")).startswith(today):
+            return ""
+        asked[key] = core.stamp()
+        core.save(ASKED, asked)
+        return hint
     for q in qs:
         if str(asked.get(q["field"], "")).startswith(today):
             continue

@@ -8,7 +8,8 @@ stale_followup_days ago and was never consumed. Ranked by advice.score inside ea
 The state machine per item (data/tracking/chase.json):
   awaiting  -> an ask is out; re-asked after reask_hours of silence, at most max_follow_ups times
   answered  -> the owner tapped Handled, Bring it back up or Hand it to Sage (or it cleared on its own)
-  snoozed   -> "Remind me tomorrow": next ask tomorrow, does not count toward max_follow_ups
+  snoozed   -> "Remind me tomorrow": next ask tomorrow, does not count toward max_follow_ups; a typed
+               "postpone / hold off ... until November (or 11/5)" snoozes it to that day instead
   folded    -> max_follow_ups unanswered asks: no more cards; the item is ONE quiet line a day in
                the owner's conversation with the others that folded (example's FOLD_AFTER, 2026-10-16:
                chases had reached 7-9 sends). A tap on its old card still counts; "Remind me
@@ -35,18 +36,73 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import advice  # noqa: E402
 import common as C  # noqa: E402
 import rhythm  # noqa: E402
+sys.path.insert(0, str(C.ROOT / "agent"))
+import causes  # noqa: E402       Seed E: why a stalled chase closed, from the owner's tap only
+import outreach  # noqa: E402     Seed A: every ask carries its channel and whether it was answered
+import preconditions as PC  # noqa: E402   Seed D: the loop reads the record before a step fires
 
 OPT_HANDLED, OPT_TOMORROW, OPT_DROP = "Handled", "Remind me tomorrow", "Drop it"
 OPT_REPOST, OPT_HAND = "Bring it back up (Recommended)", "Hand it to Sage (Recommended)"
+CHAIN_FILE = C.ROOT / "agent" / "chase_chain.json"         # Seed D: the loop as operators the record is read against
+VOCAB_FILE = C.DATA / "cause_vocab.json"                   # Seed E: this organization's labels (the engine default otherwise)
+FOLD_REPEAT_DAYS = 7                                       # the unchanged "still open" list is said again after this long
+CAUSE_MIN_SENDS = 2                                        # a close is "stalled" (worth a why) after two unanswered asks
+CAUSE_HEADER = "Why did it stall"
+_CHAIN = None
+
+
+def chain() -> dict:
+    global _CHAIN
+    if _CHAIN is None:
+        try:
+            _CHAIN = PC.load_chain(str(CHAIN_FILE))
+        except Exception:  # noqa: BLE001
+            _CHAIN = {"chain": "owner-chase", "initial": "waiting", "operators": []}
+    return _CHAIN
+
+
+def vocab() -> dict:
+    return causes.load_vocab(str(VOCAB_FILE) if VOCAB_FILE.exists() else None)
+
+
+def record_of(it: dict, now=None) -> dict:
+    """The chase item as the record Seed D reads: as_of = now (the loop just read the live cards and tickets), the
+    legacy counters as outreach history, a terminal status when the item is closed."""
+    r = dict(it)
+    r["as_of"] = (now or C.now_local()).strftime("%Y-%m-%dT%H:%M")
+    if not r.get("last_sent") and r.get("last_sent_epoch"):          # an older row: only the epoch; the stamps are derived from it
+        try:
+            r["last_sent"] = datetime.fromtimestamp(float(r["last_sent_epoch"])).strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError, OSError):
+            pass
+    if not r.get("first_sent") and r.get("last_sent"):
+        r["first_sent"] = r["last_sent"]
+    if it.get("status") in ("answered", "dropped", "parked"):
+        r["status"] = it["status"]
+    else:
+        r["status"] = "awaiting"
+    return r
+
+
+def reading(it: dict, now=None) -> dict:
+    """Seed D: {verdict, line, operator} for the item now. UNKNOWN never advances (the caller skips and logs it);
+    MOOT means the record says it is over; otherwise the line rides the nudge as its advice."""
+    try:
+        ex = PC.explain(chain(), record_of(it, now), now, terminal_statuses=("answered", "dropped", "parked"))
+        op = ex.get("operator") or {}
+        return {"verdict": str(ex.get("verdict") or "unknown"), "line": str(ex.get("line") or ""), "operator": str(op.get("id") or "")}
+    except Exception as e:  # noqa: BLE001
+        return {"verdict": "unknown", "line": f"the record could not be read ({type(e).__name__})", "operator": ""}
 
 
 def _load() -> dict:
@@ -109,6 +165,38 @@ def candidates(now=None, c: dict | None = None, cards=None, tickets=None, fus=No
 
 
 # ------------------------------------------------------------------ the owner's answers
+# 2026-10-31 (ported from example's chaser, br-6a443d97): a typed "postpone ... until November" was read as a
+# plain reply: the item closed for good, so postponing it was dropping it. A typed postpone / hold-off answer that names a month or
+# m/d snoozes the item until that day (08:00) instead of closing it or bringing it back tomorrow.
+_POSTPONE_RX = re.compile(r"\b(?:postpone|hold off|pause|stop (?:asking|checking|chasing)|"
+                          r"don'?t (?:ask|check|chase))\b.*?\buntil\s+([a-z]+|\d{1,2}/\d{1,2})", re.I | re.S)
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def postpone_resume(text: str, reply_ts: str = "") -> str:
+    """The day chasing resumes (YYYY-MM-DD) named by a typed postpone answer, or ''.
+    "until November" resumes 11/1; "until 11/5" resumes 11/5; a day already past means next year."""
+    m = _POSTPONE_RX.search(str(text or ""))
+    if not m:
+        return ""
+    sent = C.parse_any(reply_ts) or C.now_local()
+    sent = sent.date()
+    w = m.group(1).lower()
+    if "/" in w:
+        mo, d = (int(x) for x in w.split("/"))
+    elif w[:3] in _MONTHS:
+        mo, d = _MONTHS.index(w[:3]) + 1, 1
+    else:
+        return ""
+    try:
+        r = date(sent.year, mo, d)
+        if r <= sent:
+            r = date(sent.year + 1, mo, d)
+    except ValueError:
+        return ""
+    return r.isoformat()
+
+
 def harvest(st: dict, answers: list | None = None) -> int:
     """Read the owner's taps on our own cards; replies are never throttled."""
     answers = answers if answers is not None else C.card_answers(30)
@@ -122,7 +210,12 @@ def harvest(st: dict, answers: list | None = None) -> int:
             continue
         a = by_qid[qid]
         opt = str(a.get("option") or "").strip().lower()
-        if opt.startswith("bring") or opt.startswith("hand it"):
+        resume = postpone_resume(str(a.get("text") or "") or opt, str(a.get("ts") or ""))
+        if resume:
+            it["status"] = "snoozed"
+            it["sends"] = 0
+            it["snooze_until"] = f"{resume} 08:00"
+        elif opt.startswith("bring") or opt.startswith("hand it"):
             it["status"] = "answered"
             _act(key, it)
         elif opt.startswith("handled"):
@@ -139,9 +232,74 @@ def harvest(st: dict, answers: list | None = None) -> int:
         it["answered"] = str(a.get("ts") or "")
         if a.get("text"):
             it["answer_text"] = str(a.get("text"))[:300]
+        outreach.record_reply(it, ts=str(a.get("ts") or "")[:16].replace(" ", "T") or None)     # Seed A: the ask was answered
+        if it["status"] in ("answered", "dropped") and int(it.get("sends") or 0) >= CAUSE_MIN_SENDS and not it.get("cause") and not it.get("cause_qid"):
+            _ask_cause(key, it)                               # Seed E: a stalled chase closed; the owner may say why
         n += 1
         C.log("chase_answer", key=key, option=opt)
+    n += harvest_causes(st, by_qid)
     return n
+
+
+# ------------------------------------------------------------------ Seed E: why it stalled (the owner's tap, never inferred)
+def _ask_cause(key: str, it: dict) -> None:
+    """ONE non-urgent card (the weekly digest) with the vocabulary's labels and Skip; a typed note is a free text."""
+    v = vocab()
+    opts = [{"label": v["words"].get(lb, lb)} for lb in v["labels"]] + [{"label": v["words"].get(v["skip"], "Skip"), "description": "no label"}]
+    q = {"question": f"{str(it.get('title') or key)[:120]}: it took {int(it.get('sends') or 0)} asks. What stalled it?",
+         "header": f"{CAUSE_HEADER} · {it.get('lane') or 'personal'}", "lane": str(it.get("lane") or "personal"),
+         "cause_of": key, "options": opts,
+         "details": "A label here teaches me what tends to stall things; it is never about the people we serve. A typed note works too."}
+    try:
+        import cards
+        r = cards.post([q], str(it.get("owner") or C.owner_for(str(it.get("lane") or "personal"))), lane=str(it.get("lane") or "personal"))
+        if r.get("posted"):
+            it["cause_qid"] = r.get("qid") or ""
+            C.log("chase_cause_asked", key=key, qid=it["cause_qid"])
+    except Exception as e:  # noqa: BLE001
+        C.log("chase_cause_error", key=key, error=f"{type(e).__name__}: {str(e)[:120]}")
+
+
+def _label_for(option: str, v: dict) -> str:
+    o = str(option or "").strip().lower().replace(" (recommended)", "")
+    for lb, words in (v.get("words") or {}).items():
+        if o == str(words).strip().lower():
+            return lb
+    return o if o in v.get("labels", []) or o == v.get("skip") else ""
+
+
+def harvest_causes(st: dict, by_qid: dict) -> int:
+    """The owner's taps (or typed notes) on the cause cards -> causes.label_close on the chase item."""
+    n = 0
+    v = vocab()
+    for key, it in st["items"].items():
+        qid = str(it.get("cause_qid") or "")
+        if not qid or qid not in by_qid or it.get("cause") or it.get("cause_text"):
+            continue
+        a = by_qid[qid]
+        label = _label_for(a.get("option"), v)
+        typed = causes.parse_typed(str(a.get("text") or "")) or str(a.get("text") or "").strip()
+        try:
+            if label:
+                causes.label_close(it, label, "tap", vocab=v)
+            elif typed:
+                causes.label_close(it, typed, "typed", vocab=v)
+            else:
+                continue
+            it["cause_answered"] = str(a.get("ts") or "")
+            n += 1
+            C.log("chase_cause", key=key, cause=it.get("cause") or "", text=bool(it.get("cause_text")))
+        except causes.CauseError as e:
+            it["cause_refused"] = str(e)[:160]
+            C.log("chase_cause_refused", key=key, why=str(e)[:120])
+    return n
+
+
+def cause_coverage() -> dict:
+    """Seed E's read-back over the ledger: how many stalled closes carry a cause (weekly readback)."""
+    st = _load()
+    items = [it for it in st["items"].values() if int(it.get("sends") or 0) >= CAUSE_MIN_SENDS]
+    return causes.coverage(items, vocab(), closed_statuses=("answered", "dropped"))
 
 
 def _drop_item(key: str, it: dict) -> None:
@@ -225,6 +383,16 @@ def pick(st: dict, cands: list, lane: str, now, ch: dict) -> dict | None:
                 overdue.append(x)
             continue
         if time.time() - float(it.get("last_sent_epoch") or 0) >= reask_s:
+            rd = reading(it, now)                 # Seed D: the record before the step
+            if rd["verdict"] == "unknown":
+                C.log("chase_unknown", key=x["key"], why=rd["line"][:120])
+                continue                          # never advance on a record that cannot say
+            if rd["verdict"] == "moot":
+                it["status"] = "answered"
+                it["answered"] = now.strftime("%Y-%m-%d %H:%M") + " (record says it is over)"
+                C.log("chase_moot", key=x["key"], why=rd["line"][:120])
+                continue
+            x["reading"] = rd["line"]
             if int(it.get("sends") or 0) >= int(ch["max_follow_ups"]):
                 # fold, don't park: no more cards, but the item stays in view as one quiet daily
                 # line (folded_line) until park_days pass or the owner answers its old card
@@ -246,9 +414,15 @@ def _question(x: dict, it: dict) -> dict:
     q = f"{lead}{x['title']} has waited {days} day{'s' if days != 1 else ''}."
     if x.get("text") and x["kind"] != "card":
         q += f" {x['text'][:200]}"
+    adv = advice.line(x)
+    if x.get("reading"):                          # Seed D: the chain's plain-words reading of the record
+        adv = (adv + " " if adv else "") + x["reading"]
+    review = outreach.review_line(it, who="you", asker="", min_tries=outreach.MIN_TRIES) if it else ""
+    if review:                                    # Seed A: asks on one channel went unanswered; said, never acted on
+        adv = (adv + " " if adv else "") + review
     return {"question": q, "header": f"Nudge · {x['lane']}", "lane": x["lane"], "chase_of": x["key"],
             "details": x.get("text", "") if x["kind"] == "card" else "",
-            "advice": advice.line(x),
+            "advice": adv,
             "options": [{"label": OPT_REPOST, "description": "I post the card again so it's on top"} if x["kind"] == "card" else
                         {"label": OPT_HAND, "description": "I take it from here; anything that goes out comes back as a card"},
                         {"label": OPT_HANDLED, "description": "it's done or you've dealt with it"},
@@ -294,6 +468,16 @@ def folded_line(st: dict, now, ch: dict) -> dict:
             continue
         items = sorted(items, key=lambda i: i.get("folded_at") or "")[:8]
         names = "; ".join(str(i.get("title") or i.get("kind") or "")[:60] for i in items)
+        # the same list is said ONCE, then again only when it changes or a week has gone by (2026-11-07..10: the
+        # identical eight items every morning for four days)
+        told = (st.setdefault("fold_told", {}).get(owner)) or {}
+        try:
+            fresh = (now - datetime.strptime(str(told.get("day")), "%Y-%m-%d")).days < FOLD_REPEAT_DAYS
+        except (TypeError, ValueError):
+            fresh = False
+        if told.get("names") == names and fresh:
+            continue
+        st["fold_told"][owner] = {"names": names, "day": day}
         n = int(ch["max_follow_ups"])
         out[owner] = (f"Still open, asked {n} times each so I've stopped carding them: {names}. "
                       "Tap the old card when one is handled, or tell me here to drop it.")
@@ -353,6 +537,7 @@ def tick(now=None, dry: bool = False) -> dict:
             it.update({"status": "awaiting", "sends": int(it.get("sends") or 0) + 1, "qid": qid, "last_sent_epoch": time.time(),
                        "last_sent": now.strftime("%Y-%m-%d %H:%M"), "first_sent": it.get("first_sent") or now.strftime("%Y-%m-%d %H:%M"),
                        "owner": C.owner_for(lane, c)})
+            outreach.record_send(it, "card", ts=now.strftime("%Y-%m-%dT%H:%M"))       # Seed A
             it.pop("snooze_until", None)
             st["lane_day"][lane] = {"day": day, "n": n_today + 1}
             posted.append({"lane": lane, "key": x["key"], "qid": qid})
@@ -371,6 +556,7 @@ def tick(now=None, dry: bool = False) -> dict:
                     it.update({"status": "awaiting", "sends": int(it.get("sends") or 0) + 1, "qid": "", "last_sent_epoch": time.time(),
                                "last_sent": now.strftime("%Y-%m-%d %H:%M"), "first_sent": it.get("first_sent") or now.strftime("%Y-%m-%d %H:%M"),
                                "owner": owner})
+                    outreach.record_send(it, "chat", ts=now.strftime("%Y-%m-%dT%H:%M"))   # Seed A
                     it.pop("snooze_until", None)
                     ld = st["lane_day"].get(lane) or {}
                     st["lane_day"][lane] = {"day": day, "n": (int(ld.get("n") or 0) if ld.get("day") == day else 0) + 1}

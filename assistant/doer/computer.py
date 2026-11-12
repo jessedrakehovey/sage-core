@@ -329,8 +329,11 @@ def _finish(t: dict, r: dict, label: str, started: float = 0.0) -> str:
         learned = learn.after_run(t, r, WHERE, started, label)
     except Exception as e:  # noqa: BLE001
         log(f"learn failed: {type(e).__name__}")
-    d.deliver(t, d._say(who, mk or "", arg, t) + evidence_suffix(OUT / tid, mk or "") + (learned if mk in ("DOER_DONE", "DOER_ANSWER") else ""))
+    say = d._say(who, mk or "", arg, t) + evidence_suffix(OUT / tid, mk or "") + (learned if mk in ("DOER_DONE", "DOER_ANSWER") else "")
+    d.deliver(t, say)
+    d._live("finish", tid, mk or "", say if mk != "DOER_CHECKPOINT" else "")
     log(f"ticket {tid}: {mk or 'NO_MARKER'} {arg[:160]}")
+    d._handback(t, mk or "", arg)
     return f"{mk or 'NO_MARKER'}: {arg}"
 
 
@@ -349,10 +352,11 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
     if not d._budget_ok():
         d.set_status(t, "not started: today's limit of doer tasks is used up")
         tickets._transition(tid, "staged", "doer", "budget: today's doer runs are used up; retry tomorrow", {"claimed", "new"})
-        d.deliver(t, f"I have used today's limit of tasks, so {d.job_line(t) or 'this job'} waits. I will pick it up tomorrow, or raise doer.runs_per_day_max.")
+        d.deliver(t, f"I have used today's limit of tasks, so {d.job_line(t) or 'this job'} waits. I will pick it up tomorrow.")
         return "BUDGET"
-    d.set_status(t, "working on the PC", "starting")
     started = time.time()
+    d._live("start", t, "Working on the PC")
+    d.set_status(t, "working on the PC", "starting")
     timeout = int(CCFG.get("turn_timeout_s", CFG.get("turn_timeout_s", 900)))
     r = run_turn(prompt, out_dir, resume=sid, timeout=timeout, env_extra={"DOER_COMPUTER_TICKET": tid})
     if not r.get("ok") and sid and "resume" in (r.get("error") or "").lower():
@@ -419,9 +423,11 @@ def run_approved(payload: dict, dry: bool = False) -> int:
     if mk == "DOER_DONE":
         tickets._transition(tid, "done", "doer", f"approved step done: {arg}"[:500], tickets.OPEN)
         d.deliver(t, d._say(who, mk, arg, t) + evidence_suffix(out_dir, mk or "") + learned)
+        d._handback(t, mk, arg)
         print(f"DOER_RESULT=DOER_DONE: {arg}")
         return 0
     d.deliver(t, d._say(who, mk or "", arg or r.get("error", ""), t))
+    d._handback(t, mk or "", arg or r.get("error", ""))
     print(f"DOER_RESULT={mk or 'NO_MARKER'}: {arg or r.get('error', '')}")
     return 1
 

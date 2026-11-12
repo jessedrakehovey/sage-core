@@ -87,7 +87,8 @@ NICHE_SKILLS = {"ad-scout", "booking-confirmation", "card-ingest", "dashboard", 
 MODULES = {
     "money": {"what": "personal-finance lane: read-only bank feeds (Plaid / SimpleFIN), categorising, forecasts; never pays",
               "files": ["assistant/scripts/money", "assistant/money.json", "assistant/money_rules.json"],
-              "jobs": ["money-pull", "money-pull-plaid", "money-categorize", "money-forecast", "money-quarterly", "money-monthly"]},
+              "jobs": ["money-pull", "money-pull-plaid", "money-categorize", "money-forecast", "money-quarterly", "money-monthly",
+                       "money-budget", "money-reconcile"]},
     "typeform": {"what": "Typeform lead sensor", "files": ["assistant/scripts/sense_typeform.py"], "jobs": ["sense-typeform"]},
 }
 # the organization's own files (relative to the org root): an update never touches these

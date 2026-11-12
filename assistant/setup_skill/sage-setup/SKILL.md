@@ -93,6 +93,20 @@ service account and Pub/Sub; give the owner one link per click that is theirs:
    the Chat app's connection settings, then `python assistant/sage.py relay url <web app url>` and `sage relay check`
    on the PC. That turns `config.json push.buttons` on; until then cards carry their choices as words.
 5. The owner adds the agent to a DM or a space and says hello. `python assistant/agent/gchat.py --test` first.
+   **The start-up sequence takes it from here, in Chat** (`assistant/scripts/startup.py`): the moment the owner adds
+   the agent, ONE card arrives, "Getting set up", with one button. The tap makes the agent do the rest of the Google
+   side itself, in its own browser on the PC: a new version of the relay, the Chat app's Home tab and its slash and
+   quick commands (`chat_console.py`), the shared drive the job cards' pictures live in (`shots_setup.py`). Do NOT do
+   those by hand and do not walk the owner through them. If Google asks the agent to sign in on the way, the card
+   offers **Enter login** (a Chat dialog, saved to the agent's vault) and the sequence carries on by itself; the owner
+   is never sent to the PC. `python assistant/scripts/startup.py status` shows what is left; "finish setting up" in
+   chat brings the card back. A new step for the sequence is a `connections.json` row with `setup.kind: "job"` and
+   `"startup": true`, never a line in this skill.
+   **Do this while the owner is still at the computer:** `python assistant/scripts/elevated.py install`. Windows asks for
+   one administrator approval and the owner says Yes. That registers the agent's administrator helper (a scheduled
+   task that does only the short allow-list in `elevated.py`), which is what lets the agent set up "Control PC"
+   (Chrome Remote Desktop: install, register, set the PIN the owner types in a Chat form) later with nobody at the PC.
+   Skip it and the first Control PC setup has to wait for someone to approve that prompt.
 6. Logins and contacts, from chat, with nothing secret in chat: an owner who says "save my Stripe login" (or pastes a
    password, which is refused and scrubbed by code) gets one card whose **Enter login** button opens a Chat dialog;
    the fields go to the agent's vault on the PC, never into the conversation. A contacts export (.vcf) shared into
@@ -101,7 +115,16 @@ service account and Pub/Sub; give the owner one link per click that is theirs:
 
 ## 5. Discovery, Training, the shadow week, go-live
 
-Now the agent learns the business. Run these with the owner at the keyboard (or in chat once Chat is live):
+Now the agent learns the business, **in Google Chat, on its own** (2026-11-03). The moment Chat is live, the owner's
+first message gets the first onboarding question at the end of the reply: *which of these do you want me to handle?*
+(clients and projects, email, calendar, texts, money, files, team chat, social, automations). That answer is the flow
+chart: whatever they did not pick is never asked about and never set up (no bank feed or budget questions without
+`money`, no CRM, invoice or contract questions without `crm`), and a module feature (money) is switched on or off
+with it. Then one Discovery question a turn for the features they picked, then what the business keeps track of, then
+Training's six fields per lifecycle stage, each at most once a day, answered in their own words ('none' and 'skip'
+count). They can add a feature later by saying so. Nothing below needs a terminal; the commands are the same flow for
+a copilot session or a check:
+
 
 - `python assistant/onboarding.py discover`: one question per business function (leads, CRM, calendar, mail, text,
   payments, contracts, scheduling, files, team chat, accounting, social, automation, banking). The catalog picks
@@ -129,6 +152,19 @@ contract `new_org.py` installed: types, tags and folder routing in machine-read 
 pending sources a night; until then the SessionStart hook says so plainly. Semantic search over the wiki is optional:
 `pip install -r assistant/requirements-semantic.txt` into the interpreter `org.json -> semantic_python` names
 (`sage doctor`, row "semantic search"); without it the keyword search works.
+
+## 5c. What stays outside Chat (the honest boundary)
+
+Everything the agent asks and learns happens in Chat. Three things cannot, because they are not ours: the one-time
+install on the PC (`SageSetup.exe` or this skill's bootstrap, once), the first Google Workspace clicks (a Chat app
+cannot exist without a Workspace, a Cloud project and the owner's own consent screens; section 4, steps 1-4), and the
+owner's own sign-ins (a bank inside Plaid's window, Google's consent page, a login typed once into a Chat dialog).
+Everything after the owner adds the agent in Chat is the agent's: the start-up card (section 4, step 5) does the
+remaining Google-side setup by itself. The rule the owner set (2026-11-04): the agent is **100% inside Google Chat,
+a portal into the PC**. No card, line or prompt may tell an owner to do something at the computer; a sign-in the
+agent meets is the vault's, or an Enter login dialog in Chat; "Control PC" (Chrome Remote Desktop) is a window the
+owner may open, never an instruction. Do not promise a setup with none of the three; promise that after them the
+owner never opens a terminal or Mission Control to teach, connect or approve anything.
 
 ## 6. Hand-off
 

@@ -1,35 +1,23 @@
-"""plaid_wizard.py - connect Relay through Plaid from the phone, in three taps (the owner 2026-10-16:
-"make setting up Plaid stupid simple from inside the Sage chat, completely set up from there").
+"""plaid_wizard.py - connect Relay (and any other bank) through Plaid, entirely in Google Chat.
 
-What the owner does, all from chat: say "set up Plaid" -> Sage answers with the steps and ONE link,
-Mission Control's /setup/plaid page (tailnet HTTPS, phone-sized). That page is a wizard:
-  1. Create your Plaid account   a button to dashboard.plaid.com (Plaid's free tier; the owner's own
-                                 sign-up, email and terms: never done for them)
-  2. Paste the two keys          client id + secret, sent only to this PC over the tailnet and stored
-                                 in Windows Credential Manager; the page verifies them by minting a
-                                 Link token (a setup-only call that returns no bank data)
-  3. Connect Relay               Plaid Link opens right on the phone; the owner signs in to Relay inside
-                                 Plaid's own window; the page hands back only the public token, this
-                                 module exchanges it (plaid.on_public_token), runs the first pull and
-                                 posts "Relay is connected: ..." into the shared chat space. Then
-                                 "Connect another bank" opens Link again for each other bank (2026-10-18).
-Once keys are stored, step 1 is hidden and the chat steps skip it too (connect.py reads status()).
-Phone only, end to end (the owner 2026-10-20: "Your instructions involve using a PC."): direct links to
-Plaid's Keys and API pages, a Paste button on each key box, a Copy button for the redirect address,
-and Re-sign-in on the page for a bank that needs it, so no step points at the PC or a terminal.
-Plaid Link's mobile web flow (2026-10-21): the Link token is minted with this page's own address as
-redirect_uri (banks that sign in on their own site bounce back here), the page keeps that token in
-localStorage and re-opens Link with it + receivedRedirectUri when the bank sends the phone back
-(Plaid requires the SAME token), and when Plaid has not been told the address yet the token is minted
-without it (Relay and other non-OAuth banks still link) and the page shows Copy address + Open API page.
-Long-lived secrets never go through the chat record (that rule stays with connect.py); the page is
-the one place they are typed, and it is the owner's own PC answering.
+History: 2026-10-16 a phone page on Mission Control (/setup/plaid) took the keys and ran Plaid Link. 2026-11-01
+the owner: "i had to use a mission control app for collecting plaid keys. Make all data entry for anything go through
+google chat never mission control." So now (scripts/chat_forms.py posts the cards, gchat_events.py answers them):
+  1. Plaid keys       a Chat card's button opens a dialog with client_id + secret; save_keys() stores both in
+                      Windows Credential Manager and proves them by minting a Link token (setup-only, no bank data);
+                      bad keys are removed again
+  2. Sign in to bank  the next card's button opens Plaid's own Hosted Link page (secure.plaid.com, OAuth banks
+                      included, no redirect address of ours); hosted_start() mints it and a watcher thread reads the
+                      result back (/link/token/get), exchanges the public token, runs the first pull and says in
+                      chat what it sees; the spine job money-plaid-hosted is the safety net. "Another bank" mints a
+                      fresh page; "Re-sign-in" opens one in update mode for a bank that needs it.
+The /setup/plaid address now only says this moved to Chat; status stays readable.
 
-Read-only by construction: everything here goes through plaid.Client (allow-listed paths) and the
-two setup paths are used only inside this flow. Served by mc_server.py (routes /setup/plaid and
-/api/setup/plaid/*) through handle(); nothing else imports this.
+Read-only by construction: everything here goes through plaid.Client (allow-listed paths) and the setup paths
+are used only inside this flow.
 
-  python assistant/scripts/money/plaid_wizard.py status   # what the wizard would show (no network)
+  python assistant/scripts/money/plaid_wizard.py status         # what is stored and linked (no network)
+  python assistant/scripts/money/plaid_wizard.py hosted-check   # finish any bank sign-in done on Plaid's page
 """
 from __future__ import annotations
 
@@ -76,7 +64,7 @@ def mint(client, f: dict, access_token: str = "") -> tuple:
     try:
         tok = plaid.link_token(client, lf, access_token=access_token)
     except plaid.PlaidError as e:
-        if "redirect_uri" not in e.message.lower():
+        if not plaid.redirect_refused(e):
             raise
         lf["redirect_uri"] = ""
         tok = plaid.link_token(client, lf, access_token=access_token)
@@ -139,7 +127,7 @@ def save_keys(client_id: str, secret_: str, opener=None) -> dict:
             plaid.clear_secret(f["secrets"]["client_id"])
             plaid.clear_secret(f["secrets"]["secret"])
             return {"ok": False, "message": f"Plaid rejected those keys ({e.code}). On the Keys page copy the client_id and the {client.env} secret again (tap the eye to show it), then paste both here. Nothing was kept."}
-        if "redirect_uri" in e.message.lower():
+        if plaid.redirect_refused(e):
             return {"ok": True, "message": "Keys stored. Plaid wants this page's address registered first: tap Copy address, tap Open API page, paste it under Allowed redirect URIs and save, then come back and tap Connect Relay.",
                     "warn": "redirect_uri", **_redirect_fix()}
         return {"ok": False, "message": f"Keys stored but Plaid answered {e.code}: {e.message[:120]}"}
@@ -170,7 +158,7 @@ def link_token(opener=None, update_item: str = "") -> dict:
     try:
         tok, oauth = mint(client, f, access_token=access)
     except plaid.PlaidError as e:
-        fix = "redirect_uri" in e.message.lower()
+        fix = plaid.redirect_refused(e)
         hint = " Tap Copy address, tap Open API page, paste it under Allowed redirect URIs and save, then try again." if fix else ""
         return {"ok": False, "message": f"Plaid would not start Link ({e.code}).{hint}", **(_redirect_fix() if fix else {})}
     except (OSError, ValueError) as e:
@@ -229,164 +217,121 @@ def exchange(public_token: str, metadata: dict | None = None, update_item: str =
             "message": f"{inst} is linked. Pulling the first year of transactions now; I'll say what I see in chat. Another bank to add? Tap Connect another bank."}
 
 
+# ------------------------------------------------------------------ Google Chat: Hosted Link (2026-11-01)
+# the owner: "Make all data entry for anything go through google chat never mission control." The keys come in
+# through a Chat dialog (scripts/chat_forms.py) and the bank sign-in is Plaid's own Hosted Link page at
+# secure.plaid.com, opened from a Chat button. Plaid keeps the result; hosted_check() reads it back with
+# /link/token/get, exchanges the public token and says in chat what it sees. A watcher thread checks every
+# few seconds for the first half hour; the spine's money-plaid-hosted job covers the rest of the token's life.
+HOSTED_TTL_S = 4 * 3600          # a link token lives four hours
+WATCH_S, WATCH_EVERY_S = 1800, 10
+
+
+def hosted_start(update_item: str = "", opener=None, watch: bool = True) -> dict:
+    """-> {"ok", "url", "message"}: a fresh Hosted Link for a new bank, or for re-sign-in of update_item."""
+    f = plaid.feed()
+    client = plaid.make_client(f, opener=opener)
+    if client is None:
+        return {"ok": False, "message": "The Plaid keys come first: tap Enter Plaid keys."}
+    access = plaid.secret(f["secrets"]["access_token_prefix"] + update_item) or "" if update_item else ""
+    try:
+        tok, url = plaid.link_token(client, f, access_token=access, hosted=True)
+    except plaid.PlaidError as e:
+        return {"ok": False, "message": f"Plaid would not start the bank sign-in ({e.code}: {e.message[:120]})."}
+    except (OSError, ValueError) as e:
+        return {"ok": False, "message": f"Plaid could not be reached ({type(e).__name__}). Try again in a minute."}
+    st = plaid.state()
+    now = __import__("time").time()
+    st["hosted"] = [h for h in (st.get("hosted") or []) if now - float(h.get("at") or 0) < HOSTED_TTL_S] + \
+                   [{"token": tok, "update": update_item, "at": now}]
+    plaid.save_state(st)
+    C.log("plaid_hosted_started", env=client.env, update=bool(update_item))
+    if watch:
+        threading.Thread(target=_watch, args=(tok,), kwargs={"opener": opener}, daemon=True).start()
+    return {"ok": True, "url": url, "message": "Plaid's sign-in is ready."}
+
+
+def hosted_check(opener=None, post: bool = True, only: str = "") -> dict:
+    """Read back every pending Hosted Link session; exchange what finished. -> {"linked": [...], "pending": n}."""
+    f = plaid.feed()
+    client = plaid.make_client(f, opener=opener)
+    st = plaid.state()
+    pend = list(st.get("hosted") or [])
+    if client is None or not pend:
+        return {"linked": [], "pending": len(pend)}
+    import time as _t
+    now, keep, linked = _t.time(), [], []
+    for h in pend:
+        if only and h.get("token") != only:
+            keep.append(h)
+            continue
+        if now - float(h.get("at") or 0) >= HOSTED_TTL_S:
+            continue
+        try:
+            r = plaid.hosted_results(client, h["token"])
+        except (plaid.PlaidError, OSError, ValueError) as e:
+            C.log("plaid_hosted_check_error", error=f"{type(e).__name__}: {str(e)[:120]}")
+            keep.append(h)
+            continue
+        if h.get("update") and r["done"] and not r["exited"]:
+            plaid.on_public_token(client, f, st, "", {}, h["update"])
+            linked.append({"item_id": h["update"], "update": True})
+            continue
+        for pub, meta in r["public"]:
+            try:
+                x = plaid.on_public_token(client, f, st, pub, meta, "")
+                linked.append(x)
+            except (plaid.PlaidError, AssertionError, ValueError, OSError) as e:
+                C.log("plaid_hosted_exchange_error", error=f"{type(e).__name__}: {str(e)[:120]}")
+        if not r["done"]:
+            keep.append(h)
+    st["hosted"] = keep
+    plaid.save_state(st)
+    if linked:
+        plaid._status(error="", configured=True, items=len(st["items"]))
+        if post:
+            _after_link(opener=opener)
+    return {"linked": linked, "pending": len(keep)}
+
+
+def _watch(tok: str, opener=None) -> None:
+    import time as _t
+    end = _t.time() + WATCH_S
+    while _t.time() < end:
+        _t.sleep(WATCH_EVERY_S)
+        try:
+            r = hosted_check(opener=opener, only=tok)
+            if not any(h.get("token") == tok for h in (plaid.state().get("hosted") or [])) or r["linked"]:
+                return
+        except Exception as e:  # noqa: BLE001
+            C.log("plaid_hosted_watch_error", error=f"{type(e).__name__}: {str(e)[:120]}")
+
+
 # ------------------------------------------------------------------ the page + routing for mc_server
-def page() -> str:
-    return (PAGE.replace("__LINK_JS__", plaid.LINK_JS).replace("__SIGNUP__", SIGNUP).replace("__KEYS__", KEYS_PAGE)
-            .replace("__API__", API))
-
-
 def handle(method: str, path: str, body: dict | None = None, opener=None) -> tuple:
     """-> (http code, body str, content type) or None when the path is not ours."""
-    body = body or {}
+    # 2026-11-01 (the owner: "Make all data entry for anything go through google chat never mission control"): the keys come
+    # in through a Chat dialog (chat_forms.py) and the bank sign-in is Plaid's Hosted Link page, so this page only
+    # points there and its key / link / exchange endpoints are off. status stays: a read, nothing typed.
     if method == "GET" and path in (PAGE_PATH, PAGE_PATH + "/"):
-        return 200, page(), "text/html"
+        return 200, MOVED, "text/html"
     if method == "GET" and path == API + "/status":
         return 200, json.dumps(status(), ensure_ascii=False), "application/json"
-    if method == "GET" and path == API + "/link-token":
-        return 200, json.dumps(link_token(opener=opener, update_item=str(body.get("update") or "")), ensure_ascii=False), "application/json"
-    if method == "POST" and path == API + "/keys":
-        return 200, json.dumps(save_keys(body.get("client_id", ""), body.get("secret", ""), opener=opener), ensure_ascii=False), "application/json"
-    if method == "POST" and path == API + "/exchange":
-        return 200, json.dumps(exchange(body.get("public_token", ""), body.get("metadata") or {}, str(body.get("update") or ""), opener=opener), ensure_ascii=False), "application/json"
+    if path.startswith(API + "/"):
+        return 410, json.dumps({"ok": False, "message": "Plaid is set up in Google Chat now: ask the agent to set up Plaid."}), "application/json"
     return None
 
 
-PAGE = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#050B07"><title>Connect Relay · Plaid</title>
-<style>
-:root{--bg:#050B07;--panel:#0d1610;--ink:#FBFFFA;--mute:#9aa69a;--sage:#4A5C43;--line:#1c2a1f;--bad:#b4453f;--ok:#7fbf6a;--warn:#c9a44a}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 Poppins,system-ui,-apple-system,Segoe UI,sans-serif}
-header{display:flex;align-items:center;gap:10px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:2}
-header h1{font:600 20px "Playfair Display",Georgia,serif;margin:0;flex:1}header a{color:var(--mute);font-size:13px;text-decoration:none;margin-left:10px}
-main{padding:12px 16px 40px;max-width:560px;margin:0 auto}
-.intro{color:var(--mute);font-size:13px;margin:4px 0 14px}
-.step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px;opacity:.55}
-.step.on{opacity:1;border-color:var(--sage)}.step.done{opacity:.8}
-.step h2{font:500 16px inherit;margin:0 0 6px;display:flex;align-items:center;gap:8px}
-.num{width:24px;height:24px;border-radius:50%;background:var(--sage);display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:none}
-.done .num{background:var(--ok);color:#050B07}
-.step p{margin:4px 0 8px;font-size:14px;color:#d8e2d5}
-label{display:block;font-size:12px;color:var(--mute);margin:8px 0 3px}
-input{width:100%;background:#111c14;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px}
-button,a.btn{display:inline-block;background:var(--sage);color:var(--ink);border:0;border-radius:10px;padding:10px 16px;font:500 14px inherit;min-height:40px;text-decoration:none;margin:6px 8px 0 0;cursor:pointer}
-button.sec,a.sec{background:none;border:1px solid var(--line);color:var(--mute)}button:disabled{opacity:.5}
-.res{font-size:13px;margin-top:8px;color:#cfe3c7;white-space:pre-wrap}.res.err{color:#e8a39f}
-.acct{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:6px 0;font-size:14px}
-.foot{color:var(--mute);font-size:12px;margin-top:16px}
-.row{display:flex;gap:6px;align-items:center;min-width:0}.row input{flex:1;min-width:0}.row button{margin:0;flex:none}
-.res,.step p,.foot,.intro{overflow-wrap:anywhere}a{overflow-wrap:anywhere}
-.hint{font-size:13px;color:var(--mute);margin-top:8px}
-@media (max-width:420px){button,a.btn{width:100%;margin:8px 0 0;text-align:center}.row button{width:auto;margin:0}}
-</style></head><body>
-<header><h1>Connect Relay</h1><a href="/setup">Setup</a><a href="/chat">Chat</a></header>
-<main>
-<div class="intro">Read-only. Sage will see balances and transactions; it cannot move money, and your Relay login is typed only inside Plaid's own window.</div>
-
-<div class="step" id="s1"><h2><span class="num">1</span>Create your Plaid account</h2>
-<p>Plaid's free tier. Sign up with your own email, then tap <b>Open Keys page</b>: tap the copy icon next to <b>client_id</b>, come back to this tab and tap Paste in step 2; then the same for the production secret. All on this phone.</p>
-<a class="btn" href="__SIGNUP__" target="_blank" rel="noopener">Open Plaid sign-up</a>
-<a class="btn sec" href="__KEYS__" target="_blank" rel="noopener">Open Keys page</a>
-<button class="sec" onclick="goto(2)">I have an account</button></div>
-
-<div class="step" id="s2"><h2><span class="num">2</span>Paste the two keys</h2>
-<p>They go straight to the PC and into Windows Credential Manager, never into chat.</p>
-<label>client_id</label><div class="row"><input id="cid" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="sec" onclick="pasteInto('cid')">Paste</button></div>
-<label>secret (the <span id="envname">production</span> one)</label><div class="row"><input id="sec" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="sec" onclick="pasteInto('sec')">Paste</button></div>
-<button class="sec" onclick="toggleSecret()">Show secret</button>
-<a class="btn sec" href="__KEYS__" target="_blank" rel="noopener">Open Keys page</a>
-<button id="savekeys" onclick="saveKeys()">Store and verify</button>
-<div class="res" id="r2"></div><div id="fix2"></div></div>
-
-<div class="step" id="s3"><h2><span class="num">3</span>Connect your banks</h2>
-<p>Plaid Link opens here. Pick Relay, sign in there, choose the accounts (Operating, Tax, Savings). Then tap Connect another bank for each other bank; Plaid opens again each time.</p>
-<div class="res" id="linked"></div>
-<button id="link" onclick="openLink('')">Connect Relay</button>
-<button class="sec" id="relink" style="display:none" onclick="openLink(RELINK)">Re-sign-in</button>
-<div class="res" id="r3"></div><div id="fix3"></div><div class="hint" id="oauth"></div>
-<div id="accts"></div></div>
-
-<div class="foot">Something off? Say "plaid" in chat and Sage walks you through it. Keys: <a href="__KEYS__" target="_blank" rel="noopener" style="color:var(--mute)">dashboard.plaid.com</a>.<br>Opened this from Google Chat and Plaid's window will not come back? Tap the compass / "Open in Safari" icon and carry on there.</div>
-</main>
-<script src="__LINK_JS__"></script>
-<script>
-const API = "__API__"; let S = null, RELINK = "";
-function $(id){return document.getElementById(id)}
-function goto(n){ for (let i=1;i<=3;i++){ const d=$("s"+i); d.classList.toggle("on", i===n); d.classList.toggle("done", i<n); } }
-async function pasteInto(id){
-  try { $(id).value = (await navigator.clipboard.readText()).trim(); }
-  catch(e){ $(id).focus(); $("r2").className="res"; $("r2").textContent="Your phone blocked the Paste button: long-press the box and choose Paste."; }
-}
-function toggleSecret(){ const s=$("sec"); s.type = s.type==="password" ? "text" : "password"; }
-function showFix(where, d){
-  const f=$(where); f.innerHTML=""; if (!d || !d.link) return;
-  if (d.copy){ const b=document.createElement("button"); b.className="sec"; b.textContent="Copy address";
-    b.onclick=async()=>{ try{ await navigator.clipboard.writeText(d.copy); b.textContent="Copied"; }catch(e){ window.prompt("Copy this address", d.copy); } }; f.appendChild(b); }
-  const a=document.createElement("a"); a.className="btn"; a.href=d.link; a.target="_blank"; a.rel="noopener"; a.textContent=d.link_label||"Open Plaid"; f.appendChild(a);
-}
-function money(v){ if (v===null||v===undefined) return ""; const n=Number(v); return (n<0?"-$":"$")+Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:0}); }
-async function load(){
-  try { const r = await fetch(API+"/status",{cache:"no-store"}); S = await r.json(); } catch(e){ $("r3").textContent="Could not reach the PC."; return; }
-  $("envname").textContent = S.env || "production";
-  goto(S.step || 1);
-  $("s1").style.display = S.keys ? "none" : "";
-  $("linked").textContent = (S.items && S.items.length) ? "Linked: " + S.items.map(i=>i.institution||"bank").join(", ") : "";
-  const a = $("accts"); a.innerHTML = "";
-  if (S.items && S.items.length){ RELINK = S.relink || S.items[S.items.length-1].item_id; $("relink").style.display="inline-block"; $("link").textContent="Connect another bank"; }
-  for (const x of (S.accounts||[])){ const d=document.createElement("div"); d.className="acct"; d.innerHTML="<span>"+(x.name||"?")+"</span><span>"+money(x.balance)+"</span>"; a.appendChild(d); }
-  if (S.items && S.items.length && !(S.accounts||[]).length) $("r3").textContent = "Linked. The first pull is running; balances appear here in a minute.";
-  if (S.error) { $("r3").textContent = S.error; $("r3").className="res err"; }
-  if (S.keys && S.oauth_ready === false){ $("oauth").textContent = "Banks that sign you in on their own site (Chase, Amex, Capital One...) need this page's address allowed once in Plaid: Copy address, then Open API page, then Allowed redirect URIs. Relay works without it."; showFix("fix3", {link:S.api_page, link_label:"Open API page", copy:S.page_url}); }
-  else $("oauth").textContent = "";
-}
-// Plaid's mobile web flow: a bank that signs you in on its own site sends the phone back to this page
-// with oauth_state_id=...; Link must then re-open with the SAME token, so it is kept here meanwhile.
-const TOK = "plaid_link_token";
-function keepToken(tok, update){ try { localStorage.setItem(TOK, JSON.stringify({tok:tok, update:update||"", at:Date.now()})); } catch(e){} }
-function savedToken(){ try { const d = JSON.parse(localStorage.getItem(TOK)||"null"); return (d && d.tok && Date.now()-d.at < 4*3600*1000) ? d : null; } catch(e){ return null; } }
-function dropToken(){ try { localStorage.removeItem(TOK); } catch(e){} }
-function returning(){ return window.location.href.indexOf("oauth_state_id=")>=0; }
-async function saveKeys(){
-  const b=$("savekeys"), r=$("r2"); b.disabled=true; r.className="res"; r.textContent="Storing and checking with Plaid…";
-  try { const x = await fetch(API+"/keys",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:$("cid").value,secret:$("sec").value})});
-    const d = await x.json(); r.textContent = d.message||(d.ok?"Stored.":"Failed."); r.className = d.ok?"res":"res err"; showFix("fix2", d);
-    if (d.ok){ $("cid").value=""; $("sec").value=""; goto(3); }
-  } catch(e){ r.textContent="Could not reach the PC."; r.className="res err"; }
-  b.disabled=false;
-}
-let handler=null;
-async function openLink(update){
-  const r=$("r3"); r.className="res"; r.textContent="Starting Plaid Link…";
-  let d;
-  const back = returning() ? savedToken() : null;
-  if (back){ d = {ok:true, token:back.tok}; update = back.update || ""; }
-  else {
-    try { const x = await fetch(API+"/link-token"+(update?"?update="+encodeURIComponent(update):""),{cache:"no-store"}); d = await x.json(); }
-    catch(e){ r.textContent="Could not reach the PC."; r.className="res err"; return; }
-    showFix("fix3", d);
-    if (d.ok && d.hint) $("oauth").textContent = d.hint;
-  }
-  if (!d.ok){ r.textContent=d.message||"Plaid would not start."; r.className="res err"; return; }
-  keepToken(d.token, update);
-  const cfg = {token:d.token,
-    onSuccess:function(public_token, metadata){
-      dropToken(); if (returning()) history.replaceState(null, "", window.location.pathname);
-      r.textContent="Linked. Storing the read-only access token on the PC…";
-      fetch(API+"/exchange",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({public_token:public_token,metadata:metadata,update:update||""})})
-        .then(x=>x.json()).then(j=>{ r.textContent=j.message||(j.ok?"Done.":"Failed."); r.className=j.ok?"res":"res err"; setTimeout(load, 4000); setTimeout(load, 20000); })
-        .catch(e=>{ r.textContent="Could not reach the PC: "+e; r.className="res err"; });
-    },
-    onExit:function(err){ dropToken(); if (returning()) history.replaceState(null, "", window.location.pathname); r.textContent = err ? ("Plaid Link closed: "+(err.display_message||err.error_code||"")+". Tap Connect to try again.") : "Closed without linking. Tap Connect when ready."; }};
-  if (returning()) cfg.receivedRedirectUri = window.location.href;
-  try { handler = Plaid.create(cfg); handler.open(); r.textContent="Plaid's window is open: sign in to your bank there."; }
-  catch(e){ r.textContent="Plaid Link could not load: "+e; r.className="res err"; }
-}
-load();
-if (returning()) { if (savedToken()) openLink(""); else { $("r3").textContent="The bank sent you back, but this page lost its place (a different browser than the one you started in?). Tap Connect once more."; $("r3").className="res err"; } }
-</script></body></html>
-"""
+MOVED = """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plaid setup moved</title><style>body{margin:0;background:#050B07;color:#FBFFFA;font:16px/1.5 Poppins,system-ui,sans-serif;padding:32px 16px}
+main{max-width:520px;margin:0 auto}h1{font:500 24px "Playfair Display",Georgia,serif}</style></head><body><main>
+<h1>Plaid is set up in Google Chat now</h1><p>Ask the agent in Chat to set up Plaid. A form opens right there for the two keys,
+then a button opens Plaid's own sign-in page for your bank. Nothing is typed on this page any more.</p></main></body></html>"""
 
 
 if __name__ == "__main__":
-    print(json.dumps(status(), indent=1))
+    if sys.argv[1:2] == ["hosted-check"]:       # the spine's safety net for a Chat bank sign-in the watcher missed
+        r = hosted_check()
+        print(f"plaid hosted: {len(r['linked'])} linked, {r['pending']} pending")
+    else:
+        print(json.dumps(status(), indent=1))

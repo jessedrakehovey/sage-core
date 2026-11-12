@@ -33,7 +33,9 @@ Traffic is low, so nothing loops. Three tiers:
    claude's newer "Output has been saved to <file>" note for an oversized result, whose rewording read as
    "no snapshot" for 3 days and looked like a lost login; since 2026-10-25 it reads only the CRM
    call's own result, never another tool's, and a miss says why - connector not connected, tool never
-   called, or no snapshot in its result - instead of quoting the transcript's tail): new inquiries, quiet
+   called, or no snapshot in its result - instead of quoting the transcript's tail; since 2026-11-09 a
+   "SDK version X is not available" answer, the connector retiring the pinned SDK, retries once on its
+   current version instead of marking the CRM down): new inquiries, quiet
    leads, shoots entering prep, one weekly overdue-tasks ticket, one weekly balance
    ticket; also seeds `project_state.json` with booked future projects; since 2026-10-08
    `lead_meetings.py` matches the CRM's upcoming meetings/calls to the quiz leads, writes
@@ -50,7 +52,9 @@ Traffic is low, so nothing loops. Three tiers:
    **2026-10-06 standing rule:** weekend (Sat/Sun) wedding + date open in the CRM -> after the
    draft lands, `collection_autosend.py` (called from drain.py) re-checks the date and queues ONE
    source-bound `agent_run` for the doer to Publish & share it with the "Custom Package email (quiz
-   version)" template, no card; held 21:00-07:00. Any mismatch on screen falls back to a checkpoint card.
+   version)" template, no card; held 21:00-07:00. "Open" means no SIGNED project that day: an unsigned lead
+   (CRM status lead / lead_sent, even in a booked-group column) is an inquiry and never a date conflict
+   unless an owner set `confirmed_by` (2026-11-02; the trip-clash card already worked this way). Any mismatch on screen falls back to a checkpoint card.
    A draft whose CRM write times out or errors is **read back** (the connector's readback, read-only)
    instead of dead-ending: one unsent file made by that run with every quoted price = done, auto-send
    proceeds; anything else stays an exception for the owner (Odette, 2026-10-19). Each adds
@@ -82,7 +86,9 @@ Traffic is low, so nothing loops. Three tiers:
    number/address); the CRM sensor leaves dropped leads out of its tickets. Tests: `tests/test_repeat_asks.py`. Dead connections are
    carded BY CODE (`sentinels._conn_card` -> `cards.connection_card`: Set it up now / Leave it off / Something else; the
    sweep's `_act_on_setup` carries the tap out: connect.py's chat steps or setup_actions' recipe, said in chat; a connection with a chat setup gets "Say 'set up plaid' in chat" (`setup.chat.say`) and a
-   detail with no command line or item id, 2026-10-18). Chase nudges
+   detail with no command line or item id, 2026-10-18). The connection is checked once more right before its card (live -> no
+   card); a fault in its own code (conn_check owner `claude`) goes to the builder by code and its card just says "fixing it, nothing
+   for you to do" (no setup button, no file names, no "fix it in a session"; 2026-10-15 ask). Chase nudges
    are ONE daily line (`tracking.json -> chase.nudge: line`), dream questions, the no-fix weekly check and money FYIs are
    `say` lines. Sage side: an owner's ask for a message (`claims.asked_for_message`) must come back with a card-making
    SUGGEST; the bridge retries once, then queues the task itself (`forced`), so a card follows every time. Chat layout:
@@ -147,8 +153,9 @@ around the same operator:
   (`tasks/CommsProbe.xml`). When a claimable ticket of a human kind (`imessage_in`, `email`,
   `inquiry_new`, `card_answer`, `the owner_request`) is younger than 30 min and not yet woken for, it
   starts `operator_cron.ps1 -Comms` at once. Guards: the `.operator_running` in-flight marker (one
-  operator at a time, also written by the half-hour tick), `min_gap_min` 3, the window, the daily
-  budget. Log: `~/.claude/comms-probe-wv.log` (quiet probes write nothing).
+  operator at a time, also written by the half-hour tick), `min_gap_min` 3 (a last wake stamped in
+  the future, after the PC clock was moved back, counts as long ago and never blocks), the window,
+  the daily budget. Log: `~/.claude/comms-probe-wv.log` (quiet probes write nothing).
 - **`comms_state.py`** - the substrate: one record per thread (phone threads + mail / text
   tickets + open cards + verified sends) with class (`data/comms_law.json`: lead 15 min, couple
   2 h, vendor 24 h, owner 4 h, personal none), state (needs_reply / awaiting_the owner /
@@ -163,7 +170,8 @@ around the same operator:
   `Wiki/Vendors`, or a CRM client (then laned `wedding`). Friends, family and group chats
   stay in the thread log only: no card, no SLA, no unconfirmed-send sentinel; Sage still drafts
   any thread on request. Family is never wedding work even if a source lists them (2026-10-10:
-  the owners, a CRM contact on an owner's email, phones in `Wiki/People/Family and Friends.md`).
+  the owners, a CRM contact on an owner's email, phones in `Wiki/People/Family and Friends.md`), and an owner is also known by email handle or by
+  the name the phone saved ("owner Pennywhistle"; a wedding party sharing the first name still passes).
   Their texts are never ticketed on any phone or lane (2026-10-11); Mission Control restarts itself
   when any script module it has loaded changes, so a gate fix is live within 10 minutes.
   Since 2026-10-11 this covers owner's iPhone and every lane too: only a wedding client, lead or
@@ -250,8 +258,10 @@ now on besides one drop down card with them all together once a week."
   change done), so does an expired card about a number memory flags as a scam, and rewordings of one job
   ride ONE card ("asked N times"; Close it closes them all) (`sentinels._settled`, `_same_job_groups`). An ask an
   owner closed closes quietly too: a Skip / Drop tap on its card, or a later never-raise rule, 'stop following up' or
-  'handling it himself' line naming the same person and matter (`_owner_closed`; a team member's camera 2, the insurance retry). Tests:
-  `tests/test_weekly_nudge_cards.py`.
+  'handling it himself' line naming the same person and matter (`_owner_closed`; a team member's camera 2, the insurance retry). A
+  follow-up ticket whose step's own window has closed (a week-of confirmation after the wedding) closes quietly as well
+  (`_window_passed`, 2026-11-09), and so does a ticket whose later retry names it by id and finished (`_retried_done`,
+  the ShareGrid hold, 2026-11-10). Tests: `tests/test_weekly_nudge_cards.py`, `tests/test_followups.py` 8a, 8a2.
 - **"Unless they are not confirmed done":** when drain hits a PERMANENT failure on a card-approved ticket
   that provably did not go (never an UNVERIFIED result - the message may have landed, the operator checks
   first), `cards.reopen` brings back the SAME card, open, its question headed "Not confirmed done last
@@ -307,7 +317,8 @@ Ported from the property OS's question_bridge + executor, trimmed to this OS. Ze
 anywhere in the approve-and-execute path.
 
 1. **Card** - the operator posts a decision card (`cards.py post`), after `rulings.py find`
-   (the owner's standing rulings, `data/rulings.json`). Guards: NO_RECOMMENDATION, freshness
+   (the owner's standing rulings, `data/rulings.json`; since 2026-10-30 also Sage's own active rules
+   and the lane lessons, the best hit added to the post advice, `--no-agents` for rulings only). Guards: NO_RECOMMENDATION, freshness
    (already replied / 3rd card to one recipient in a day), exec payload verbatim in the
    question, exec keys valid, identity allow-list. Store: `data/cards/` (live / superseded /
    archive, `answers.jsonl`, `notes.jsonl`). The operator can post, note and list; it is
@@ -372,14 +383,17 @@ Exactly-once rules (2026-10-01 hardening; each only tightens the path):
 - **Uncertain means stop.** `email_send.py` prints `NOT_SENT` (before hand-over: retried),
   `SENT=1`, or `DELIVERY_UNVERIFIED`. Drain retries only the first; an unknown failure, a
   timeout, or a ticket orphaned by a killed drain becomes an exception ("check Sent mail" /
-  "check the CRM project"), never a second send. One drain at a time (`.drain.lock`).
+  "check the CRM project"), never a second send. One drain at a time (`.drain.lock`). A script
+  past its timeout is killed with its whole process tree (`taskkill /T`), so nothing under a venv
+  launcher can still send after the ticket was booked as a timeout (2026-10-29).
 - **A tap is an instruction.** A tap on a decision card (2+ options, no exec) becomes a
   `card_answer` ticket the operator carries out; an expired card nothing tracks becomes a
   `card_expired` ticket.
-- Still open, the owner's call: the word "resend" in a card disables the duplicate guards
-  (`Memory/skill-suggestions.md` ## Pending).
+- The duplicate guards lift only for a card with `exec.resend: true` AND the literal `[RESEND]`
+  marker in its question (checked at `post()`, read at the tap); the word "resend" in an ordinary
+  sentence changes nothing (the owner, 2026-10-18).
 - A further message an owner asks for in chat to someone who already got one today (or has
-  one queued) says RESEND on its card by itself (`actions._resend_mark`), so the first tap
+  one queued) carries both on its card by itself (`actions._resend_mark`), so the first tap
   sends; the identical wording and cards the system raised still hit the duplicate guards.
 
 Tests: `python assistant/tests/test_cards_exec.py` and `test_email_send.py` (scratch dirs via
@@ -403,6 +417,13 @@ state a read of the record justifies: `claimed -> verifying -> verified | unveri
   text (`imessage_send`) is only `claimed` at hand-off; its verifier reads the phone outbox: a reply or an ack
   verifies it, `expired`/`recalled` fails it, and past the phone's no-ack window (`HANDED_STALE_NOACK_MIN`, 4 h
   on a phone that has never acked) it is `unverified`.
+- **Picked up is not texted (2026-11-06)**: Chat says a handed text is "lined up on your phone", never "Texted",
+  until something confirms it. An owner's "it never arrived" / "the send from phone now button is not working" is
+  `approve` with `resend` (`intents.unconfirmed_text`): a copy still waiting is recalled and the same card comes
+  back marked RESEND for their tap. The card's "Send now from phone" button opens `/phone/run`, a page with a tap
+  target for the phone's send shortcut (Chat's in-app browser dropped the old bare redirect) and the by-hand way.
+  With the card's ticket (`?t=`), when a tap would send nothing for that text (quiet hours 9 PM-7 AM, or the phone
+  already picked it up) the page says so in one line, and says it once in the card's thread (`mc_server.phone_run_why`).
 - **An unverified row asks the owner ONCE** (`outcomes.ask_owner`): an urgent card "Did this text go?" with It went
   (Recommended) / Send it again / Drop it. The tap is the evidence (`cards.sweep -> _act_on_outcome ->
   outcomes.answer`): It went marks the outbox item sent by the owner; Send it again fails the row and brings the
@@ -676,7 +697,8 @@ everything tunable is in [tracking.json](tracking.json) so another organization 
   silence, folded after 3 asks. Default `chase.nudge: line`: ONE plain chat line a day per owner. With
   `nudge: card` the card leads with something the system does (button grammar): "Bring it back up" re-posts
   an open card, "Hand it to Sage" queues an operator ticket for a ticket/follow-up; then Handled / Remind me
-  tomorrow / Drop it. A card the guards refuse rides the daily line instead (2026-10-19). Posted in the owner's
+  tomorrow / Drop it; a typed "postpone / hold off ... until November (or 11/5)" snoozes the item to that day
+  (ported from example, 2026-10-31). A card the guards refuse rides the daily line instead (2026-10-19). Posted in the owner's
   measured active hours (`rhythm.py`, from his card answers and chat lines), never in quiet hours. Personal
   texts and the sentinels' own digests are never chased (ruling 13; `chase.exclude_tickets`).
 - **`drift.py`** - the record says one thing, the evidence says it happened: the delivery ledger vs the
@@ -720,9 +742,12 @@ Spine jobs `tracking-drift` / `tracking-chase` / `tracking-weekly`. State: `data
   **Q2** (important, not urgent) rows get one nudge line each in the Friday readback, never a card.
   Tunables in `tracking.json -> priority`.
 - **`dayplan.py`** - tomorrow, lined up at `tracking.json -> dayplan.plan_at` (19:00), once a day, only
-  when it has 3+ timed items (events, calls, deadlines, reminders, chases due back): ONE plain message
-  to the shared space in Morning / Afternoon / Evening blocks, owner's line only on days she has
-  items. Otherwise silence. `--dry-run` prints it.
+  when it has 3+ items that need someone (events, calls, deadlines, reminders, chases due back, bills to
+  pay): ONE short message to the shared space, a dash line per item under "On the calendar:" and
+  "Bills due:" ("Adobe, $69.99"; owner's items as "- owner: ..."), about six item lines at most
+  (`dayplan.max_lines`). Card charges the money forecast found are autopay: they never count and fold
+  into one "Autopay, nothing to do:" line (the owner 2026-11-01: "What is this mess?"). Otherwise silence.
+  `--dry-run` prints it.
 
 Spine jobs `tracking-chains` / `tracking-entities` / `tracking-dayplan`. Tests:
 `python assistant/tests/test_lifecycle.py` (56). `new_org.py` ships `chains.json` with the template.
@@ -755,14 +780,23 @@ All zero-LLM, all in `scripts/tracking/`, every word list in JSON so another org
   Contacts is titled by what Sage's memory or a wiki note says it is about ("General Liability insurance:
   Coverage will end on 10/26/2026 ... (unverified)"), never the raw number; `(unverified)` when a mention
   calls it unchecked or a possible scam (2026-10-19). Titles are cut at a whole word.
+  Mass and marketing texts get no hold (`mining.json -> skip.bulk`): any text with an opt-out line
+  ("Stop=End", "Reply STOP"), and from a sender who is not a lead / client / vendor / family, a short
+  code or toll-free number, or promo words / a link from a number not in Contacts. One incoming text
+  gives at most one hold card (2026-10-16 ballot text, 2026-10-19 loyalty promo).
   Vocabulary + switches: [mining.json](mining.json). State: `data/tracking/mining.json`.
   `python assistant/scripts/tracking/mining.py scan --days 7` lists every finding in the window.
 - **`text_gate.py`** (ruling 13) - personal texts stay logged-only EXCEPT a **time-related** one (a
   date or clock time AND a plan word) or a **money-tied** one (an amount, pay / owe / venmo), which
   may become a ticket and so a draft card, marked `payload.exception = "time" | "money"`. The owners'
-  own numbers never come through; family and friends do (`include_family`). Switch:
+  own numbers never come through, and since 2026-10-16 neither do family and friends (`include_family`
+  false: Casey Juniper, the groomsmen chat); a group text whose known members are all family / friends
+  counts as family for every member (`personal_groups`). Switch:
   `config.json -> phone.personal_exceptions {enabled, time, money, include_family}`; words in
   `mining.json -> personal_text_exception`. The operator prompt says what to do with such a ticket.
+  The hourly spine job `personal-text-close` (`text_gate.py retire`) closes any open personal-text
+  reply card the gate would no longer let through (to an owner; to family or anyone personal when
+  these switches leave them out), so nobody taps Skip on each; a card an owner asked for stays.
 - **`scheduling.py`** (ruling 12) - "set up a call with X" / a lead asking for a call: reads both
   owners' Google calendars (the agent's token) plus `data/calendar.json`, the CRM meetings in
   the desk snapshot, `data/holds.json` and the times already offered to someone else; picks 2-3 open
@@ -803,7 +837,7 @@ every other kind is still refused, re-run `python scripts/guardrails/check_gates
 a gate file changed, commit scoped. Until that commit lands, every card keeps coming.
 
 Spine jobs `tracking-mining` (30 min) / `tracking-scheduling` (15 min) / `tracking-probation` (twice a
-day). Tests: `python assistant/tests/test_mining.py` (59), `test_scheduling.py` (43),
+day). Tests: `python assistant/tests/test_mining.py` (81), `test_scheduling.py` (43),
 `test_probation.py` (26); `test_phone_bridge.py` covers the ruling-13 gate.
 
 ## Money lane - a read-only bank feed (2026-10-15)
@@ -842,7 +876,11 @@ Wiki note: `Wiki/Integrations/Bank Feed (SimpleFIN).md`.
   the merchant handle) + a line in `learnings/money.md`, and the rows are placed.
 - **Forecast** `forecast.py`: recurring charges -> upcoming bills **armed as `money / bill-due`
   follow-ups** (T-3d, no new reminder path); latched cards for a low balance (7-day bills > the paying
-  account) and a price jump.
+  account) and a price jump. Every merchant is classed first (2026-11-01): subscription or bill,
+  stores, restaurants, transfer, income or other, from the owner's word (`merchant_classes`), its
+  bucket, its name, then its amounts. Only a bill is recurring or gets a price card, so Costco or
+  Trader Joe's never does; an own-card payment or round-up is a transfer, never spending. "Not a bill,
+  just shopping" on a price card reclasses that merchant for good.
 - **Quarterly** `quarterly.py`: YTD Schedule C profit -> annualized federal (SE, standard deduction,
   QBI, brackets) + CA; the next due date armed as `money / quarterly-estimate` (T-10d) with the amount
   in `data/money/quarterly.json`; a set-aside card after each CRM payment lands, netting out
@@ -871,7 +909,58 @@ Wiki note: `Wiki/Integrations/Bank Feed (SimpleFIN).md`.
   Long-lived keys never pass through chat; the SimpleFIN
   one-time token still may. Tests: `tests/test_plaid_wizard.py`.
 
-Spine jobs `money-pull`, `money-pull-plaid`, `money-categorize`, `money-forecast`, `money-quarterly`, `money-monthly`.
+Spine jobs `money-pull`, `money-pull-plaid`, `money-categorize`, `money-forecast`, `money-quarterly`, `money-monthly`, `money-budget`, `money-reconcile`.
+
+### The envelope budget + the weekly reconciliation (2026-11-02, the owner: "keep track of my finances with the same type of system, with you as reconciler")
+
+An envelope budget on top of the ledger, the way YNAB works, zero LLM, nothing moves at a bank:
+
+- **Budget** `budget.py`: give every dollar a job. Per side (`money.json -> budget.sides`): *ready to assign* = cash in
+  the spending accounts - every envelope's positive available - what the cards owe; an envelope's available = carried
+  over (floored at 0 unless `carry_overspend`) + assigned this month + its activity (the rows in spending accounts and
+  cards with that bucket; transfers never). Every account plays a ROLE (`accounts.overrides[id].budget`, else by type and
+  name): `spending`, `card`, `vault` (a sub-account that IS an envelope: its balance is its available, the owner funds it
+  at the bank), `off` (investments). A card charge from an envelope and the card payment both leave ready-to-assign
+  unchanged, so the money for the card is held. Assigning is the owner's decision: on `budget.fund_day` ONE "fund the
+  envelopes" card per side proposes refilling every envelope to its target (`budget.targets`, the owner's typed
+  `target groceries 600`, else the median of the last `target_months` months) and the tap funds it; words typed in the
+  thread change it (`groceries 500`, `move 50 from dining to groceries`, `assign 200 to travel`, `cover groceries from
+  dining`). Same words on the command line (`budget.py assign | move | target | start | show`). State:
+  `data/money/budget.json`. Mission Control **/money** (`config.json -> pages.modules.money`): ready to assign, envelopes
+  with bars, vaults, cards, every account's reconciliation state.
+- **Reconcile** `reconcile.py`: ONE card a week (`reconcile.day/after`, once per ISO week, held for the Monday digest).
+  Every spending account and card: the bank's balance vs the ledger's expectation (the balance at the last baseline +
+  every posted row since); off by more than `tolerance` and the card names the difference and what it can see (a row the
+  feed sent twice, a pending row older than `pending_max_days`, the one row equal to the difference); a balance older
+  than `stale_days` is the feed's problem, not the money's. Plus the overspent envelopes with the envelope that has the
+  slack to cover each, the week's unplaced rows, and the **age of money** (FIFO days the spent dollars sat first).
+  "Reconciled" takes the bank's balances as the new baseline for every account (the owner's call, the only way a feed
+  hiccup clears); "Hold on" leaves them; typed moves apply either way.
+- **Bulk placement** (`categorize.py bulk`): a backlog of unplaced rows that repeats the same merchants gets ONE
+  merchant-level card (count, total, example line; `categorize.bulk_*`) instead of twelve single rows a week; one typed
+  word per merchant becomes the learned rule that places every row of that merchant, past and future.
+
+- **The money talk** `brief.py` (2026-11-03, the owner: "that process is too complex, it needs to be simple, like talking
+  and clarifying with my finance advisor"). No forms: the agent's context carries **MONEY** (ready to assign, envelopes
+  with targets, vaults, accounts vs bank, age of money, how many charges have no envelope) and **MONEY QUESTIONS**, the
+  facts only an owner has, ranked the way an advisor would take them (a new month to fund, the merchants that explain
+  the most money with count / total / per month / accounts, an overspend that can be covered, a missing target, the
+  first baseline, an account off at the bank; capped per kind). Sage asks ONE per reply in her own words and the
+  answer becomes the `money` tool (intents `place` / `target` / `move` / `assign` / `cover` / `reconciled` / `fund`;
+  validated against the ledger before she speaks, applied by `brief.apply` when the reply posts, ledgered as
+  `money` rows, `/undo` through `brief.undo`). The weekly routine "Money talk" (Sunday 18:30, a prompt routine)
+  opens the conversation; mid-week she asks the next one only when the owner is in the money conversation. The
+  fund / weekly / bulk / Friday cards stay in the engine for an organization that wants forms, switched off here:
+  `money.json -> budget.fund_card, reconcile.card, categorize.weekly_card, categorize.bulk_card`.
+  **Card history** (2026-11-08, gap g-a6fb9d: "it was $1,300 a month ago and now it's over 3,000"): `money` op
+  `history` is read only; `brief.history` works each card's balance back `days` through the ledger and lists every
+  charge and payment since (biggest first, with its envelope and the business share), which Sage answers from.
+  **Bills breakdown** (2026-11-09, gap g-a9b3c1: "are you sure the lens rentals are due tomorrow? ... give me a
+  breakdown"): `money` op `bills` is read only; `brief.bills` lists forecast.py's bills due in the next `days`, how
+  each is known (rhythm, charge count, last charge) and each account's balance against them.
+
+Tests: `python assistant/tests/test_money_budget.py` (offline, scratch data, nothing posts).
+
 Tests: `python assistant/tests/test_money.py` and `python assistant/tests/test_money_plaid.py` (offline; fake feeds, scratch stores).
 
 ## Why a text waited for the "Send now" button (2026-10-24)
@@ -925,6 +1014,14 @@ setup: [owner_IPHONE_SETUP.md](owner_IPHONE_SETUP.md)).
   2 min same contact / 1 d identical text). `drain.py` puts it in `data/phone_outbox.json`;
   her "example-org Send Texts" shortcut GETs `/api/phone/outbox` (which first drains phone tickets
   older than the 30 s undo window), sends with Send Message, POSTs `/api/phone/ack`.
+- **Group chats (2026-10-08):** a text that came in a group chat carries `payload.group`
+  (`phone_bridge.group_info`: the members and chat id the phone sends as `participants` /
+  `chat_id`, else the group whois reads from the threads). iPhone's Message trigger gives
+  only sender + text and the send Shortcut reads one `to`, so today the reply card says
+  word for word that it goes to that person alone, not the group. A phone listed in
+  config `phone.group_send_accounts` (Shortcut sends to every `recipients` entry) gets the
+  reply into the group, only from the phone's own member list; `exec_store` refuses a
+  group payload on any other phone, so nothing is quietly sent one-on-one.
 - **At most once:** an item is `handed` on fetch and never re-offered. Handed-but-unacked
   after 30 min becomes a sentinel finding (check her Messages before re-sending).
 - **Door:** every phone call needs the token in `data/phone_token.txt` (`phone_bridge.py token
@@ -1062,6 +1159,57 @@ milestone (`report.py note`, `doer/notes.py`); it is the job's checkpoint file, 
 four reach the job's chat thread as "still on it" lines (`receipts.note`). A run cut off by its step limit or time
 limit is carried on from the notes (`doer.carry_on`, same session when there is one, up to `doer.continues_max`
 more tries) before the owner hears it stopped, and then hears how far it got. Doer README "Milestone notes".
+
+**The live job card + the sign-in card (2026-11-03, the owner: "a window into the desk of my personal employee ... see
+what my PC is doing when I'm away ... if it gets caught up on a login it doesn't have stored, store it from in chat").**
+Every job gets ONE card in its chat (`doer/livecard.py`), redrawn in place at each note, checkpoint and end, with a
+picture of the screen (taken over the browser's CDP or of the main screen; hosted a few minutes in a shared drive by
+`scripts/shots.py`, Google-only, no public port) and three buttons: **Control PC** (Chrome Remote Desktop, the live
+view and the wheel from a phone), **Show on screen**, **Stop** (a flag `click_guard` enforces on the next tool call).
+A login the vault lacks posts the **sign-in card** (`report.py login`) instead of ending the job: **Enter login** is the
+vault dialog, whose submit answers the card and resumes the job (`doer.run_login_resume`); **I'll sign in myself**
+puts the browser on screen and a Carry on card follows; a code card's **Enter code** is a dialog too. Doer README
+"The live job card" and "Logins".
+
+**Phase 2, the app feel (2026-11-04): the Home tab, commands, switches, Send later.** `scripts/home_tab.py` builds
+the desk with no model: **Right now** (the running job, its picture, Watch / Show / Stop), **Waiting on you** (open
+cards, the urgent ones listed, Open approvals), **Coming up** (the owners' calendars, cached 5 min), **The PC** (CPU,
+disk, uptime, the browser, the last housekeeping run), and chips to the **Jobs**, **Approvals** (every open card with
+its buttons, the same guarded `cards.answer`), **Settings** (every job in `agent/switches.json` as a switch; dotted
+config fields such as `leads.auto_send_collection` flip in place) and **Help** views. Chat asks for it when the owner
+opens the DM's Home tab (relay `onAppHome` → RenderActions `pushCard`) and every tap comes back as `home_action` →
+`updateCard`. The registered commands `/desk /jobs /approvals /watch /stop /login /settings /help` and the quick
+commands Desk / Approvals / Control PC / Stop the job answer with the same cards as messages (`command_event`);
+any other registered command still reaches the brain. Outbound cards gained **Send later**: a date-time picker
+dialog whose submit is `cards.answer(send_at=...)`, the not_before "send it at 8am" in words would mint. The Google-side setup
+(Apps Script new version, Support App Home, the commands table) is itself a Chat button: connection `chat-home`,
+setup kind **job** (`setup_actions._job`, `chat_forms.job_card`, `gchat_events.job_run_click`: the tap answers at once,
+the job runs on a thread, the card is edited with the result; `scripts/chat_console.py` drives the agent's browser and
+stops with NEEDS_SIGNIN, browser on screen, when Google re-asks the password). The screenshots shared drive is the
+same shape: connection `shots-drive` runs `scripts/shots_setup.py` (Drive → Shared drives → create the drive named
+`shots.drive_name`, Manage members → the chat service account as Content manager, proven by the service account
+listing it; `rehearse` does it on a throwaway drive and deletes it). Both rows are in `new_org.GENERIC_CONNECTIONS`.
+**A job never sends the owner to the PC** (the owner 2026-11-04: "100% inside Google Chat, a portal into the PC"): when
+Google (or any site) wants a sign-in mid-job the script stops with `signin_url=`, `setup_actions._job` runs
+`login_fill.py` on that page from the vault and runs the job again; no login in the vault = the job card's **Enter
+login** (the vault dialog with the site and the job's id; saved, the job runs again by itself and the card follows);
+a one-time code = the same dialog's code-generator secret, so codes are the agent's from then on.
+Relay README "The Home tab". Tests: `tests/test_home_tab.py`.
+
+**Control PC from chat (2026-11-04, the owner: "the google remote desktop needs to be able to be setup and installed from
+google chat ... I don't have the pin which google chat should have set up for me").** Connection `remote-desktop`
+is a setup of kind **job_form**: a job that needs one thing typed first. Its card's button opens a form on top of chat
+(the PIN); the submit goes to `scripts/remote_desktop.py set_pin` on a thread and the card is edited with the result
+(`gchat_events.job_form_click`; the value is never logged or stored by the form). Remote Desktop's settings are a
+file only an administrator may write, so the work goes through `scripts/elevated.py`: a scheduled task with the
+highest privileges, on demand, that does only what its `ALLOWED` list names (read the host's state, set the PIN as
+Chrome's own hash and restart the host, register the PC with a one-time code from Google's headless page, install
+Google's signed host). Windows asks for an administrator's approval ONCE, to register that helper, on its own prompt
+that no program can press: a new organization gives it during the PC install (`elevated.py install`); where the
+helper is missing the card says so and offers **Ask Windows now**, and the moment it is approved the agent finishes
+with the PIN it was given (held in memory ten minutes at most). The row is a step of the start-up sequence (its own
+form button on the "Getting set up" card) and ships with every pack. `chatfirst.py` is the rule every line of this
+passes; tests: `tests/test_remote_desktop.py`, `tests/test_chat_first.py`, `tests/test_startup.py`.
 
 - **Three tiers.** Read or trivially reversible: done. Reversible write: done + screenshot. Irreversible,
   outward, money, identity, or any government / bank / payment / registrar site: fill everything, screenshot
@@ -1235,6 +1383,8 @@ every command below, update, modules):
   doer's browser opens off-screen and comes on-screen only for a step a person must take. A new script that starts a
   process follows the same: `creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)` on Windows, PowerShell with
   `-WindowStyle Hidden`, a browser `show=False`. The builder's rules say so; `test_sage_core.py` checks the runners.
+  Never `DETACHED_PROCESS` for a python child (2026-10-28): a venv launcher then has no console and the real python
+  opens a visible one; detached starts use `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` (`test_sage_core.py` scans).
 - **`sage.py`: the one command.** `doctor` (Python, packages in the jobs' interpreter, Playwright browsers, git, node,
   gcloud, the Claude CLI, the token in User scope and no stray API key, a headless probe skipped inside a session
   with the reason, Mission Control, serve, secrets folder, Google, Chat, buttons mode, disk; `--json`, `--fix`),
@@ -1256,6 +1406,56 @@ every command below, update, modules):
   training stops at 100% coverage, never at a count), `never` (seeded at maximum gating into the learned org file),
   `shadow on|off` (config switches), `golive --enable <switch>` (standing exceptions on by name, dated),
   `blueprint` (a wiki note rendered from the answers, never the source). `--answers <file>` for every step.
+- **Onboarding in chat (2026-11-03, the owner: "easy google chat onboarding").** The same Discovery and Training without a
+  terminal: once the organization's own interview (`agent/org.py` QUESTIONS) is done, `org.interview_hint` hands the
+  ONBOARDING context line to `onboarding.chat_hint()`: the next unanswered Discovery function, then the tracks question,
+  then the first missing Training field (`onboarding.next_question()`), one a turn, each at most once a day, the owner
+  answering in their own words ('none' and 'skip' count). The `onboard` deed (`gmcp.py` tool, `intents.validate`: kind
+  tool | tracks | stage, the id from the line, a stage field, never a secret, owners only; `actions.apply`) calls
+  `onboarding.answer()`, which goes through the very same `discover()` / `train()` the CLI uses, so coverage, the CRM
+  build request and the wiki seed behave the same; every answer is ledgered (`onboard`). Switch: `config.json ->
+  onboarding.in_chat` (new_org.py writes true; this organization is long past onboarding, so false here). CLI mirror:
+  `onboarding.py next` / `answer <kind> <id> <field> "<value>"`. Tests: `tests/test_onboarding_chat.py`.
+- **Seeds brought back from the template (2026-11-03).** The property side had committed Seed A (`agent/outreach.py`: channel
+  history + needs_channel_review on every follow-up row, wired in `agent/followups.py`), Seed C (`agent/metacheck.py` +
+  `metacheck.json`: a deferred re-check gated by action type), Seed D (`agent/preconditions.py`: a chase chain as data and the
+  satisfied / open / unknown / moot verdicts `scripts/preconditions.py` now reads), Seed E (`agent/causes.py` + `cause_vocab.json`:
+  a cause label on a closed chase from the owner's tap only) and the evals runner v2 (`scripts/regression_packets.py`: runner
+  table, phrases scored on the carded texts, `--limit`) straight into sage-core; this organization's Sage never had that code
+  and core_sync held the three shared files for it. They live here now, verbatim but for the packet's default sender (the first
+  owner from people.json, never a literal), with their tests (`test_outreach`, `test_preconditions`, `test_metacheck`,
+  `test_causes`, `test_regression_packets`). Lesson: a direct template commit is a port request for THIS side too; `core_sync.py
+  holds` names it ("changed directly in the template ... bring it here, then adopt").
+- **The seeds wired in (2026-11-03, the owner: "update sage and sage core so it fits the seeds ability").** The modules above
+  now act: **Seed C** at `cards.post` (`scripts/metacheck_bind.py`): a card whose action is a message to a client or a
+  colleague, a record write or a payment (`agent/metacheck.json`, by exec kind / preview marker / audience) gets its key
+  facts re-read against the records this PC holds before it is written: the recipient (the phone books, the CRM or the
+  person it replies to), every date in the words (one in the past is a discrepancy), the amount against the record; the
+  verifier's plain line is appended to the details, the tap and the payload untouched, no number shown; one ledger row per
+  card (`data/agent/metacheck.jsonl`; `metacheck_bind.py calibration` reads it, the Friday readback says it in a line). A
+  verifier failure reads as "verify by hand"; a post is never blocked or delayed. **Seed D** in the owner chase
+  (`tracking/chase.py`): the loop is `agent/chase_chain.json` (first ask, second ask a day later, fold); before any re-ask
+  the chain reads the item as a record (`reading()`): UNKNOWN never advances (logged `chase_unknown`), MOOT clears the item,
+  otherwise the plain-words reading rides the nudge as its advice. **Seed A** there too: every ask records its channel
+  (`outreach.record_send`: card or chat line), every tap a reply; two unanswered asks on one channel put the review line on
+  the nudge. **Seed E**: a chase that closes after two or more asks gets ONE non-urgent card "What stalled it?" with the
+  pack's labels (`assistant/data/cause_vocab.json`, the engine default `agent/cause_vocab.json` otherwise) plus Skip; the
+  owner's tap (or a typed note) is written with `causes.label_close`; a text about the people served is refused and
+  recorded as refused; coverage is a Friday readback line. **Seed F**: `scripts/evals/triggers.py` (a prompt, a rules
+  file, the chase or card code, a packet) runs the zero-LLM packet check from the pre-commit hook on a staged trigger and,
+  from the dreaming cron's post-patch step, the regression suite live (a dozen turns at most, throwaway lanes);
+  `scripts/evals/packets_from_cards.py` makes packets from the owners' answered cards (approve = the `approve` deed, a
+  decline forbids it, an edit forbids the sentences edited away, the rationale only from a typed note, near-identical cards
+  clustered; `packets/cards/<agent>.jsonl`). Tests: `tests/test_seeds_wired.py`.
+- **The feature gate (2026-11-03, the owner: "like a flow chart, if they don't want banking management or plaid then don't ask
+  for plaid connection setup or budget questions, if they don't have a CRM don't ask those questions").** The FIRST
+  onboarding question is which features the owner wants handled (`onboarding.FEATURES`: crm, mail, calendar, texts,
+  money, files, team, social, automation; each names the Discovery functions it opens and the engine module it switches).
+  `answer("features", ...)` parses their words (`parse_features`: 'none', 'all', 'everything except social', 'no banking')
+  and `apply_features` makes it true: every Discovery function of an unpicked feature is skipped as "not wanted" (never
+  asked, never offered a connection), a re-picked one opens again, and `money` switches the money module with it
+  (`sage.module_switch`: its spine jobs and org.json -> modules). `feature_wanted(key)` is the read for any other code
+  (True for an organization that was never asked, so nothing changes here). `onboarding.py features` shows the gate.
 - **`scripts/habits.py`: the habit ledger.** Ask classes from exec tickets (by kind) and doer runs (by the job's first
   words); verified counts from outcomes; a class with `habits.min_verified` verified runs and no script is `ready`;
   with `habits.codify = true` each becomes ONE build request through `capability.file_build`. Off here until the owner
@@ -1429,7 +1629,8 @@ every command below, update, modules):
   serve heartbeat + job, a fresh dreaming log, or a dreaming task in `org.json -> watched_tasks`), else it says the
   backlog does not drain and how to ingest; `sage doctor` has a "semantic search" row and `requirements-semantic.txt`
   (fastembed + numpy) is the documented optional extra; `semantic.py` without them prints one line and exits 2 (the hook
-  stays silent). First-run path for an organization's own documents: `sage-setup` SKILL.md section 5b (put them in
+  stays silent). A worktree copy of `semantic.py` (the builder's) resolves to the main checkout, so there is one index and one
+  build lock (2026-11-10). First-run path for an organization's own documents: `sage-setup` SKILL.md section 5b (put them in
   `Raw/`, run `wiki_tool.py sources`, say "ingest"; nothing automatic). Tests: `assistant/tests/test_wiki_tooling.py`
   (wiki_tool on a temp vault from the generic schema, session_capture, the semantic fallback) and new checks in
   `test_sage_core.py` (generic schema in the pack, lint 0 after the blueprint and after `wiki_writer.write`, no SID in
@@ -1478,6 +1679,120 @@ engine, on every machine. Three kinds: `mission_control` (org.json `mission_cont
   keepalive (asks `python assistant/ports.py current mission_control`).
 - `python assistant/ports.py status` shows wanted / now / holder per kind. Tests: `assistant/tests/test_ports.py`.
 
+## The organization's own pages, and the shoot-day app in the OS (2026-11-01)
+
+`config.json -> pages` is the one place an organization adds a page to Mission Control without touching the
+engine: `modules: {"<name>": {file, page, api, nav}}` makes `/<name>` render that module's `page()` and
+`/api/<name>` its `api()` as JSON (the header links it when `nav` is set); `static: {"<mount>": "<folder>"}`
+serves `/<mount>/<slug>/<file>` from `<folder>/<slug>/`. Code: `mc_server._extra_page`, `dashboard._nav_pages`.
+With no `pages` key nothing answers, so the engine ships the mechanism and none of any organization's pages.
+This organization uses it for `/gear` (gear/gear.py: the pack list for the next shoot, ShareGrid holds, battery
+groups, memory cards) and `/shoot/` (the one Shoot Day app, apps/shoot-day/builds/shoot-day). The shoot-day app
+itself is niche (never exported): `apps/shoot-day/README.md`; its spine job is `shoot-day` (shoot_day.py: the app rebuilt when a wedding file changed,
+the gear hold two days out, the pack line the day before, the day-of agent on the day, the cards line the day
+after); the chat jobs are `shoot_day_build`, `shoot_day_agent`, `gear_hold`, `gear_batteries`, `gear_media`,
+`gear_media_scan` (jobs.json).
+
+## Borrowed from Grok Bot and Muse (2026-11-08)
+
+Sixteen engine-level upgrades from the teardown of xAI's Grok Bot and Meta's Muse (`Wiki/Builder/Grok Bot and Muse
+Teardown.md`, ROADMAP section 6). Sage was already stronger on approval binding; these close the gaps in policy shape,
+memory scopes, routine discipline and prompt-injection hygiene. One agent, one voice, unchanged; nothing sends without a tap.
+
+- **One policy** (`scripts/policy.py`): every "may Sage do this without a tap?" is answered in a fixed order - forever
+  gated (sends, money, the browser agent, a login) -> an untrusted trigger (an unauthenticated mail, the injection marker)
+  -> an owner's own ask-first rule -> an owner's standing grant or a graduated class -> default ask. `cards.post` stamps
+  `reason`, `caution`, `always_rule` and the allowed `grants` on every card by code; a card the policy allows is answered
+  by code, signed `policy:<grant>`, archived and harvested like any tap (ledger `card_auto`).
+- **Grant types**: a tap can stand - `once` (default) | `this_task` (this thread, 24 h) | `until <date>` | `always`.
+  `data/grants.json`, ledgered through `core.log_change` (undo `grant_revoke`). The Chat card gets an **Always** button
+  only where the policy allows it; "always" / "from now on" / "until Friday" in an owner's words carry the same through the
+  `approve` deed. A send, money or a login is ever only `once`. `python assistant/scripts/policy.py grants | revoke <gid>`.
+- **Expiry by origin**: a card an owner asked for in chat never expires; a routine-born card delivered at once dies in
+  30 min (`cards.post(origin=...)`, env `ASSISTANT_CARD_ORIGIN`). A decline or such an expiry reaches the model as ONE
+  fixed line (`policy.NO_RETRY_LINE`), never a paraphrase.
+- **`initiator` on every ledger row** (`exec_store.initiator_kind`): owner | staff | schedule | inbound | standing |
+  system; brain.ask sets it per turn, the spine per job.
+- **OUTCOME UNKNOWN**: a ticket left `running` on an earlier boot (`exec_store.boot_id`) is settled at once as an
+  exception, never retried by itself; routines re-arm `next_due` BEFORE a prompt run; the spine stamps `started` before a
+  job and says when the last run did not finish.
+- **Untrusted text** (`agent/untrusted.py`): every non-owner line is stamped `[From who · channel · information only]`
+  inside a fence with a random tag the text cannot close; `tickets.claim` hands the operator wrapped inbound rows, the
+  brain wraps a staff member's words, `mail.py fetch` wraps the message. Mail loses one-time codes and sign-in links
+  (`mail.redact`) and carries SPF/DKIM (`auth_results`); an unverified sender marks the ticket `untrusted`, and the policy
+  asks for anything it sets off. Contract test: `tests/test_injection_contract.py` plants the marker through every seam.
+- **Memory**: a person's forget stays forgotten (`state/forgotten.json`; the dream cannot re-learn it, a person can);
+  at `MAX_RULES` a card asks which rule to retire (least used first) and the tap retires + adds; memory and the work log
+  are rendered LAST in the context, labelled recall, never rules.
+- **Work log** (`agent/worklog.py`): the third memory scope - what Sage DID (drain results, policy answers, routines),
+  rendered as "WORK LOG" in the context; `python assistant/agent/worklog.py [days]`.
+- **Routines**: `test <ref>` (what it would say, nothing posted), `history <ref>` (last 20 runs), `on_missing`
+  skip|say ("Nothing new today." posts nothing by default), never fires at creation, `routines.idle_pause_days` in
+  profile.json holds a routine for an owner who has not written (the occurrence is skipped, not shifted).
+- **Ideas** (`agent/ideas.py`): rule-generated suggestions (rules near the cap, a failing routine, an old build request,
+  piling lessons, a grant about to end), content-hash ids, said once under the weekly digest, never a card.
+- **Teach** (`doer/teach.py start "<title>"`): records clicks and field edits in the doer's browser over CDP and writes a
+  skill through `skills.write`; values are never recorded, a password field becomes the vault's step.
+- **Egress** (`doer/egress.py`, `data/doer/egress.json`): per side (doer / desk) `learn` (default: allow + note hosts) or
+  `allow_list` (refuse what is not named; vault hosts always allowed for the doer). Wired as a PreToolUse hook on the
+  doer's `browser_navigate` and into `desk_policy.decide` for WebFetch / curl. `egress.py add <host> [side]`.
+- **Vault hint**: `vault.py add ... --hint "..."` / `vault.py hint <title> "<text>"`; a failed `login_fill` carries it.
+- Tests: `test_policy_grants.py`, `test_untrusted_mail.py`, `test_memory_forget_rules.py`, `test_worklog_routines.py`,
+  `test_ideas_teach_egress.py`, `test_injection_contract.py`.
+
+### Four reply words and event routines (2026-11-09, the interaction pass)
+
+the owner kept starter suggestions and approve-by-text off the list; these four landed, all by code, no model turn:
+
+- **Event routines** (`agent/routines.py`): `when` may be `{"on": card | approved | declined | done | failed | grant | work,
+  "match": "words"}` instead of a clock. "Whenever a new lead card comes up, tell me" is a schedule, not a rule. Events
+  are read each tick from the audit ledger and the work log through a cursor (`data/routine_events.json`) that starts
+  at the end, so history never replays; a routine's own posting is never an event (no loops); a burst is capped at
+  three per routine per tick with "and N more like it"; quiet hours hold them like any routine. `routines.event_from_words`
+  maps plain words to a spec for tests and the model; `test` shows a sample.
+- **"Why?"** (`agent/why.py`): under a card, the answer comes from the card's own record (where it came from, a decide
+  card's reason, what a yes would do, the standing yes that answered it, where it stands); under a routine's post it
+  names the schedule and who set it; otherwise the brain gets a WHY block (its last line here, the work log, the
+  grants) and "never 'I don't know why'". "Why not …" is an ask, not a why.
+- **Grants in words** (`agent/grants_chat.py`, `/grants`): "what do you do on your own" lists the standing yeses in a
+  person's voice; "ask me again about X" / "stop doing X on your own" / "take back the yes on X" / "take them all back"
+  revoke them (`policy.revoke`, ledgered). The `revoke` deed does the same from an indirect ask. Nothing here grants.
+- **"I'm done"** after a takeover (`agent/resume.py`): an open Carry on card (a sign-in the owner took) is answered
+  `Carry on` by code and the browser agent woken; a page left open for the owner (`doer/leftopen.resume`) is released,
+  the job staged again from its notes. Owners only; a bare "done" with nothing waiting goes to the brain as talk.
+
+Tests: `assistant/tests/test_interaction_words.py`. Gotcha met on the way: `prompt.md` is `.format()`-ed, so a literal
+`{"on": …}` in it breaks every turn; write such examples without braces.
+
+## Five fixes from a week of use (2026-11-11)
+
+A review of four days of real chats (71 owner messages) found five places that cost the owners time. Each is fixed in
+code, with `tests/test_usage_week.py` as the gate.
+
+1. **A sign-in check holds its page.** When a site sends a prompt to the owner's phone or asks for a code, the page
+   that asked is the only page their answer counts for. `doer/browser.py` `hold_wait` / `waiting` / `release_wait` /
+   `expire_waits` keep that tab (store `data/doer/waits.json`, `doer.wait_hold_min`, default 30): no job prunes it
+   or quits the browser while it is held. `report.py is_wait` decides which checkpoints are waits (`ask_code`,
+   `wait_on_page`, or the step's own words); `doer.same_page_block` tells the approved step to carry on in that tab
+   and never reload, restart the sign-in or press resend.
+2. **An owner's approval is the say on timing.** `exec_store.quiet_exempt`: a ticket approved on a card goes at any
+   hour; quiet hours hold only what goes out by itself (standing texts, the agent's own lines). The phone outbox
+   marks such a text `any_hour`. `config.json -> exec.quiet_holds_approved: true` brings the old hold back.
+3. **The rule limit never loses a rule.** At `MAX_RULES` the least used rule older than a week is retired by itself
+   (ledgered, undo = `rule_restore`) and the new rule is applied; when none is that old, the least used of any age
+   goes. No "Make room" card.
+4. **Less repeating.** A look-up routine ends itself with a last line `ROUTINE_DONE`; a schedule whose words name
+   its last day ("Stop after Nov 7") gets that `until` by code (`routines.last_day_from_words`). The "still open"
+   list is said once, then only when it changes or after `chase.FOLD_REPEAT_DAYS`. A lead cold for
+   `applies.auto_archive_days` (default 90) is archived with no card; CRM activity still brings it back. The stock
+   "that part is mine" line stands in only for a message that would otherwise be empty. The text lines no longer
+   promise "I'll say here the moment it goes": the phone never reports back.
+5. **A question keeps its answer.** `capability.answers_anyway`: when the owner asked a question and the reply says
+   something real besides its "can't" sentence, the reply is posted as it is and the gap is built behind it; the
+   one-word receipt is for asks to DO something. The money boundary said in passing is not a gap. The prompt now
+   says model names, order items, amounts and dates are copied from the record read that turn. The name typed into
+   the sign-in form is no longer written to the transcript or the log.
+
 ## Not built yet
 
 - The doer's first live run (the nested CLI cannot authenticate inside a session; everything but the model
@@ -1501,3 +1816,25 @@ engine, on every machine. Three kinds: `mission_control` (org.json `mission_cont
 Tests: `python assistant/tests/test_assistant.py` - queue, calendar recurrence, and the
 mail sensor + draft path against a fake IMAP server (lane routing, skip-senders, bulk
 flag, seen-tracking, draft goes only to the original sender and is verified in Drafts).
+
+**In front, Control PC, the focused tab, reschedule, wiki and builds without a card (2026-11-06, the owner, one message):**
+"Bring to front should be standard for Sage PC work unless someone is working on the computer in the last 5 minutes and
+needs a clear screen" -> `doer/browser.open_browser(show=None)` opens (or moves) the browser in front by default
+(`want_front`: config `doer.in_front`, and nobody at the PC within `doer.clear_screen_idle_s` = 300 s by Windows' own
+last-input clock); the live card says "It is in front now". "The button of watch pc is confusing since it is a remote
+desktop connection, it should say control pc" -> every button, chip, card line and prompt says **Control PC**; the old
+phrase still parses (connections words, `home_tab._VIEW_OF`, `chatfirst._ALLOWED`), and `chat_console.configure` renames a
+registered command whose name changed (the Google-side quick command keeps "Watch my PC" until "set up the home tab"
+runs again). "Sometimes sage sends screenshots of pages it is not working on" -> `browser.active_page()`: the visible AND
+focused tab (CDP `document.visibilityState` + `hasFocus()`), else a visible one, else the first real page; `livecard`,
+`front_page_ws` and `show_on_screen` use it (before: the first tab in Chrome's list). "Sage is unable to adjust its own
+schedule for the reminders" -> the hourly "owner loves you" could not be stopped for five days because the deed recorded
+`{"id": "s8"}` and `actions` compared `str(sid)`; now `routines.find` takes an id, a dict or (part of) a title, and a new
+deed **`reschedule`** (`routines.update`: when / to / say / prompt / until; undo op `routine_restore`) changes one in
+place. "Sage should not need permission to add new info to the wiki" -> `Wiki` and `apps/shoot-day/weddings` are
+computer-lane write roots (tier B; Raw, Memory, Schema stay protected). "Automatically perform builds without informing
+the user as long as it is helpful ... and doesn't break any other systems" -> `builder.auto_ok` approves every protected
+path that is neither hard nor a tap, whoever filed the request; `TAP_PATHS` is only the send paths, executor, phone,
+credentials, people.json, card_ingest and Memory/; the test gate and check_gates remain the "breaks nothing" check.
+Tests: `test_live_card` (active page, idle guard), `test_agent` (find / update / undo, both unschedule shapes),
+`test_computer` (wiki = B), `test_builder_verify` (dream-filed builds auto-approved).

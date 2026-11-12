@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -398,6 +399,228 @@ def blueprint(s: dict | None = None) -> Path:
     return p
 
 
+# ---------------------------------------------------------------- in chat (2026-11-03)
+# the owner: "easy google chat onboarding". Until now Discovery and Training ran only here, at a prompt. The agent's
+# ONBOARDING context line (agent/org.py interview_hint) now carries the next unanswered Discovery function or Training
+# field once the organization's own questions are done, the owner answers in their own words in chat, and the `onboard`
+# deed (agent/gmcp.py, intents.py, actions.py) lands the answer here through the same discover() / train() code the
+# terminal uses. One question a turn, a few a day, never a form. Switch: config.json -> onboarding.in_chat (new_org.py
+# writes true; an organization long past onboarding sets false).
+def in_chat() -> bool:
+    try:
+        cfg = _load(HERE / "config.json", {}) or {}
+        v = (cfg.get("onboarding") or {}).get("in_chat")
+        return True if v is None else bool(v)
+    except Exception:  # noqa: BLE001
+        return True
+
+
+# ---------------------------------------------------------------- the feature gate (the owner 2026-11-03: "like a flow chart, if they
+# don't want banking management or plaid then don't ask for plaid connection setup or budget questions, if they don't have a CRM
+# don't ask those questions"). The FIRST onboarding question is which of these the owner wants the agent to handle; every
+# Discovery function of a feature they did not pick is skipped as "not wanted" (never asked, no connection offered), and a feature
+# that is an engine module (money: the bank feeds, the budget, the weekly check) is switched on or off with it. They can change
+# their mind later in chat ("actually, do handle my money"): answering the gate again re-opens or closes the questions.
+FEATURES = [
+    # key, how the owner hears it, the Discovery functions it opens, the engine module it switches, words that mean it
+    ("crm", "your clients and projects (leads, a CRM or booking tool, invoices, contracts, scheduling links)",
+     ["lead_intake", "crm", "payments_invoicing", "contracts_esign", "scheduling_booking"], "", r"crm|clients?|leads?|bookings?|invoic|contracts?|projects?|customers?"),
+    ("mail", "your email", ["mail"], "", r"e-?mails?|gmail|inbox|outlook"),
+    ("calendar", "your calendar", ["calendar"], "", r"calendars?|appointments?"),
+    ("texts", "texts from your phone", ["text_phone"], "", r"texts?|texting|sms|imessage|phone"),
+    ("money", "your money: read-only bank feeds, an envelope budget and a weekly check (never pays anything)",
+     ["banking", "accounting"], "money", r"money|bank|banking|budget|plaid|financ|accounting|bookkeeping|cash|spending"),
+    ("files", "your documents and files", ["file_storage"], "", r"files?|documents?|drive|dropbox|storage"),
+    ("team", "your team chat", ["team_chat"], "", r"team|staff|slack|contractors?"),
+    ("social", "social media posts", ["social"], "", r"social|instagram|facebook|tiktok|posts?"),
+    ("automation", "automations between your apps", ["automation"], "", r"automations?|zapier|make\.com|integrations?"),
+]
+_NEG = re.compile(r"(?:\b(?:no|not|never|without|skip|don't|dont|do not|nor)\b[^,.;]{0,24})$", re.I)
+
+
+def features_state(s: dict | None = None) -> dict | None:
+    """{"wanted": [keys], "when"} once the gate was answered; None before (nothing is gated for an organization that was
+    never asked, so an existing one keeps every question and module it has)."""
+    s = s or state()
+    f = s.get("features")
+    return f if isinstance(f, dict) and isinstance(f.get("wanted"), list) else None
+
+
+def feature_wanted(key: str, s: dict | None = None) -> bool:
+    f = features_state(s)
+    return True if f is None else key in f["wanted"]
+
+
+def parse_features(value: str) -> list:
+    """The owner's words -> the feature keys they want. 'none' / 'nothing' -> []; 'all' / 'everything' -> every key; else each
+    feature whose key or words appear, unless a 'no' / 'not' / 'without' stands right before it."""
+    v = str(value or "").strip()
+    low = v.lower()
+    if re.fullmatch(r"\s*(?:none|nothing|no|nope|no thanks|neither)\s*[.!]?\s*", low):
+        return []
+    every = bool(re.search(r"\b(?:all|everything|all of (?:it|them|those|these))\b", low))
+    minus = every and bool(re.search(r"\b(?:not|except|but|minus|apart from)\b", low))
+    if every and not minus:
+        return [k for k, *_ in FEATURES]
+    named = []
+    for key, _what, _fns, _mod, words in FEATURES:
+        rx = re.compile(r"(?<![a-z])(?:" + key + "|" + words + r")", re.I)
+        hits = [m for m in rx.finditer(v) if minus or not _NEG.search(v[max(0, m.start() - 30):m.start()])]
+        if hits:
+            named.append(key)
+    if minus:                                   # "everything except social": all but what is named
+        return [k for k, *_ in FEATURES if k not in named]
+    return named
+
+
+def _module(name: str, on: bool) -> None:
+    """Switch an engine module with the feature (sage.py module on|off): its spine jobs and org.json -> modules."""
+    sys.path.insert(0, str(HERE))
+    import sage
+    sage.module_switch(name, on)
+
+
+def apply_features(wanted: list, s: dict | None = None) -> dict:
+    """Record the gate and make it true: unwanted features' Discovery functions are skipped as "not wanted" (an answered one
+    keeps its answer), a re-wanted feature's questions open again, a module feature is switched with it."""
+    s = s or state()
+    wanted = [k for k, *_ in FEATURES if k in set(wanted)]
+    s["features"] = {"wanted": wanted, "when": time.strftime("%Y-%m-%d")}
+    for key, _what, fns, mod, _words in FEATURES:
+        for fid in fns:
+            cur = s["discovery"].get(fid) or {}
+            if key in wanted:
+                if cur.get("status") == "skipped" and cur.get("reason") == "not wanted":
+                    s["discovery"].pop(fid, None)               # asked again, now that they want it
+            elif not cur.get("tool"):
+                s["discovery"][fid] = {"tool": "", "status": "skipped", "reason": "not wanted", "when": time.strftime("%Y-%m-%d")}
+        if mod:
+            try:
+                _module(mod, key in wanted)
+            except Exception as e:  # noqa: BLE001   the gate is recorded either way; the module switch is reported
+                print(f"MODULE_SWITCH_SKIPPED {mod}: {type(e).__name__}: {str(e)[:120]}", file=sys.stderr)
+    _save(STATE, s)
+    return s
+
+
+def features_ask() -> str:
+    return ("Which of these do you want me to handle? " + "; ".join(f"{w} ({k})" for k, w, *_ in FEATURES)
+            + ". Any of them, all, or none; you can add one later.")
+
+
+def remaining(s: dict | None = None) -> int:
+    """How many Discovery functions and Training fields still have no answer."""
+    s = s or state()
+    disc = _load(DISCOVERY, {"functions": []})
+    n = 0 if features_state(s) else 1
+    n += sum(1 for fn in disc.get("functions", []) if not (s["discovery"].get(fn["id"], {}).get("tool") or s["discovery"].get(fn["id"], {}).get("status") == "skipped"))
+    if disc.get("tracks") and not s.get("tracks"):
+        n += 1
+    c = coverage(s)
+    return n + sum(len(v) for v in c["missing"].values())
+
+
+def next_question(s: dict | None = None) -> dict | None:
+    """The next thing Discovery or Training still needs, as one question for chat:
+    {"kind": "tool"|"tracks"|"stage", "id", "field", "ask", "examples", "typical", "left"}; None when onboarding is done."""
+    s = s or state()
+    left = remaining(s)
+    if features_state(s) is None:
+        return {"kind": "features", "id": "features", "field": "features", "ask": features_ask(),
+                "examples": ["clients, email and calendar", "all of it", "just my money", "none"], "typical": "", "left": left}
+    disc = _load(DISCOVERY, {"functions": []})
+    for fn in disc.get("functions", []):
+        cur = s["discovery"].get(fn["id"], {})
+        if cur.get("tool") or cur.get("status") == "skipped":
+            continue
+        return {"kind": "tool", "id": fn["id"], "field": "tool", "ask": str(fn.get("ask") or ""), "examples": list(fn.get("examples") or [])[:4],
+                "typical": "", "left": left}
+    tr = disc.get("tracks") or {}
+    if tr and not s.get("tracks"):
+        return {"kind": "tracks", "id": "tracks", "field": "tracks", "ask": str(tr.get("ask") or ""), "examples": list(tr.get("examples") or [])[:4],
+                "typical": "", "left": left}
+    kind = s["lifecycle"].get("type") or "service-studio"
+    for st in lifecycle(kind).get("stages", []):
+        got = s["lifecycle"]["stages"].get(st["id"], {})
+        for f in FIELDS:
+            if str(got.get(f) or "").strip():
+                continue
+            return {"kind": "stage", "id": st["id"], "field": f, "ask": f"About the {st['name']} stage ({st.get('what', '')}): {FIELD_ASK[f]}",
+                    "examples": [], "typical": str(st.get("typical_" + f) or ""), "left": left}
+    return None
+
+
+def answer(kind: str, id_: str, field: str, value: str, by: str = "") -> dict:
+    """An owner's answer from chat -> the same state discover() / train() write. -> {"ok", "line", "left"}."""
+    v = re.sub(r"\s+", " ", str(value or "")).strip()[:600]
+    kind, id_, field = str(kind or "").strip(), str(id_ or "").strip(), str(field or "").strip()
+    if not v:
+        return {"ok": False, "line": "nothing to record", "left": remaining()}
+    before = json.loads(json.dumps(state()))
+    if kind == "features":
+        wanted = parse_features(v)
+        s = apply_features(wanted)
+        line = "handling: " + (", ".join(wanted) if wanted else "none of the optional features") + (" (money module on)" if "money" in wanted else "")
+    elif kind == "tool":
+        disc = _load(DISCOVERY, {"functions": []})
+        fn = next((f for f in disc.get("functions", []) if f["id"] == id_), None)
+        if not fn:
+            return {"ok": False, "line": f"no business function called {id_ or '(blank)'}", "left": remaining()}
+        s = discover(answers={id_: v}, only=id_)
+        got = s["discovery"].get(id_, {})
+        line = f"{id_.replace('_', ' ')}: " + ("none" if got.get("status") == "skipped" else f"{got.get('tool') or v} ({got.get('status') or 'noted'})")
+    elif kind == "tracks":
+        s = discover(answers={"tracks": v})
+        line = "tracks: " + ", ".join(str(t.get("name") or t) if isinstance(t, dict) else str(t) for t in (s.get("tracks") or [])) if s.get("tracks") else "tracks: noted"
+    elif kind == "stage":
+        skel = lifecycle(state()["lifecycle"].get("type") or "service-studio")
+        st = next((x for x in skel.get("stages", []) if x["id"] == id_), None)
+        if not st or field not in FIELDS:
+            return {"ok": False, "line": f"no stage {id_ or '(blank)'} / field {field or '(blank)'}", "left": remaining()}
+        c = train(answers={id_: {field: v}}, only_stage=id_)
+        line = f"{st['name']} {field}: {v[:80]}" + (f" (training {c['pct']}%)" if c else "")
+    else:
+        return {"ok": False, "line": f"unknown onboarding kind {kind!r}", "left": remaining()}
+    left = remaining()
+    cid = ""
+    try:
+        sys.path.insert(0, str(HERE / "agent"))
+        import core as _core
+        cid = _core.log_change("onboard", f"onboarding {kind} {id_}{(' ' + field) if kind == 'stage' else ''}: {v[:160]}",
+                               {"op": "onboarding_restore", "before": before}, by or "chat")
+    except Exception:  # noqa: BLE001   the answer is saved either way; the ledger line is a courtesy
+        pass
+    return {"ok": True, "line": line, "left": left, "change": cid}
+
+
+def restore(before) -> bool:
+    """Undo of one chat answer (core.undo op onboarding_restore): the state file as it was before it."""
+    if not isinstance(before, dict):
+        return False
+    _save(STATE, before)
+    return True
+
+
+def chat_hint() -> str:
+    """The ONBOARDING line for the model's context when the next unknown is a Discovery or Training question, or ''."""
+    if not in_chat():
+        return ""
+    q = next_question()
+    if not q:
+        return ""
+    ex = (" For example: " + ", ".join(str(e) for e in q["examples"]) + ".") if q.get("examples") else ""
+    typ = (f" Typical: {q['typical']}.") if q.get("typical") else ""
+    if q["kind"] == "features":
+        return (f"ONBOARDING (first question; {q['left']} things unknown): if the moment allows, ask this in your own words, once, at the end "
+                f"of your reply: \"{q['ask']}\" Save their answer with `onboard` (kind \"features\", id \"features\", field \"features\", "
+                "value = the keys they want, comma-separated, or 'all' or 'none'). What they do not pick is never asked about and never set up; "
+                "they can add one later by saying so. Never ask if they are busy with something urgent.")
+    return (f"ONBOARDING (you are still learning how this organization works; {q['left']} things unknown): if the moment allows, ask this "
+            f"in your own words, once, at the end of your reply: \"{q['ask']}\"{ex}{typ} They may answer 'none' or 'skip'. "
+            f"Save their answer with `onboard` (kind \"{q['kind']}\", id \"{q['id']}\", field \"{q['field']}\", value = their words). "
+            "Never ask if they are busy with something urgent.")
+
+
 # ---------------------------------------------------------------- cli
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -412,8 +635,21 @@ def main() -> int:
     p = sub.add_parser("golive"); p.add_argument("--enable", default=""); p.add_argument("--value", default="")
     sub.add_parser("blueprint")
     sub.add_parser("seed-wiki")
+    sub.add_parser("next")
+    sub.add_parser("features")
+    p = sub.add_parser("answer"); p.add_argument("kind", choices=["features", "tool", "tracks", "stage"]); p.add_argument("id"); p.add_argument("field"); p.add_argument("value")
     a = ap.parse_args()
-    if a.cmd == "discover":
+    if a.cmd == "features":
+        f = features_state()
+        print("not asked yet" if f is None else ("handling: " + (", ".join(f["wanted"]) or "none of the optional features") + f"  (since {f.get('when')})"))
+    elif a.cmd == "next":
+        q = next_question()
+        print(json.dumps(q, indent=1, ensure_ascii=False) if q else "onboarding complete")
+    elif a.cmd == "answer":
+        r = answer(a.kind, a.id, a.field, a.value, by="cli")
+        print(("ok   " if r["ok"] else "no   ") + r["line"] + f"  ({r['left']} left)")
+        return 0 if r["ok"] else 1
+    elif a.cmd == "discover":
         ans = _load(Path(a.answers), {}) if a.answers else None
         s = discover(ans, a.function)
         print(capability_map(s))

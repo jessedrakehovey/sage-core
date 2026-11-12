@@ -128,7 +128,10 @@ ok(bool(_owner) and builder.owner_asked(_req_owner) == _owner, "owner_asked: the
 ok(builder.owner_asked(_req_dream) == "" and builder.owner_asked(_req_staff) == "", "owner_asked: a dream-filed or staff-filed request is nobody's ask")
 _prot = ["assistant/doer/computer_policy.py", "assistant/agent/brain.py"]
 ok(builder.auto_ok(_req_owner, _prot) == sorted(_prot), "auto_ok: protected (not tap, not hard) files are approved by the owner's own ask")
-ok(builder.auto_ok(_req_dream, _prot) == [], "auto_ok: nothing for a request nobody asked for")
+ok(builder.auto_ok(_req_dream, _prot) == sorted(_prot) and builder.auto_ok(_req_staff, _prot) == sorted(_prot),
+   "auto_ok: a dream-filed or staff-filed request builds on its own too (2026-11-06: builds run without a card unless a send, credential or hard path is touched)")
+ok(builder.tap_hits(["assistant/config.json", "assistant/scripts/cards.py", "assistant/org.json", "Schema/schema.md"]) == [] and builder.tap_hits(["Memory/memory.md"]) == ["Memory/memory.md"],
+   "tap_hits: config, cards, org and the schema build on their own; the owners' memory stays a tap")
 ok(builder.auto_ok(_req_owner, _prot + ["assistant/scripts/email_send.py"]) == [] and builder.tap_hits(["assistant/scripts/email_send.py", "assistant/doer/vault.py", "assistant/agent/brain.py"]) == ["assistant/scripts/email_send.py", "assistant/doer/vault.py"],
    "auto_ok: a send or credential path keeps the whole request on a card (tap_hits)")
 ok(builder.auto_ok(_req_owner, ["scripts/guardrails/check_gates.py"]) == [], "auto_ok: a hard path is never approved")

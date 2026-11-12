@@ -152,29 +152,17 @@ def _collect():
                 findings.append({"key": f"exc:{t['id']}", "text": f"exec exception {t['kind']} {t['id']}: {str(t.get('result', ''))[:100]}"})
     except Exception:
         pass
-    try:
-        import phone_bridge
-        import text_gate
-        nums = None
-        for i in phone_bridge.stale():
-            if text_gate.applies(i.get("account")):
-                nums = text_gate.business_numbers() if nums is None else nums
-                if not text_gate.is_business(i.get("to"), nums):
-                    continue                 # a text to a friend on an owner's line is not chased (2026-10-08)
-            acct = str(i.get("account") or phone_bridge.DEFAULT_ACCOUNT)
-            owner = phone_bridge.ACCOUNTS.get(acct, {}).get("owner") or "the owner"
-            when = i["ts_handed"][11:16] if i["ts_handed"][:10] == date.today().isoformat() else f"{i['ts_handed'][5:10].replace('-', '/')} {i['ts_handed'][11:16]}"
-            if phone_bridge.acks_ever(acct):
-                why = "but never confirmed sent: check Messages on that phone before re-sending"
-            else:
-                # the Shortcut has never acked once: the text almost certainly went (the phone fetched it), the
-                # confirmation step is what is missing. Said ONCE per text (once: True), with the fix on the phone.
-                why = ("and the phone never confirms sends (its Shortcut has never acked one): it almost certainly went, "
-                       f"so check Messages once. To stop these, on {owner}'s iPhone open Shortcuts > {_SHORTCUT} and, after "
-                       f"Send Message, add a Get Contents of URL step: POST {_MC}/api/phone/ack "
-                       f"with the {phone_bridge.TOKEN_HEADER} header and a JSON body id = the message id (the phone setup note, step 5)")
-            findings.append({"key": f"phone:{i['id']}", "once": True,
-                             "text": f"text to ...{i['to'][-4:]} was handed to {owner}'s iPhone at {when} {why} ({i['body'][:60]!r})"})
+    # A text handed to an iPhone is treated as sent: the phone cannot confirm an outgoing message, so the old
+    # "handed ... but never confirmed sent, check Messages" chase was noise (the owner 2026-10-18 07:47: "Stop sending
+    # me text not confirmed. You have no way to confirm outgoing iPhone messages."). Nothing is said about it.
+    try:   # the wake-up path itself (phone_nudge.health, 2026-11-04): every nudge of a spell went out, no fetch followed
+        import phone_nudge
+        h = phone_nudge.health()
+        if h.get("missed"):
+            findings.append({"key": "phone:wakeup", "once": True,
+                             "text": f"the phone's wake-up text is not arriving ({h['missed']} time(s) in a row every nudge went out and the phone "
+                                     "never fetched): the carrier's email-to-text address may have stopped working, so an approved text waits "
+                                     "until the send Shortcut runs on the phone; each waiting text is said in chat with its send-now link"})
     except Exception:
         pass
     ms = load_json(DATA / "mail_status.json", {})
@@ -202,7 +190,7 @@ def _collect():
             fix = f" Fix ({c.get('owner') or _first_owner()}): {c['renew']}" if c.get("renew") else ""
             findings.append({"key": f"conn:{cid}", "text": f"connection '{c.get('name', cid)}' is down: {str(c.get('detail', ''))[:120]}.{fix}"[:300],
                              "conn": {"id": cid, "name": str(c.get("name") or cid), "detail": str(c.get("detail") or ""),
-                                      "renew": str(c.get("renew") or "")}})
+                                      "renew": str(c.get("renew") or ""), "owner": str(c.get("owner") or "")}})
     findings += _machinery()
     return findings
 
@@ -343,6 +331,42 @@ def _owner_closed(t: dict, facts: list, rules: list) -> str:
     return ""
 
 
+def _window_passed(t: dict) -> str:
+    """A follow-up ticket whose step's own window closed ('' = still open): 'Waiting 5d: Teo (2026-11-07) - week-of
+    confirmation' stayed up two days after the wedding (2026-11-09); a week-of check three days late is moot."""
+    fid = str((t.get("payload") or {}).get("followup") or "") if t.get("kind") == "followup" else ""
+    if not fid:
+        return ""
+    try:
+        import followups
+        ea = followups.parse_iso((followups.load_state()["items"].get(fid) or {}).get("expires_at"))
+    except Exception:  # noqa: BLE001   an unreadable follow-up state keeps the card
+        return ""
+    if ea and ea <= followups.now_utc():
+        return f"its window closed on {ea.astimezone().date().isoformat()}"
+    return ""
+
+
+def _retried_done(t: dict, db: dict) -> str:
+    """A later ticket that names this one by id ('... ticket 37e13dcf29595bd6') and finished: the retry did the job.
+    'Waiting 5d: ShareGrid hold: ashcombe' stayed up five days after its retry blocked the dates (card q586ce4d309fc,
+    2026-11-10); the retry's words ('the owner: On sharegrid.com ...') never matched the original's title."""
+    tid = str(t.get("id") or "")
+    if len(tid) < 12:
+        return ""
+    for o in db.values():
+        if o.get("id") == tid or o.get("status") not in ("done", "verified") or o.get("kind") in _SKIP_KINDS:
+            continue
+        if str(o.get("created") or "") < str(t.get("created") or ""):
+            continue
+        if tid not in f"{o.get('summary', '')} {(o.get('payload') or {}).get('text', '')}":
+            continue
+        note = str(((o.get("history") or [{}])[-1] or {}).get("note") or "")
+        if _OUTCOME_NOTE.search(note):
+            return f"retried and done: {str(o.get('title') or '')[:80]}"
+    return ""
+
+
 def _settled(t: dict, db: dict, facts: list, rules: list | None = None) -> str:
     """Why a staged ask needs no card any more ('' = it does): an owner already closed it (a Skip / Drop tap, a
     never-raise rule, 'handling it himself'), a later finished ticket or an active memory fact shows the same change
@@ -350,6 +374,9 @@ def _settled(t: dict, db: dict, facts: list, rules: list | None = None) -> str:
     closed = _owner_closed(t, facts, _rules() if rules is None else rules)
     if closed:
         return closed
+    passed = _window_passed(t)
+    if passed:
+        return passed
     if t.get("kind") == "card_expired":
         nums = {re.sub(r"\D", "", m)[-10:] for m in _PHONE.findall(f"{t.get('title', '')} {t.get('summary', '')}")}
         nums.discard("")
@@ -358,6 +385,9 @@ def _settled(t: dict, db: dict, facts: list, rules: list | None = None) -> str:
             if nums and _SCAM.search(text) and nums & {re.sub(r"\D", "", m)[-10:] for m in _PHONE.findall(text)}:
                 return "about a number Sage's memory flags as a likely scam"
         return ""
+    retry = _retried_done(t, db)
+    if retry:
+        return retry
     ask = _subject(t.get("title"))
     for o in db.values():
         if o.get("id") == t.get("id") or o.get("status") not in ("done", "verified") or o.get("kind") in _SKIP_KINDS:
@@ -400,7 +430,7 @@ def _close_settled() -> int:
 
 
 _TERMINAL = re.compile(r"\bpython\b|\bpowershell\b|\bschtasks\b|\bclaude -p\b|/mcp\b|\bterminal\b|\bclaude(?: code)? session\b|~/\.claude", re.I)
-_DANGLING = re.compile(r"(?:[\s\-:;,(]|\b(?:see|check its log in|fix \(\w+\)|fix|run|from|in|a|re-?auth\w*|sign in again)\b)+$", re.I)
+_DANGLING = re.compile(r"(?:[\s\-:;,.(]|\bfix \(\w+\)|\b(?:see|check its log in|fix|run|from|in|a|re-?auth\w*|sign in again)\b)+$", re.I)
 
 
 def _no_terminal(text: str) -> str:
@@ -408,14 +438,19 @@ def _no_terminal(text: str) -> str:
     fix points at the Setup page instead (2026-10-16: 're-auth in a terminal' on a stuck card)."""
     m = _TERMINAL.search(str(text or ""))
     if not m:
-        return text
+        try:                               # the whole chat-first rule, not only terminal words (agent/chatfirst.py, 2026-11-04)
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent"))
+            import chatfirst
+            return chatfirst.clean(str(text or ""), "say 'set it up' in chat and its card comes up") if chatfirst.changed(str(text or "")) else text
+        except Exception:  # noqa: BLE001
+            return text
     try:
         import connect
         mc = connect._mc_url()
     except Exception:  # noqa: BLE001
         mc = ""
     head = _DANGLING.sub("", text[:m.start()]) or "something needs fixing"
-    return f"{head} - open Setup on Mission Control{f' ({mc}/setup)' if mc else ''}"
+    return f"{head} - say 'set it up' in chat and its card comes up"
 
 
 def _allowed(cls: str) -> bool:
@@ -840,11 +875,75 @@ def _plain(detail: str) -> str:
     return d.strip(" -:;,") or "it stopped answering"
 
 
+def _recheck(cid: str):
+    """The connection checked once more right before its card goes out -> its fresh row, or None when the check
+    could not run (then the card goes out as before). The 10-15 'the CRM snapshot down' card went out while
+    the connector showed live."""
+    try:
+        import conn_check
+        return conn_check.run(only=cid).get(cid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _file_fault_build(conn: dict) -> str:
+    """A connection whose own code broke (conn_check owner 'claude') goes to the builder by code, ONE open request
+    per connection; the owners are never sent to the PC to fix it (2026-10-15). -> the request's key, or ''."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent"))
+        import builder
+        import wiki_writer
+        title = f"Fix the {conn['name']} refresher"
+        for r in builder.collect():
+            if str(r.get("title") or "").lower() == title.lower() or f"conn:{conn['id']}" in str(r.get("text") or ""):
+                return str(r.get("key") or "")
+        body = ("## Build request\n\n"
+                f"**Ask (the sentinel, by code):** the connection `{conn['id']}` ({conn['name']}) is down with a fault in its own "
+                f"code, not a sign-in: {conn.get('detail', '')[:300]}\n\n"
+                f"**What to fix:** {conn.get('renew', '')[:300]}\n\n"
+                f"**Acceptance:** `python assistant/scripts/conn_check.py --only {conn['id']}` reports it live, and a test drives "
+                f"the broken path.\n\n**Evidence:** sentinel finding conn:{conn['id']}\n")
+        x = wiki_writer.write({"title": title[:90], "type": "workflow", "lane": "personal", "body": body}, by="sentinels")
+        if x.get("status") not in ("applied", "appended"):
+            return ""
+        key = str(x.get("path") or "")
+        try:
+            builder.kick(force=True, first=key)
+        except Exception:  # noqa: BLE001
+            pass
+        return key
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _fault_card(conn: dict) -> dict:
+    """The card for a connection whose own code broke: plain words that it is being fixed, nothing for an owner to do
+    at the PC, no file names. It clears itself when conn_check proves the connection live again."""
+    name = conn["name"]
+    return {"header": f"{name}: fixing it", "lane": "personal", "clears_when": {"connection": conn["id"]},
+            "sentinel_key": f"conn:{conn['id']}", "sentinel_act": {},
+            "question": f"{name} stopped updating because of a fault on my side, not a sign-in. I'm fixing it myself now; "
+                        "there's nothing you need to do, and this card closes on its own once it works again.",
+            "options": [{"label": "Leave it", "description": "I keep fixing it quietly"}]}
+
+
 def _conn_card(conn: dict) -> bool:
     """ONE alarm card per dead connection, by code, with buttons that act; the sweep carries the
-    answer out (cards._act_on_setup). Refused as DUPLICATE_ALARM while one is open -> False."""
+    answer out (cards._act_on_setup). Refused as DUPLICATE_ALARM while one is open -> False.
+    The connection is checked again first (live now -> no card); a code fault is handed to the builder and
+    carded as 'fixing it' instead of asking an owner to set anything up."""
     try:
         import cards
+        fresh = _recheck(conn["id"])
+        if isinstance(fresh, dict):
+            if fresh.get("state") != "dead":
+                return False
+            conn = {**conn, **{k: str(fresh.get(k) or "") for k in ("detail", "renew", "owner") if fresh.get(k)}}
+        if conn.get("owner") == "claude":
+            _file_fault_build(conn)
+            q = _fault_card(conn)
+            r = cards.post([q], "sentinels", lane=q["lane"])
+            return bool(r.get("posted"))
         how = ""
         try:
             import setup_actions
@@ -862,7 +961,7 @@ def _conn_card(conn: dict) -> bool:
             ch = None
         if isinstance(ch, dict) and ch.get("steps"):
             say = str(ch.get("say") or f"set up {conn['name']}")
-            renew, how = f"Say '{say}' in chat and I'll walk you through setting it back up from your phone.", ""
+            renew, how = "", f"Say '{say}' in chat and I'll walk you through setting it back up from your phone."
             detail = _plain(detail)
         if conn["id"] == "bank-simplefin":
             # point at the Setup page's Bank feed button, never a terminal or a command (2026-10-15)
@@ -871,7 +970,7 @@ def _conn_card(conn: dict) -> bool:
                 mc = connect._mc_url()
             except Exception:  # noqa: BLE001
                 mc = ""
-            renew, how = f"Open Setup on Mission Control{f' ({mc}/setup)' if mc else ''} and tap the Bank feed button; it works from your phone.", ""
+            renew, how = "", "Say 'set up the bank feed' here and its form comes up; it works from your phone."
             detail = _plain(detail)
         q = cards.connection_card(conn["id"], conn["name"], detail, renew, how)
         r = cards.post([q], "sentinels", lane=q["lane"])

@@ -110,8 +110,28 @@ def _quiet_hours(now=None) -> bool:
 
 
 def _run(cmd, timeout=180):
-    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=timeout, cwd=str(VAULT))
+    """Run an executor script. On timeout, kill the WHOLE process tree, then re-raise: subprocess.run's
+    timeout kills only a venv launcher, and the real python under it can still send after the ticket
+    was already booked as a timeout (ported from the property agent, 2026-10-29)."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                            errors="replace", cwd=str(VAULT), creationflags=flags)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+                               timeout=30, creationflags=flags)
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            out, err = proc.communicate(timeout=30)
+        except Exception:  # noqa: BLE001
+            out, err = "", ""
+        raise subprocess.TimeoutExpired(cmd, timeout, output=out, stderr=err)
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 # ------------------------------------------------------------------ executors
@@ -269,7 +289,9 @@ def _exec_agent_run(p, dry):
             Path(pf).unlink()
         except OSError:
             pass
-    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    # stderr first (the profile lease's [lease] wait lines go there): with it last, the
+    # 250-char tail on a failure card held lease noise instead of the doer's verdict
+    out = ((r.stderr or "") + "\n" + (r.stdout or "")).strip()
     if dry and "DRY_RUN_OK" in out:
         return True, "DRY_RUN_OK agent_run"
     if "DOER_RESULT=DOER_DONE" in out:
@@ -373,7 +395,9 @@ def _result_line(t, result) -> str:
             return line + "; I could not confirm it landed in the original thread, check Sent mail."
         return line + (", as a reply in the original thread." if "THREAD=ok" in out else ".")
     if k == "imessage_send":
-        return f"Text to {p.get('to')} handed to the phone at {when}; the phone's Shortcut sends it."
+        # queued is not sent (2026-11-04: "Texted ... at 4:00 PM" was said 54 minutes before the phone took the
+        # text): the "handed" line is said by phone_bridge.fetch_outbox, at the moment the phone fetches it
+        return f"Text to {p.get('to')} queued for the phone at {when}; it goes when the phone picks it up."
     own = _plugin_call("result_line", t, result)          # the organization's own kinds (the CRM's) word their own
     if own:
         return str(own)
@@ -407,9 +431,22 @@ def _outcome(t, ok, result) -> dict:
 def _report_result(t, result):
     """Post the result line under the card the owner tapped (its Chat thread) and as a card note.
     Never raises; a send that landed is never undone by a reporting failure."""
-    line = _result_line(t, result)
-    if not line:
-        return
+    report_line(t, _result_line(t, result))
+    try:                                   # the agent's own work log (agent/worklog.py, upgrade 10): what it did, when
+        sys.path.insert(0, str(HERE.parent / "agent"))
+        import worklog
+        worklog.add(_result_line(t, result), lane=str(t.get("lane") or ""), ref=str(t.get("id") or ""),
+                    by=str(t.get("approved_by") or ""), kind=str(t.get("kind") or ""))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def report_line(t, line) -> bool:
+    """One line about an executor ticket, under the card the owner tapped (its Chat thread) and as a card note.
+    Also the phone bridge's voice (a text fetched by the phone, or still waiting for it). True when it reached the
+    card's thread. Never raises."""
+    if not line or not t:
+        return False
     ref = str(t.get("approval_ref") or "")
     try:
         import cards
@@ -418,9 +455,10 @@ def _report_result(t, result):
         card = (cards._read(cards.DONE / f"{qid}.json") or cards._read(cards.LIVE / f"{qid}.json")) if qid else None
         cards.note("drain", line + (f" (card {qid})" if qid else ""))
         if card:
-            chat_push.push_result(card, line)
+            return bool(chat_push.push_result(card, line))
     except Exception:  # noqa: BLE001
         pass
+    return False
 
 
 def _reopen_card(t, result) -> bool:
@@ -439,7 +477,7 @@ def _reopen_card(t, result) -> bool:
             # the same failure twice (reflex, 2026-10-27): no third identical tap; one plain line says what only the
             # owner can change, and the card stays closed
             why = str(result).replace(PERM, "", 1)[:160]
-            fix = ("set it up on Mission Control > Setup (System), then ask me again" if "NOT_CONFIGURED" in why.upper()
+            fix = ("say 'set it up' here and I bring its form, then ask me again" if "NOT_CONFIGURED" in why.upper()
                    else "tell me how you'd rather handle it, or ask me again once it's changed")
             cards.say("drain", str(t.get("lane") or "personal"), f"This failed the same way twice ({why}), so I'm not trying it a third time; {fix}.")
             es.ledger("reopen_same_failure", ticket=str(t.get("id") or ""), why=why)
@@ -474,13 +512,31 @@ def _surface_exception(t, result):
         pass
 
 
+UNKNOWN = PERM + "OUTCOME UNKNOWN: "
+
+
 def reap_stale_running(minutes=STALE_RUNNING_MIN):
-    """A drain that died mid-ticket leaves it 'running' forever; hand it back or fail it."""
+    """A drain that died mid-ticket leaves it 'running' forever; hand it back or fail it. A ticket whose running row
+    was written on an EARLIER boot (the machine restarted mid-run, upgrade 5) is settled at once as OUTCOME UNKNOWN:
+    the action may or may not have landed, so nothing retries it by itself; the outcome ledger asks."""
     now, n = time.time(), 0
+    boot = es.boot_id()
     for t in es.running():
         try:
             ts = time.mktime(time.strptime(str(t.get("ts_run") or t.get("ts")), "%Y-%m-%dT%H:%M:%S"))
         except Exception:
+            continue
+        rebooted = bool(boot) and bool(t.get("boot")) and str(t.get("boot")) != boot
+        if rebooted:
+            why = UNKNOWN + "the machine restarted while this ran; check the record before re-carding"
+            es.set_status(t["id"], "exception", why)
+            try:
+                import outcomes
+                outcomes.from_exec(t, False, why)
+            except Exception:  # noqa: BLE001
+                pass
+            _surface_exception(t, "OUTCOME UNKNOWN: the machine restarted mid-run")
+            n += 1
             continue
         if now - ts > minutes * 60:
             if t.get("kind") in es.OUTBOUND_KINDS:
@@ -612,7 +668,7 @@ def _drain_locked(lane, dry, min_age_s):
         floor = max(min_age_s, UNDO_FLOOR_S if str(t.get("approval_ref", "")).startswith("card:") and not dry else 0)
         if floor and _age_s(t) < floor:
             continue
-        if t["kind"] in es.OUTBOUND_KINDS and quiet and not dry:
+        if t["kind"] in es.OUTBOUND_KINDS and quiet and not dry and not es.quiet_exempt(t):
             out["held_quiet"] += 1
             continue
         fn = EXECUTORS.get(t["kind"])
@@ -645,7 +701,7 @@ def _drain_locked(lane, dry, min_age_s):
             continue
         attempts = int(t.get("attempts") or 0) + 1
         es._append(es.TICKETS, {"id": t["id"], "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "status": "running",
-                                "ts_run": time.strftime("%Y-%m-%dT%H:%M:%S"), "attempts": attempts})
+                                "ts_run": time.strftime("%Y-%m-%dT%H:%M:%S"), "attempts": attempts, "boot": es.boot_id()})
         es.ledger("run", ticket=t["id"], kind=t["kind"], attempt=attempts, dry=dry)
         out["ran"] += 1
         try:
@@ -694,10 +750,29 @@ def _drain_locked(lane, dry, min_age_s):
     return out
 
 
+def kick(lane: str, after_s: float = UNDO_FLOOR_S + 1) -> str:
+    """An owner just approved something that should not wait for the next 10-minute pass (a sign-in handed over from
+    chat, a browser step on a checkpoint card): ONE detached drain of that lane, started once the card's undo window
+    has passed. The drain lock keeps it from running beside the regular pass. Never from a scratch store (a test);
+    never raises (2026-11-04: a login saved from chat sat queued for ten minutes and looked like it had not worked)."""
+    if any(os.environ.get(v) for v in ("ASSISTANT_DATA", "ASSISTANT_CARDS", "AGENT_DATA", "AGENT_STATE")):
+        return "NOT_KICKED a scratch store (a test)"
+    try:
+        exe = Path(sys.executable)
+        pyw = exe.with_name("pythonw.exe")
+        flags = 0x08000000 | 0x00000200 if os.name == "nt" else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, never DETACHED_PROCESS
+        subprocess.Popen([str(pyw if pyw.exists() else exe), str(Path(__file__).resolve()), "--lane", str(lane), "--after", str(max(0.0, float(after_s)))],
+                         cwd=str(VAULT), creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "KICKED"
+    except Exception as e:  # noqa: BLE001
+        return f"NOT_KICKED {type(e).__name__}: {str(e)[:120]}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--lane", default="")
+    ap.add_argument("--after", type=float, default=0, help="wait this many seconds first (a card's undo window), then drain")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--reset-breaker", default="", help="close a tripped channel breaker by lane name")
     a = ap.parse_args()
@@ -705,6 +780,10 @@ def main():
         breaker_reset(a.reset_breaker, by="cli")
         print(f"DRAIN breaker reset lane={a.reset_breaker}")
         return
+    if a.after > 0:
+        time.sleep(min(a.after, 300))
+    if sys.stdout is None:                         # pythonw (kick): no console
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
     res = drain(a.lane, a.dry_run)
     print(json.dumps(res) if a.json else "DRAIN " + " ".join(f"{k}={v}" for k, v in res.items()))
 

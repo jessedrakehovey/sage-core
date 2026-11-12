@@ -102,7 +102,7 @@ def launch(j: dict, args: dict) -> dict:
               "--name", describe(j, args), "--log", str(log), "--"] + cmd
     flags = 0
     if os.name == "nt":
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP   # Never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     p = subprocess.Popen(runner, cwd=str(VAULT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, creationflags=flags, close_fds=True)
     return {"pid": p.pid, "log": str(log), "cmd": cmd}

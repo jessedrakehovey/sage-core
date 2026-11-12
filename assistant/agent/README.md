@@ -8,6 +8,23 @@ to open Claude Code for it to improve.
 
 Both owners are equal (`people.json`). Nobody else is ever answered.
 
+## Looking things up on the internet: free, no browser (2026-11-08)
+
+An owner, 2026-11-08: *"an internet search and query tool that lets sage look things up just like a normal claude
+or gpt instance can without opening any browsers but it needs to be free."* Two read tools on the private server
+(`gmcp.py`), code in `websearch.py`, allowed in every turn (owners' space and team space; not the staff role):
+
+- **`web_search`** (query) gives titles, links and snippets. Free backends in order: Yahoo's plain results page
+  (standard library), the `ddgs` package if installed, DuckDuckGo's HTML page, Wikipedia's search API. Bing's bare
+  page is left out on purpose: to a cookieless client it matches only the first word of the query.
+- **`web_read`** (url) reads one page as clean text (`trafilatura` if installed, else a built-in extractor).
+
+Pages are marked as other people's words, never instructions. A read refuses this computer and private-network
+addresses (Mission Control, the browser's debugging port, the router, the tailnet), redirects included. No key, no
+account, no browser. The CLI's own WebSearch/WebFetch stay denied to the brain. `python assistant/agent/websearch.py
+selftest` checks every backend live; tests in `assistant/tests/test_websearch.py`. If searches start coming back
+empty, a backend changed its page: the selftest says which one.
+
 ## The desk: work is done in the turn, not relayed (2026-10-30)
 
 the owner, comparing Sage with example (the property OS's front door): "When I tell example to do something example
@@ -66,6 +83,51 @@ Tests: `tests/test_desk.py` (the owner's real lines sorted, the belt's refusals 
 and the frozen belt, the prompt filled and org-free, the reply checked against the record, notes, the
 bridge routing with the desk on and off). Not built yet: a desk job that itself needs a second desk
 (it reads the running job's notes instead), and a `/desk` command listing jobs in chat.
+
+## The pick-up: an ask is carried to its end (2026-11-10)
+
+the owner, after a morning of Dropbox: "Sage should be reliable for these types of tasks and never just stop
+without following all the way through." The record: he asked for an upload link texted to a team member and the
+finished film's link texted to a client. The desk took the first line, queued the browser step and its turn
+ended. Then two things broke the follow-through:
+
+1. **The day's thread turned into "a card's thread".** A card posted as a reply inside a thread is named
+   `spaces/S/messages/<thread id>.<its id>`, and `bridge.card_for_thread` read the part before the dot. The
+   10:24 sign-in checkpoint card therefore made every later line in that thread (one per space per day) "a
+   reply to that card", which `desk.wants` leaves to the read-only brain. "Send her the final link", "Try
+   again. Also I exported ...", "Send a team member the request link" all got a brain turn that could only promise.
+2. **A step's end was the work's end.** Nothing read a browser step's result against what had been asked.
+   a team member's link existed at 11:30; its text card went up at 12:23, because the owner asked again. The film "had not
+   uploaded yet", so that step stopped and nobody looked a second time.
+
+What changed, all by code:
+- `bridge.card_started_thread(card, thread)`: only a card whose message IS the thread's first message
+  (`ID.ID`) owns the thread. For a card that merely sits in the thread, `desk.wants(..., card_root=False)`
+  keeps a line with the brain only when `desk.card_talk()` reads it as a yes / no / when ("send it", "send
+  it at 8am", "not yet") or a revision that points at the draft ("change it to say Thursday"); every other
+  work line goes to the desk as it would in an empty thread. `card_for_thread` now returns the NEWEST card
+  in the thread when none started it (it used to return the first by file name, an old checkpoint).
+- **`pickup.py`**. `doer._handback()` is called at every ending of a browser or PC step (`run_ticket`,
+  `run_approved`, both lanes) except a checkpoint (the tap comes next), the owner's Stop and a re-queue.
+  `pickup.on_job_end()` then starts a desk turn in the ask's thread whose prompt carries the step, how it
+  ended and the thread so far (`pickup.block`): list what the owner asked for that is not in their hands,
+  do the next deed now (the card with the link in it, the next step, the other route), and reply only with
+  what is new; `NO_REPLY` posts nothing (`desk.quiet_pickup`), and a failed pick-up turn is silent too,
+  because the step's own report already stands.
+- **Check-backs.** A piece waiting on something that changes by itself (an upload, a sync, a render):
+  `python assistant/agent/desk.py later <job> <minutes> "<what to look at>"` (2 to 180 minutes, three per
+  thread). `bridge.pickup_fire()` on the minute tick starts a desk turn when one is due. `desk.block` shows
+  the waiting check-backs to the brain, so "are you done yet?" gets "I look again at 11:40", never "ask me
+  again".
+- **Bounded.** At most `max_rounds` (12) pick-ups and check-backs per thread per `window_h` (6) hours; the
+  same ending is picked up once; the last round is told to set no more check-backs and hand the rest over
+  in one line with the shortest way from the phone. An owner-only block (a tap, a code) is never re-run.
+- `desk_prompt.md`: an ask with several pieces is one piece of work until every piece is in the owner's
+  hands; a `do` never says a card "is ready"; a sign-in check stays on its one page.
+
+Switch: `profile.json -> "pickup": {"enabled", "max_rounds", "window_h", "later_min", "later_max"}` (defaults
+in code), env `AGENT_PICKUP=off`. State: `data/agent/pickup.json`; `python assistant/agent/pickup.py` prints
+it; every start is in `~/.claude/desk-wv.log` ("pickup ..."). Tests: `tests/test_pickup.py`. Org-free.
 
 ## Projects: long-running problems worked on a schedule, with every try on record (2026-10-27, evening)
 
@@ -184,7 +246,9 @@ urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": T
   Quinn Heathcote at 12:19 PM, from your phone"; "Emailed Corwin Castellan IV at 4:45 PM" (the Message-ID stays on the
   card note); "Done: approval cards now show an hourglass ..." for a build receipt (a receipt whose "what changed" is
   a truncated title says "Done, that's built: ..."); "I need the 6-digit MyDMV code ... Reply with it here" for a doer
-  waiting on a code; a blocked doer line quotes the job cut at a word; "On it." for a tap ack; a routine drops its
+  waiting on a code; a blocked doer line quotes the job cut at a word; "On it." for a tap ack ("Build it, I approve"
+  names its build, and taps within 5 minutes edit that ONE message: "Building all four: a, b, c and d",
+  `voice.build_batch`, `test_build_ack.py`); a routine drops its
   "Title: " prefix. Names for numbers everywhere (`voice.names`, from the contacts; an unknown number reads
   "(805) 555-0123"), ids, ticket codes, preview markers out of every line (`voice.polish`, the model's reply
   included). The same words to the same place within an hour post once (`voice.fresh`). Switches:
@@ -196,7 +260,8 @@ urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": T
   reply (urgent where asked), "Build needs your OK", a stalled ask ("Waiting Nd"), a lead's next step. Switch:
   `cards.system_to_chat` (env `ASSISTANT_CARDS_SYSTEM=chat` in tests).
 - **The reflex works the system cards** (`reflex.d_system_cards` + `fix_system_card`): step 0 presses the card's own
-  recommended button by code (run the job / the task / the drain / the sensor), an hour later a still-open finding
+  recommended button by code (run the job / the task / the drain / the sensor; on a stalled ticket's "Waiting Nd" card
+  it taps "Hand it to Sage" on the card itself, so the card closes and the ticket goes to the operator), an hour later a still-open finding
   becomes ONE build request with the evidence, and only a sign-in that is the owner's to do (a connection card) or a
   paused channel with approved items behind it is said in Chat, in the card's own words, once a week at most. Nothing
   else about the machinery reaches an owner.
@@ -279,6 +344,9 @@ model took each correction as conversation. `assistant/agent/correction.py`, zer
   how it stands (`place._card_state`: open / tapped and sent), nothing is forced or re-run, and the ledger row's
   `card_here` keeps the reflex from filing a build. A closed card's own thread context says how it closed too, so a
   tapped Send is never described as "closed unsent" and an owner's message there never changes it.
+- **The card is somewhere else** (`card_not_here` + `surface`, 2026-11-05 "There is no card"): the open card the last
+  reply pointed at, but held for the weekly digest or posted in another space, is posted into this conversation by code
+  and the brain is told it is here now; a system (Mission Control only) card is never brought into Chat.
 - **Ledger** `data/agent/corrections.jsonl` (`python assistant/agent/correction.py [hours]`): kind, the ask, what was
   expected, what the turn put forward, what code forced, whether a re-run was needed, `words_only`. The reflex's
   `correction:<ts>` finding (`d_corrections`) takes a correction that still ended in words alone and files ONE build
@@ -361,7 +429,8 @@ around the same read-only brain:
   `capability.from_blocked`, and the ask is replayed when it lands) or `signin` / `fact` / `tap` / `connection` (code
   records the portal and the reply says Tried / Blocked because / Need from you, once). Rung 6 of the prompt calls it;
   the reply backstop stays quiet when a turn used it. `gmcp.WRITE_TOOLS`, `intents.validate`, `actions.apply`,
-  `brain.ALLOWED` (the gate baseline tracks the deny floor, so it did not move).
+  `brain.ALLOWED` (the gate baseline tracks the deny floor, so it did not move). "Are you missing any bank?"
+  (gap g-e569ce, 2026-11-01) is `blocked` kind connection `bank-plaid`: the bank sign-in card lands in that thread.
 - **The builder demands a test that drives the ask** (`builder.acceptance_ok`): a build for a request that carries an
   **Ask** line is rejected unless a new or changed file under `assistant/tests/` shares the ask's content words (the
   fake-brain pattern of `test_capability.py` section 9); the rejection names what to add and rides into the next
@@ -447,6 +516,10 @@ the owner: "Sage is not responding. I also added it to a new Google space called
 - **A card asked for in a team-space thread lands in that thread.** `chat_push.push_card` posts a card whose
   `chat_thread` belongs to another space into that thread's own space, not the home space (10-26: the Odette
   card handed to the operator after a draft-lint refusal opened a new thread in the home space). `tests/test_chat_push.py`.
+- **A schedule can post in a team space (2026-11-02).** `schedule` takes `space` (the space's name as Chat shows it)
+  and `until` (its last day): its fixed `say` posts there at its time through the voice gate (`bridge.post_space`),
+  a line opening "a team member, ..." becomes a real tag, never in the home space or a DM, never a `prompt` look-up.
+  `routines.team_space`; `tests/test_capability.py` section 30.
 
 ## Never assume what they mean: thread, recency, last cards (2026-10-25)
 
@@ -675,6 +748,8 @@ try) and the rest hit six gaps, each closed in code:
   decides the window: 30 min on a phone that acks, 4 h on one that never has (`HANDED_STALE_NOACK_MIN`),
   and nothing older than 72 h (`HANDED_GIVEUP_H`). The finding carries the date, says the text almost
   certainly went, names the Shortcut step to add (the owner_IPHONE_SETUP.md step 5), and is `once: True`.
+  **Since the 2026-10-18 build request, that chase is gone:** a handed text is treated as sent and the sentinel
+  says nothing about it ("You have no way to confirm outgoing iPhone messages").
 - **One chase digest a day.** The operator relisted the same stuck items in chat at 12:10, 12:15, 16:17 and
   17:45. `sentinels.run` folds further card/staged/phone findings into the day once a chase digest exists
   (latched, no ticket); a sensor, connection, exec or spine finding is news and still gets its own digest.
@@ -855,14 +930,17 @@ The model never writes and never sends. "Saved" is only ever said by the code th
 - **Chat markup.** Replies are converted to Google Chat's own bold, bullets and links.
 - **Follow-ups.** "Ask owner whether Saturday works" or "I'll send it tonight" becomes a tracked check-back
   (`followups.py`). When it comes due the brain checks whether it is settled; only if not does that person get
-  one line. A promise to check back that nothing is tracking is removed from the reply.
+  one line. A promise to check back that nothing is tracking is removed from the reply. A reply in the follow-up's
+  own thread closes it, but a question or an ask to the agent posted there does not (ported from example, 2026-10-31).
 - **Addressed vs ambient.** `space_reader.py` reads the shared spaces with the owner's example sign-in (read-only
   scopes), the way example reads her space, so people talking to each other are seen too. @mentions, the name "Sage"
   or a question aimed at it are direct; the rest is AMBIENT: no typing placeholder, at most 4 model turns an hour,
   and the brain answers NO_REPLY unless it holds a fact they need.
 - **Voice notes and photos.** Attachments are fetched with the reader's sign-in; audio and video are transcribed on
   this machine (`scripts/transcribe.py`, faster-whisper) and handed to the brain as the person's words; photos as a
-  path the brain opens with Read.
+  path the brain opens with Read. A failed transcription is tried once more offline (the cached model), and a
+  "transcription failed" line is transcribed again whenever it reaches the brain again, a capability replay included
+  (2026-11-07).
 
 ## One space, and a human voice (2026-10-07)
 
@@ -997,7 +1075,9 @@ and the doer (browser and computer use; a cut-off job resumes its own session) s
 ## From the transcript review (2026-10-11)
 
 the owner asked for every miss in Sage's chats to be fixed. What changed (details in HANDOFF.md 2026-10-11):
-calendar `event_change` / `event_remove` for the agent's own events (ledger allow-list, listed each turn),
+calendar `event_change` / `event_remove` for the agent's own events (ledger allow-list, listed each turn;
+when several match, the exact title or the one on the new start's day wins, otherwise one plain "Which one
+did you mean, X on Saturday Oct 17, or Y on ...?" with no dashes or ids, 2026-10-17),
 eight events a reply, `core.tightens()` so narrowing rules apply at once and only loosening ones queue,
 `bridge.recently_answered` so a re-delivered or resent message is answered once, the prompt's "How to
 sound, what never to say" section (no sending owners to the PC, no mechanics talk, pronoun -> newest card,
@@ -1238,6 +1318,50 @@ evidence of completion report back". What changed, all in code around the same r
   finishes posts its record (Message-ID / CRM message id + time) in the card's own thread.
 - The doer's self-learning had been dead since 10-12 (`import learn` picked the wrong module);
   fixed in `doer._learn()`.
+
+## Follow-through: five fixes from one day's review (2026-11-04)
+
+An owner typed 18 messages that day; 7 were the same ask again or "that didn't work", and none was recorded as a
+correction. Each fix below is a failure that was chased by hand. Tests: `tests/test_followthrough.py`.
+
+1. **Queued is not sent.** `drain._result_line` says an approved text is *queued*; "Texted ... at HH:MM" is said by
+   `phone_bridge.fetch_outbox` at the moment the phone takes it (`drain.report_line`, the card's own thread). A text the
+   phone has not fetched `WAITING_TELL_MIN` (3; `config phone.waiting_tell_min`, 0 = off) after it was queued is said
+   once, where it was approved, with the send-now link (`phone_bridge.tell_waiting`, every minute from the comms
+   probe). `brain.sent_block` carries each text's real state in brackets (`phone_bridge.state_words`), so "it never
+   sent" is answered from the queue. A draft refused as already approved is never handed on again
+   (`actions._already_approved_line` says where the message is; `reflex.fix_reply` no longer adds a second "the card
+   didn't post" line). `phone_nudge.health()` counts spells where every wake-up went out and the phone never fetched
+   (a sentinel finding, `phone:wakeup`); `woke()` clears it when a fetch follows a nudge.
+2. **A promise is not its own answer.** `commitments._answered_in_chat` no longer closes a hand-off on the reply that
+   made the promise (`_PROMISED`: "comes here", "in a few minutes", "I've handed ..."), so a card that is then refused
+   is said in the thread. A `prompt` routine an owner set up may put up the ONE draft card it asks for
+   (`routines._routine_card`: its `task` only, through the usual guards, registered as a commitment); before, the turn
+   was told "No SUGGEST line" and could only say no card was up.
+3. **"Let me sign in" is one step.** `signin.owner_signs_in` (bridge, before the model): the job's sign-in card is
+   answered "I'll sign in myself" by code (posted again first when it had closed), the browser agent is woken, and the
+   Carry on card follows. `chatfirst` keeps a sentence in which the agent says where its own browser is (subject the
+   agent, nothing asked of the owner), and never appends `HANDLED` to a line that still asks for the sign-in.
+4. **Complaints and repeats are corrections.** `correction.kind` reads curly quotes as straight ones (a phone types
+   "didn’t") and knows "was never texted", "you haven't given me", "I'm telling you", "I told you to".
+   `correction.repeat_of`: the same ask inside two hours, any thread of the conversation, is kind `repeat`: the model
+   is told its last answer did not work; a setup ask that gets the same code answer again is recorded for the reflex.
+5. **A job's report in a person's words.** The `_DOER_*` patterns end the job's title at its closing quote (a title
+   holding ": " used to spill into the reason); `voice.human` drops sentences that are only code and reads a hook's
+   refusal as a safety rule; a "step" that was only at the computer is said as the agent's own block. A browser job
+   whose own report reached the owner raises no "Not confirmed" card (`outcomes._job_reported`).
+
+Not changed, on purpose: unrelated lines sharing the day's thread (that is `thread_keys.py`, one thread per day, as
+asked for the same day).
+
+**The wake-up's replacement (2026-11-05).** The carrier's email-to-text address is being shut down, so the phone now
+ASKS instead of being woken: automations on the phone run the send shortcut when its owner leaves the chat app, when
+any text arrives, and on the hour (the phone setup note, step 4). The PC's half is `phone_bridge.wait_for_release`:
+a fetch that arrives while a card-approved text for that phone is still inside its undo window is held until the
+window is out (`FETCH_WAIT_S` 40; `config phone.fetch_wait_s`, 0 = off), then drained and answered, so the fetch
+made seconds after the tap carries the text. A phone that hung up during the hold is handed nothing
+(`mc_server._client_gone`): an item marked handed to a closed connection would never be sent. The old nudge still
+fires while the carrier delivers it; the waiting line with its link stays as the net.
 
 ## Not built yet
 

@@ -70,7 +70,7 @@ tcard = {"id": "q0123456789ab", "questions": [dict(Q, exec={"kind": "imessage_se
 body = chat_push.card_body(tcard, "answered", {"option": "Send", "by": "gchat:owner1", "ticket": "tk-2"})
 allb = [b for s in body["cardsV2"][0]["card"]["sections"] for w in s["widgets"] if "buttonList" in w for b in w["buttonList"]["buttons"]]
 check("approved text card offers Send now from phone (https link)", [b["text"] for b in allb] == ["Undo", "Send now from phone"]
-      and allb[1]["onClick"]["openLink"]["url"].startswith("https://") and allb[1]["onClick"]["openLink"]["url"].endswith("/phone/run"))
+      and allb[1]["onClick"]["openLink"]["url"].startswith("https://") and allb[1]["onClick"]["openLink"]["url"].split("?")[0].endswith("/phone/run") and "?t=" in allb[1]["onClick"]["openLink"]["url"])
 # 3b. the mark on a tapped card means it really happened (Delia, 2026-10-24): queued ⏳, refused ❌, landed ✅
 send_card = {"id": "q0123456789ab", "questions": [dict(Q, exec={"kind": "email_send", "payload": {}, "approve_label": "Send"})]}
 

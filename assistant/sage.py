@@ -206,7 +206,7 @@ def _mc_keepalive(dry: bool) -> tuple:
         return True, "DRY would start mc_server.py"
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe") if IS_WIN else exe
-    flags = 0x00000008 | 0x00000200 if IS_WIN else 0
+    flags = 0x08000000 | 0x00000200 if IS_WIN else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     try:
         subprocess.Popen([str(pyw if pyw.exists() else exe), str(HERE / "scripts" / "mc_server.py")], cwd=str(ROOT), env=child_env(),
                          creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -460,6 +460,36 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
     add("google (mail + calendar)", "ok" if acc else "info", f"{len(acc)} account(s) in agent/google.json" if acc else "not connected yet", "Mission Control /setup, or assistant/agent/GOOGLE_SETUP.md Part 1")
     chat = (HERE / "agent" / "gchat.local.json").exists()
     add("google chat", "ok" if chat else "info", "chat app configured" if chat else "not connected yet (needs Google Workspace)", "assistant/agent/GOOGLE_SETUP.md Parts 2-3")
+    cc = _load(HERE / "data" / "chat_console_state.json", {}) or {}
+    add("chat home tab", "ok" if cc.get("app_home") else "info",
+        f"App Home on, {len(cc.get('commands') or [])} commands, relay v{cc.get('relay_version', '?')} ({cc.get('configured_at', '')})" if cc.get("app_home") else "not set up yet",
+        "tap 'Set up the Home tab' in chat (connection chat-home), or: <venv python> assistant/scripts/chat_console.py all")
+    try:
+        sys.path.insert(0, str(HERE / "scripts"))
+        import startup as _startup
+        todo = [r["name"] for r in _startup.pending()]
+        add("start-up sequence", "ok" if not todo else "info", "every start-up job is done" if not todo else "still to do: " + "; ".join(todo),
+            "say 'finish setting up' in chat: one card, one tap, the agent does the rest")
+    except Exception as e:  # noqa: BLE001
+        add("start-up sequence", "info", f"startup.py: {type(e).__name__}", "say 'finish setting up' in chat")
+    try:
+        sys.path.insert(0, str(HERE / "scripts"))
+        import remote_desktop as _rd
+        rd = _rd.status()
+        add("control pc", "ok" if rd.get("pin_set_at") else "info",
+            (f"PIN set {rd['pin_set_at'][:10]}" if rd.get("pin_set_at") else "no PIN set from chat yet") + ("; host running" if rd.get("running") else "; host not running")
+            + ("" if rd.get("helper") else "; administrator helper not installed"),
+            "tap 'Set the Control PC PIN' in chat; the helper: python assistant/scripts/elevated.py install (one Windows approval, at install)")
+    except Exception as e:  # noqa: BLE001
+        add("control pc", "info", f"remote_desktop.py: {type(e).__name__}", "tap 'Set the Control PC PIN' in chat")
+    try:
+        sys.path.insert(0, str(HERE / "scripts"))
+        import shots as _shots
+        ss = _shots.status()
+    except Exception as e:  # noqa: BLE001
+        ss = {"ok": False, "hint": f"shots.py: {type(e).__name__}"}
+    add("screenshots drive", "ok" if ss.get("ok") else "info", f"\"{ss.get('drive_name')}\" found, {ss.get('hosted', 0)} picture(s) hosted" if ss.get("ok") else str(ss.get("hint") or "not set up"),
+        "tap 'Set up the screenshots drive' in chat (connection shots-drive), or: <venv python> assistant/scripts/shots_setup.py all")
     ts = _which("tailscale")
     push = ((_load(HERE / "config.json", {}) or {}).get("push") or {})
     gl = _load(GCHAT_LOCAL, {}) or {}

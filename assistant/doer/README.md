@@ -32,7 +32,8 @@ e.g. a login code). Sage reads it to answer "where is it?"; `doer.py --status` s
 checkpoint is relayed into the requester's Chat DM as well as the card; a code card says to type the
 code in the note box on Mission Control (Chat buttons cannot carry a typed code). Since 2026-10-25 an owner
 can also just type the code in chat: a bare 4-10 digit line answers the newest open code card by code
-(`bridge._code_for_card`, no model turn; the code is kept only in the ticket, never in the transcript).
+(`bridge._code_for_card`, no model turn; the code is kept only in the ticket, never in the transcript); since 2026-11-05 the code may be named around the digits, "148198 for share grid code" or
+"sharegrid code is 148198", while "2000 for the retainer" is never taken for a code.
 
 **Hand-off checkpoints (2026-10-28).** When the last step is the owner's own (typing the payment at a
 checkout, signing), the turn sets `"handoff": true`: before the card posts, `browser.show_on_screen()` moves the
@@ -49,6 +50,14 @@ picks (authenticator app, then email code, then another device; never the same t
 options, where things sit) reaches chat and the ticket note whole, up to 1500 characters
 (`doer.REPORT_MAX`), instead of stopping at the first line break.
 
+**Research goes wider than the named site (2026-11-03, gap g-31a02d).** A products-or-prices ask
+(WinCo's ready-to-eat protein) does not stop at a store site with no catalog: the doer reads the
+weekly ad, grocery listings and maker pages and reports every real item with its source (`prompt.md`).
+
+**Cancelling a membership finds its own numbers (2026-11-05, gap g-9f9d49).** "Cancel every Fitness 19
+membership" is one `do`: the doer reads the agreement number and home club from the member account, the
+mail or the site's lookup, fills each cancel form and stops with one checkpoint card per membership.
+
 ## Files
 
 | File | Role |
@@ -60,6 +69,7 @@ options, where things sit) reaches chat and the ticket note whole, up to 1500 ch
 | `login_fill.py` | signs in from the vault into the page the model is on; prints SIGNED_IN / NEEDS_CODE / NO_ENTRY / FAILED, never a secret |
 | `vault.py` | the agent's KeePass file (`assistant/data/doer/agent.kdbx`, key in Credential Manager `kdbx:agent`); import from Google Password Manager, add, list, has, remove |
 | `report.py` | the checkpoint card (the only way the turn talks to an owner mid-task) |
+| `leftopen.py` | a step the agent cannot finish: the page is left open for the owner, ONE message with Control PC + Do later; Do later closes it and brings it back later (2026-11-08) |
 | `assistant/data/doer/` | git-ignored: the vault, sessions (ticket -> model session), budget, locks |
 | `assistant/out/doer/<ticket>/` | git-ignored: screenshots, the MCP config, result JSON; Mission Control serves the PNGs at `/api/doer/shot/<ticket>/<name>` |
 
@@ -93,8 +103,83 @@ a wrong tier call means a tier C step without a card. That is why tier C is draw
    python assistant/doer/vault.py list
    ```
    Only the logins you put here are reachable. TOTP secrets make two-factor automatic; an SMS or
-   email code becomes a card ("type the code in the note box, tap Approve"). To open the file in
-   KeePassXC: `vault.py key`.
+   email code becomes a card whose **Enter code** button opens a one-field dialog in chat (the digits
+   are minted into the sha-bound step, never kept on the card; a bare code typed in the thread still
+   works). To open the file in KeePassXC: `vault.py key`.
+3. **The sign-in card (2026-11-03).** A login the vault does not have no longer ends the job. The
+   turn runs `report.py login --ticket <id> --host <host> --url <url> --why "<login_fill's line>"`
+   and stops at a checkpoint; ONE urgent card lands in the job's thread:
+   - **Enter login** opens the vault dialog on top of chat (site prefilled). Saved, the dialog's
+     submit answers the card itself (`gchat_events.vault_click` with the card's `qid`), which mints
+     the usual `agent_run` exec ticket with `payload.login`; drain hands it to `doer.py --approved`
+     -> `run_login_resume`, and the job carries on from its last milestone note in the same session.
+   - **I'll sign in myself**: the next `doer-tick` (woken by the tap) runs `self_signin`: the browser
+     opens ON screen at the sign-in page, and a **Carry on** card follows in the thread (`report.carry_on_card`,
+     `payload.self`). From a phone, **Control PC** on either card opens Chrome Remote Desktop.
+   - **Stop** ends the job. A captcha or "verify you are human" at a sign-in posts the same card
+     with only the last two buttons.
+   Nothing typed in the dialog reaches the conversation, the transcript, a log or the model.
+
+## A step it cannot finish is left open for you (2026-11-08)
+
+Standing rule, the owner's words: "if sage gets to a step it can't complete in browser it should leave the browser open
+for the user to do it themself unless the user selects a button to do it later. Have control pc and do later buttons
+presented in chat."
+
+- **When.** A browser run (or an approved step) ends `DOER_BLOCKED` on a step only the owner can take (`doer._owner_only`:
+  a password, a code, a captcha, a payment, identity). Not on a Stop, a refused handed-over login (the sign-in card comes
+  back), the configured site's own sign-in window, or a block that is the agent's own to build (that still files its
+  build quietly and closes, as before). `doer._leave_open` decides before the `finally` that used to close the browser.
+- **What.** The browser is NOT closed. The page stays where the job stopped, in front unless someone used the PC in the last
+  few minutes (`browser.want_front`), and `leftopen.offer` posts ONE message in the job's own thread (the live card's
+  `_space_for`: never a space with staff in it): the "One step needs you" line, that it is left open, and two buttons.
+  **Control PC** opens Remote Desktop (`doer.remote_desktop_url`) so the owner finishes it from a phone. **Do later**
+  (`card_answer` `{"job", "option": "Do later"}`, routed by `gchat_events.job_click` to `leftopen.later`) is the only
+  thing that closes it: the browser quits (only that tab when another job is in it), the ticket is held, and the tapped
+  message says when it comes back. That message replaces the plain report line (no second message). Words go through
+  `voice.gate` and the chat-first rule.
+- **Coming back.** `doer.tick` (the 10-minute `doer-tick`) runs `leftopen.sweep`: a Do later that is due (`doer.do_later_at`,
+  default 09:00, at least `doer.do_later_min_wait_h` = 3 hours on, never in quiet hours, never while a job runs) opens the
+  page again in front and posts the same two buttons in the same thread ("Back to ..."). One message per offer; nothing is
+  retried by the agent.
+- **While a page is held** (`data/doer/left_open.json`, `browser.held_tabs`): `browser.close_browser()` refuses to quit
+  (`force=True` is Do later), `prune_tabs` never closes the held tab, `open_browser(show=True)` moves the window instead of
+  restarting over it, and a new job gets a fresh tab in front plus a prompt block telling it never to touch the held one;
+  at its end only its own tabs close. A held page settles by itself when its tab is gone (the owner finished and closed it),
+  when its job runs again, when the job is over, or when the browser went down (then it waits for the next slot).
+- Not covered yet: a captcha AT A SIGN-IN still ends on the sign-in card (I'll sign in myself / Stop): the browser closes
+  and "I'll sign in myself" reopens it in front; no Do later there. The hand-off checkpoint already leaves its page open
+  with its own card. The computer lane has no browser.
+- Switch: `doer.leave_open` (default on). `python assistant/doer/leftopen.py status` shows what is held. Tests:
+  `tests/test_left_open.py`.
+
+## The live job card (2026-11-03)
+
+Every browser or computer job gets ONE card in the chat it was asked in (`livecard.py`), posted when
+the job starts and **redrawn in place** at each milestone note, at a checkpoint and when it ends: the
+job in the owner's words, "on it since 10:41 · step 3", ✓ / ▶ the notes, a **picture of the screen**,
+and three buttons. **Control PC** opens Chrome Remote Desktop (config `doer.remote_desktop_url`):
+Google's own live view of the PC from a phone, where the owner can also take the wheel. **Show on
+screen** brings the off-screen browser onto the main monitor (`browser.show_on_screen`). **Stop**
+writes `out/doer/<ticket>/stop.json`; `click_guard.pre` then refuses every browser tool with a line
+telling the turn to end with `DOER_BLOCKED: stopped by the owner`, and `run_ticket` stages the ticket
+as stopped, says "Stopped, as you asked", files no build. Stop also closes the job's follow-ups
+(`livecard.close_followups`, lasting `stopped.json`): its queued approved steps are cancelled, no new
+checkpoint / sign-in / carry-on card posts, and no approved step, code fallback, hand sign-in or
+carry-on try runs for it; a fresh claim of the job clears the mark. The buttons ride the existing `card_answer`
+relay function with `{"job": <ticket>, "option": ...}` (no Apps Script change); `gchat_events.job_click`
+answers with the redrawn card. The card goes only to the owners' home space or the requester's DM,
+never a space with staff in it. Switch: `doer.live_card`; `doer.live_shot_every_s` paces the pictures.
+
+The picture: `livecard.capture` takes it by code (`Page.captureScreenshot` over the browser's own
+CDP for a browser job, so the off-screen window is fine; the main screen for a computer job) and
+`scripts/shots.py` hosts it where Chat's image fetcher can reach it: the agent's service account
+uploads into a **shared drive** the owner made (config `shots.drive_name`, default "<agent>
+screenshots") and added the service account to as Content manager; each picture is link-shared for
+`shots.ttl_s` seconds (default 15 min) and deleted by `shots.py sweep`. No public port on the PC,
+nothing but Google. A service account has no Drive storage of its own, Chat's attachment upload
+takes only user auth, and Cloud Storage would need billing: that is why a shared drive. Without it
+the card still redraws, just with no picture (`shots.py status` says what is missing).
 
 ## Staying signed in: clean shutdown (2026-10-13)
 
@@ -213,6 +298,8 @@ Resolve was closed). Three things changed:
   re-stats and re-hashes every file row and `evidence_suffix` puts the result under the DOER_DONE
   line in chat ("Checked: ..." / "Checked, and something is off: MISSING ..."); a DONE with no
   evidence file is relayed as an unchecked claim. The ticket's done-note carries the tally.
+  Since 2026-11-10 the browser lane records it with `report.py evidence --ticket <id> --what .. --detail ..
+  [--file <path>]`: code writes the file, so no turn has to type the vault's spaced path (the 10-18 admin-page job could not).
 - **Two vault tools the lane runs as written** (listed in `computer_prompt.md`, both append their
   own evidence rows when `DOER_COMPUTER_TICKET` is set): `assistant/scripts/mail_attach.py`
   (Gmail attachments and the Google Drive links Gmail puts in a body; sha256 + Drive md5 checked,
@@ -221,6 +308,14 @@ Resolve was closed). Three things changed:
   old clip muted, project saved, `--launch` opens Resolve when closed; `--list`, dry run by default).
   The policy now scans a script run through a full interpreter path (`.../Python312/python.exe
   editor/x.py`) and treats `editor/` like `scripts/` (scanned, not tier C).
+- **Uploading a file from this PC to a website** (`assistant/doer/upload.py`, 2026-11-10, gap g-29ce2a: a Dropbox replace
+  of a film in the Videos folder came back "the browser refuses to read files" twice). The browser lane has no file picker
+  (frozen deny list), so the brain sends these as a `do` with `where: computer` that runs
+  `python assistant/doer/upload.py --file "<path>" --url "<page>" [--replace]`. Code hands the file to the signed-in page
+  over CDP (DOM.setFileInputFiles: any folder, any size, no copy), clicks Upload > Files when the input is not drawn yet,
+  presses Replace on a same-name prompt (a replaced Dropbox file keeps its share link) and watches until it reads done;
+  past `--wait` a hidden watcher finishes, and the tab counts as held (`browser.held_tabs`) so nothing prunes it mid-upload.
+  Status JSON in `assistant/out/doer/uploads/`. Tests: `test_capability.py` section 21.
 - **The learn bug.** `import learn` in `doer.py` / `computer.py` resolved to
   `assistant/scripts/learn.py` (the corrections ledger) whenever that was already loaded, so every
   run since 10-12 logged `learn failed: AttributeError` and recorded nothing. `doer._learn()` loads
@@ -348,5 +443,16 @@ and a run that ends with no result now say nothing in chat: `doer._gap_for` open
 own ask and files its build (capability.file_build, builder kicked at once); the record goes to Mission Control
 (`_mc_note`); when the build lands the ask is replayed by the capability loop and the owner hears the result. An
 owner-only block is said once as "One step needs you on "<job>": <why>" (the portal line), never "I could not finish".
+No line the doer sends ever tells the owner to open a terminal, run claude or type commands (`doer.pc_only`, applied
+in `deliver`, 2026-11-02): such a sentence is dropped and "That part is blocked and needs the PC." takes its place.
+A block that is only a missing sign-in ("signed out", "no login saved for <site>") is said as the chat route instead of
+the model's steps (`doer.signin_line`): "Say '/signin <site>' here ... or 'save my <site> login'"; never vault.py,
+browser.py or the Setup page.
 Tests: test_doer (blocked, no result, `_owner_only`), test_voice (the `progress` class holds "Still on it",
 "I couldn't finish", "That still didn't take" back from Chat).
+
+**2026-11-06:** the browser is **in front by default** (`browser.want_front`: `doer.in_front` and nobody at the PC within
+`doer.clear_screen_idle_s`; a browser already up off-screen is moved, not restarted); the button is **Control PC** (a
+Remote Desktop connection, never "Watch my PC"); the live card's picture and `front_page_ws` are of the **focused tab**
+(`browser.active_page`); the computer lane may write the organization's **Wiki** and `apps/shoot-day/weddings` without
+a card (tier B).

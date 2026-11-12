@@ -35,7 +35,7 @@ STORE = Path(os.environ["AGENT_ACCOUNT_STORE"]) if os.environ.get("AGENT_ACCOUNT
     else Path.home() / ".claude" / "accounts.dpapi.json"
 VAR = "CLAUDE_CODE_OAUTH_TOKEN"
 METERED = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
-LIMIT = re.compile(r"(session|usage|rate) limit|hit your limit|limit reached|too many requests", re.I)   # same as held.py
+LIMIT = re.compile(r"(session|usage|rate|weekly|daily|hourly|monthly|opus|sonnet) limit|hit your (?:\w+ )?limit|limit reached|too many requests", re.I)   # same as held.py
 
 
 def fallback() -> str:

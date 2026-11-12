@@ -37,7 +37,9 @@ TRACKING = ROOT / "tracking.json"
 STATE = DATA / "graduation.json"
 # Engine-owned forever-gated kinds (outbound sends, money, browser agent, etc.); CRM-specific
 # forever-gated kinds (e.g. outbound CRM messages) are merged in dynamically via crm.kinds().
-FOREVER_GATED = {"email_send", "imessage_send", "ads_apply", "agent_run", "calendar_hold", "local", "tracking_fix"}
+# calendar_hold left this set 2026-11-09: a hold on our own calendar notifies nobody and is undone in one click, so an
+# owner's "Always" on "Date from <who>" may stand (policy.py grants); it still never graduates by statistics alone.
+FOREVER_GATED = {"email_send", "imessage_send", "ads_apply", "agent_run", "local", "tracking_fix"}
 DEFAULTS = {"enabled": True, "min_samples": 10, "approve_min": 0.90, "window_days": 90,
             "classes": []}
 SKIP = re.compile(r"^\s*(skip|drop|dismiss|ignore|not now|later|remind me|leave it|never mind|cancel|no\b)", re.I)

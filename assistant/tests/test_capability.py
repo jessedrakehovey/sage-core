@@ -255,7 +255,8 @@ n0 = len(NOTES)
 bridge.handle({"channel": "local", "person": owner1, "text": "Rent a 40 foot crane for the Saturday shoot", "convo": "spaces/AAQAtest",
                "thread": "spaces/AAQAtest/threads/e2e", "space": "spaces/AAQAtest", "direct": True})
 out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
-ok(len(NOTES) == n0 + 1 and cap.LINE_BUILDING in out and "crane" in NOTES[-1]["body"], "bridge: the can't reply gets the one sentence, the build is filed with the ask")
+ok(len(NOTES) == n0 + 1 and out == cap.ACK_LINE and "crane" in NOTES[-1]["body"],
+   "bridge: the can't reply becomes the one acknowledgement (no 'can't', no 'building it'), the build is filed with the ask" + " " + repr(out))
 gid = next(g["id"] for g in cap._load()["gaps"].values() if "crane" in g["ask"])
 bridge.handle({"channel": "local", "person": owner1, "text": "Rent a 40 foot crane for the Saturday shoot", "convo": "spaces/AAQAtest",
                "thread": "spaces/AAQAtest/threads/e2e", "space": "spaces/AAQAtest", "direct": True, "_held": "replay", "_capability_replay": gid})
@@ -400,6 +401,27 @@ ok(tk.get("kind") == "agent_run" and (tk.get("payload") or {}).get("code") == "5
 ok("Got the code" in out and "can't" not in out and "552182" not in out, "the reply says it is going in, never 'I can't use a code from chat'")
 ok(not any("552182" in json.dumps(e) for e in core.rows(cards.ANSWERS)), "the code is not kept in answers.jsonl")
 ok(not any("552182" in str(r.get("text")) for r in core.rows(core.TRANSCRIPT)), "nor in the transcript")
+# the owner, 2026-11-05 (gap g-567481): "148198 for share grid code" was answered "I can't type it in from this thread"
+brain._run_claude, seen["brain"] = no_brain, False
+sg_card = cards.post([{"header": "Sign in to ShareGrid", "question": "[ACTION PREVIEW] Type the verification code and continue. A verification code was sent to you.",
+                       "lane": "personal", "options": [{"label": "Approve"}, {"label": "Cancel"}],
+                       "exec": {"kind": "agent_run", "approve_label": "Approve",
+                                "payload": {"ticket": "fedcba9876543210", "step": "Type the verification code and continue",
+                                            "resume": "On the ShareGrid code page, enter the code.", "ask_code": True, "values": {}}}}],
+                     owner="owner1", asked=True)
+sq = sg_card.get("qid") or sg_card.get("id")
+bridge.handle({"channel": "local", "person": owner1, "text": "148198 for share grid code", "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/code3", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tid = next((e.get("ticket") for e in core.rows(cards.ANSWERS) if e.get("qid") == sq), "")
+tk = _es.fold().get(tid) or {}
+ok(not seen["brain"] and cards._read(cards.LIVE / f"{sq}.json").get("status") == "answered"
+   and (tk.get("payload") or {}).get("code") == "148198", "'148198 for share grid code' answers the ShareGrid code card by code")
+ok("Got the code" in out and "can't" not in out and "148198" not in out, "the reply says it is going in, never 'I can't type it in from this thread'")
+for line, want in (("sharegrid code is 148198", "148198"), ("ShareGrid code: 148198", "148198"), ("2000 for the retainer", ""),
+                   ("148198 for share grid", ""), ("call me at 805 555 1234 for the venue", "")):
+    m = bridge._CODE_LINE.match(line)
+    ok((re.sub(r"\D", "", m.group(1)) if m else "") == want, f"code line {line!r} -> {want or 'not a code'}")
 # no code card waiting: the line is an ordinary message for the brain, and the prompt forbids the old answer
 seen["brain"] = False
 bridge.handle({"channel": "local", "person": owner1, "text": "552183", "convo": "spaces/AAQAtest",
@@ -762,4 +784,705 @@ for f in ("prompt.md", "templates/prompt.generic.md"):
     t = (ROOT / "agent" / f).read_text(encoding="utf-8")
     ok("Whether a bill, a fee or a charge is paid" in t and "Never \"I couldn't check the account\"" in t,
        f"{f}: a paid-or-not question is a `mail_search`, then a `do`")
+# ---------------------------------------------------------------- 23. a second text never carries the word "resend" (a team member, 2026-10-29)
+# the owner, 2026-10-29 19:00: the card for a team member read "resend Oak Hollow Farm ..." because the guard told Sage to put the
+# word in the text. The flag lifts the guard; a leading marker an old caller still writes is stripped from preview and send.
+staff1_ASK = ('you text would have literally said "resend Oak Hollow Farm, 123 Example Street in Fairview. Ceremony is at 3:30 '
+           'outside, so be there by 3. I\'d want the drone for the ceremony and then golden hour at the Vista right after, so '
+           'plan on about 3 to 5:30." fix that so it never happens again')
+staff1_TO = "+15550944994"
+staff1_BODY = ("Oak Hollow Farm, 123 Example Street in Fairview. Ceremony is at 3:30 outside, so be there by 3. I'd want the drone "
+            "for the ceremony and then golden hour at the Vista right after, so plan on about 3 to 5:30.")
+es.set_status(es.enqueue("imessage_send", {"account": "owner1-iphone", "to": staff1_TO, "body": "Hey staff1, the Ashcombe wedding is on."},
+                         es.APPROVER, "card:staff1-seed")["id"], "done", "PHONE_QUEUED m-staff1")
+
+
+def fake_run_staff1(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["staff1"] = gmcp.call("task", {"lane": "wedding", "text": "Text staff1 the venue and drone plan",
+                                     "draft": {"channel": "text", "to": staff1_TO, "name": "staff1", "text": "resend " + staff1_BODY,
+                                               "resend": True}})
+    return {"ok": True, "session": "S23", "text": "Fixed: the card for staff1 has just the venue and plan, right under this."}
+
+
+brain._run_claude = fake_run_staff1
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": staff1_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/staff1", "space": "spaces/AAQAtest", "direct": True})
+ic = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+      if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("to") == staff1_TO]
+ok(str(seen["staff1"]).startswith("accepted") and len(ic) == 1, f"the second text to staff1 posts its card ({str(seen['staff1'])[:120]})")
+iq = ic[0]["questions"][0]
+ok(iq["exec"]["payload"]["body"] == staff1_BODY and "resend oak hollow" not in iq["question"].lower()
+   and (staff1_TO + ":\n" + staff1_BODY) in iq["question"], "the card shows and carries the wording without the marker word")
+ia = cards.answer(ic[0]["id"], iq["exec"]["approve_label"], by="gchat:owner1")
+itk = es.fold().get(ia.get("ticket") or "", {})
+ok(ia.get("ticket") and itk.get("payload", {}).get("body") == staff1_BODY, f"the tap sends exactly the clean wording ({ia.get('mint_error')})")
+ok(len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, "the ask completes with a deed, no build filed")
+ok(actions.strip_marker("RESEND: Hi staff1") == "Hi staff1" and actions.strip_marker("Resending is fine") == "Resending is fine",
+   "only a leading marker word is stripped")
+# ---------------------------------------------------------------- 24. "respond to a team member again" answers only his last question (gap g-cc35a4)
+# the owner, 2026-10-29 17:26: a team member asked the time frame and location; the draft repeated the date and other details, and the chat
+# line explained what the draft lacked. The redo is a `task` draft with just the answer; the chat line names the card only.
+AGAIN_ASK = "respond to staff1 again"
+AGAIN_BODY = "Plan on about 3 to 5:30, at Oak Hollow Farm in Fairview."
+
+
+def fake_run_again(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["again"] = gmcp.call("task", {"lane": "wedding", "text": "Answer staff1's question about the time frame and location",
+                                       "draft": {"channel": "text", "to": staff1_TO, "name": "staff1", "text": AGAIN_BODY, "resend": True}})
+    return {"ok": True, "session": "S24", "text": "The answer to staff1's question is on the card below."}
+
+
+brain._run_claude = fake_run_again
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": AGAIN_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/staff1-again", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+ac = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+      if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("body") == AGAIN_BODY]
+ok(str(seen["again"]).startswith("accepted") and len(ac) == 1, f"'respond to staff1 again' posts one card with just the answer ({str(seen['again'])[:120]})")
+ok("I don't have the venue" not in out and "the draft gives" not in out and "card below" in out
+   and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, "the chat line names the card, explains nothing, files no build")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("answers only their newest question" in t and "Never restate what they already have" in t,
+       f"{f}: a reply answers only the newest question, never repeats what they have")
+# ---------------------------------------------------------------- 25. "purge all bank related log-in info" is one job card (2026-10-30)
+# the owner, 2026-10-30 08:23: the doer was sent to delete the bank entries from its vault and its policy refused the edit.
+# The purge is the registered job vault_purge_banks: the `job` deed posts ONE card, the tap runs doer/vault_purge.py.
+PURGE_ASK = "Promptly purge all bank related log-in info you have unless it is through something like plaid"
+
+
+def fake_run_purge(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["purge"] = gmcp.call("job", {"job": "vault_purge_banks", "lane": "money"})
+    return {"ok": True, "session": "S25", "text": "Tap Run on the card and every bank login leaves the vault; Plaid, Venmo and PayPal stay."}
+
+
+brain._run_claude = fake_run_purge
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": PURGE_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/purge", "space": "spaces/AAQAtest", "direct": True})
+pc = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+      if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("op") == "vault_purge_banks"]
+import jobs  # noqa: E402
+ok("vault_purge_banks" in jobs.render() and len(pc) == 1 and pc[0]["questions"][0]["exec"]["kind"] == "local",
+   f"the purge ask posts one Run card for the vault_purge_banks job ({str(seen.get('purge'))[:120]})")
+ok(len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, "the purge ask completes with a deed, no build filed")
+# ---------------------------------------------------------------- 26. "read the email thread we sent him" reads the mail (gap g-754648)
+# the owner, 2026-10-31 10:04, in the thread of the Ambrose follow-up card: "No, I want you to read the email thread that we just
+# sent him and make a logical follow up". Sage searched its notes only and answered "I couldn't open the actual email thread
+# from here". The thread is read whole (mail_read with `thread`, sent mail included) and the draft follows on from it.
+THREAD_ASK = "No, I want you to read the email thread that we just sent him and make a logical follow up"
+EU = "ambrose@example.com"
+MAILBOX = next(n for n, a in google_api.accounts().items() if a.get("person") == "owner1")
+(google_api.HOME / f"{MAILBOX}.json").write_text("{}", encoding="utf-8")
+
+
+def _b64(s):
+    import base64
+    return base64.urlsafe_b64encode(s.encode()).decode()
+
+
+def _msg(mid, frm, to, body, labels):
+    return {"id": mid, "threadId": "th-eu", "labelIds": labels, "snippet": body[:40],
+            "payload": {"mimeType": "text/plain", "body": {"data": _b64(body)},
+                        "headers": [{"name": "From", "value": frm}, {"name": "To", "value": to},
+                                    {"name": "Subject", "value": "Re: trial reel"}, {"name": "Date", "value": "Fri, 30 Oct 2026"}]}}
+
+
+EU_MSGS = [_msg("m1", EU, "owner3@example.invalid", "Happy to start with one trial reel. 12 to 14 days, two revision rounds.", ["INBOX"]),
+           _msg("m2", "owner3@example.invalid", EU, "Great, I'll send my example timeline by Dropbox this week.", ["SENT"])]
+api_calls = []
+
+
+def fake_api(name, url, body=None, method=""):
+    api_calls.append(url)
+    if "/threads/" in url:
+        return {"id": "th-eu", "messages": EU_MSGS}
+    if "/messages?" in url:
+        return {"messages": [{"id": "m2"}]}
+    return next(m for m in EU_MSGS if m["id"] in url.split("/messages/")[1])
+
+
+google_api._api = fake_api
+EU_BODY = "Hi Ambrose,\n\nThe example timeline is on its way by Dropbox; let me know once you have it and when the trial reel could start.\n\nowner1"
+
+
+def fake_run_thread(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    found = gmcp.call("mail_search", {"account": MAILBOX, "query": f"to:{EU} OR from:{EU} in:anywhere"})
+    seen["thread"] = gmcp.call("mail_read", {"account": MAILBOX, "thread": found[0]["thread"]})
+    seen["eu"] = gmcp.call("task", {"lane": "wedding", "text": "Follow-up email to Ambrose from the thread",
+                                    "draft": {"channel": "email", "to": EU, "name": "Ambrose", "subject": "Re: trial reel",
+                                              "text": EU_BODY, "account": "owner3@example.invalid"}})
+    return {"ok": True, "session": "S26", "text": "I read the thread; the follow-up to Ambrose is right under this."}
+
+
+brain._run_claude = fake_run_thread
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": THREAD_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/ambrose", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+th = seen["thread"]
+ok(any("/threads/th-eu" in u for u in api_calls) and [m["id"] for m in th["messages"]] == ["m1", "m2"]
+   and th["messages"][1]["sent"] and "example timeline" in th["messages"][1]["body"],
+   "mail_read with a thread id returns every message of the thread oldest first, the sent one included")
+euc = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+       if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("body") == EU_BODY]
+ok(str(seen["eu"]).startswith("accepted") and len(euc) == 1, f"the follow-up posts its email card ({str(seen['eu'])[:120]})")
+ok("couldn't open" not in out and "from my notes" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   "no 'I couldn't open the email thread' line, no build filed")
+ok("thread" in next(x for x in gmcp.TOOLS if x["name"] == "mail_read")["inputSchema"]["properties"], "mail_read offers `thread`")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("An email follow-up" in t and "Never \"I couldn't open the email thread\"" in t,
+       f"{f}: an email follow-up reads the thread first")
+
+# ---------------------------------------------------------------- 27. their money, organized and tracked (2026-11-01)
+# the owner, 2026-11-01 18:48, after price cards on Costco / Trader Joe's / Amazon: "You are my financial advisor you told me
+# how to organize it and track it". The money lane now classes every merchant; the answer reads it and writes the plan down.
+MONEY_ASK = "You are my financial advisor you told me how to organize it and track it"
+seen27 = {}
+
+
+def fake_run_money(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen27["note"] = gmcp.call("note", {"title": "How our money is organized and tracked", "type": "workflow", "lane": "money",
+                                        "body": "Every charge gets a class: subscription or bill, stores, restaurants, transfer, income, other. "
+                                                "Only bills are recurring and can raise a price card; Costco, Trader Joe's and Amazon are "
+                                                "stores, so a bigger shop is never a price rise. Moves between our own accounts are not spending."})
+    return {"ok": True, "session": "S27", "text": "Here's how I'm keeping it: bills and subscriptions are tracked for price changes, "
+                                                  "groceries and shopping are not, and transfers between your accounts don't count. "
+                                                  "I wrote the plan down in the money notes."}
+
+
+brain._run_claude = fake_run_money
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": MONEY_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/money27", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+ok(str(seen27["note"]).startswith("accepted") and len(NOTES) == n0 + 1 and "stores" in NOTES[-1]["body"],
+   f"'{MONEY_ASK}': the plan is written down as a money note ({str(seen27['note'])[:80]})")
+ok("can't" not in out.lower() and len(cap._load()["gaps"]) == g0, "the advisor ask completes with no 'can't' and no build filed")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("Their money is yours to organize and track" in t and "money/forecast.json" in t and "Never \"I can't track that\"" in t,
+       f"{f}: money organizing and tracking has a rung")
+# ---------------------------------------------------------------- 28. "are you missing any" bank posts the sign-in card (gap g-e569ce)
+# the owner, 2026-11-01 15:49: "I thought you were connected to all of my bank accounts. Are you missing any?" was answered with
+# a list of banks that "still need their own sign-in pass" and nothing behind it. Now the missing banks are a `blocked`
+# connection deed and the bank sign-in card is posted in that thread.
+BANK_ASK = ("Yes, owner6 and I are both paid hourly. She just gotta pay raise so if you need any info from her, just ask her, "
+            "but you can probably calculate everything you need to know from income to SoFi account since that is where our "
+            "paychecks land. I thought you were connected to all of my bank accounts. Are you missing any?")
+seen28, posted28 = {}, []
+import chat_forms  # noqa: E402
+chat_forms.post = lambda rid, space="", thread="": posted28.append((rid, space, thread)) or True
+
+
+def fake_run_bank(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen28["blocked"] = gmcp.call("blocked", {"what": "link Relay, SoFi and Wells Fargo to the bank feed",
+                                              "why": "each bank needs its own sign-in on the bank's page", "kind": "connection",
+                                              "connection": "bank-plaid"})
+    return {"ok": True, "session": "S28", "text": "Chase is linked. Relay, SoFi and Wells Fargo are not yet: the sign-in card is "
+                                                  "right below, one bank at a time, and I'll read your paychecks from SoFi once it's in."}
+
+
+brain._run_claude = fake_run_bank
+n0 = len(NOTES)
+actions.LAST_APPLIED.clear()
+bridge.handle({"channel": "local", "person": owner1, "text": BANK_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/bank28", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+kinds = [a["kind"] for a in actions.LAST_APPLIED]
+ok(str(seen28.get("blocked", "")).startswith("accepted") and "blocked" in kinds and "form" in kinds,
+   f"'Are you missing any?' bank ask: a blocked connection deed ({str(seen28.get('blocked'))[:60]})")
+ok(posted28 and posted28[-1][0] == "bank-plaid" and posted28[-1][2] == "spaces/AAQAtest/threads/bank28",
+   "the bank sign-in card is posted in the ask's own thread")
+ok("sign-in pass" not in out and len(NOTES) == n0, "no 'still need their own sign-in pass' line, no build filed")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("Asked whether you are missing an account" in t and "`connection` bank-plaid" in t,
+       f"{f}: a missing bank is a blocked connection deed")
+# ---------------------------------------------------------------- 29. "What is this mess?" on the tomorrow look-ahead (2026-11-01)
+# the owner, 2026-11-01 19:27, under the 7pm look-ahead (four card charges as "<name> (monthly) due <date>: pay / confirm it is
+# paid"). dayplan.py now writes a short dash list and stays quiet when nothing needs anyone; the replay learns the taste.
+MESS_ASK = "What is this mess? It looks terrible. If it’s important it shouldn’t look like a waste of space in my chat."
+sys.path.insert(0, str(ROOT / "scripts" / "tracking"))
+import dayplan  # noqa: E402
+import entities  # noqa: E402
+from datetime import datetime  # noqa: E402
+seen29 = {}
+nov = [{"id": f"fu{i}", "sop": "money", "step": "bill-due", "status": "waiting", "lane": "money", "created_by": "money.forecast",
+        "subject": f"{m} due 2026-11-02", "action": {"instruction": f"{m} is due 2026-11-02 (${a})."}}
+       for i, (m, a) in enumerate((("Adobe (monthly)", "69.99"), ("Port Alder Meat (weekly)", "27.10"), ("Microsoft Xbox (monthly)", "19.99")))]
+nov.append({"id": "fu9", "sop": "money", "step": "bill-due", "status": "waiting", "lane": "money", "created_by": "mail_arm",
+            "subject": "SCE electric bill due 11/02/2026", "action": {"instruction": "SCE is due ($212.40)."}})
+its29 = dayplan.items_for(datetime(2026, 11, 2), cal=[{"date": "2026-11-02", "time": "17:00", "title": "Call with the venue", "owner": "owner1"}],
+                          entities=entities.money_rows(nov, {}, datetime(2026, 11, 1, 19)), gaps=[], fus=nov, chase_state={}, crm_tasks=[])
+look = dayplan.message(datetime(2026, 11, 2), its29)
+
+
+def fake_run_mess(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen29["learn"] = gmcp.call("learn", {"rule": "Anything posted in chat is a short dash list, one line per item with its amount, and only what needs us",
+                                          "why": MESS_ASK})
+    return {"ok": True, "session": "S29", "text": "Fair. From tonight it looks like this, and on a night with only autopay it stays quiet:\n" + look}
+
+
+brain._run_claude = fake_run_mess
+g0 = len(cap._load()["gaps"])
+actions.LAST_APPLIED.clear()
+bridge.handle({"channel": "local", "person": owner1, "text": MESS_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/mess29", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+ok(str(seen29.get("learn", "")).startswith("accepted") and any("short dash list" in str(r) for r in core.rules_active()),
+   f"'{MESS_ASK[:30]}...': the taste is learned as a rule ({str(seen29.get('learn'))[:60]})")
+ok("can't" not in out.lower() and len(cap._load()["gaps"]) == g0, "the ask completes with no 'can't' and no new build")
+ok(look == "Tomorrow, Monday 11/2\nOn the calendar:\n- 5pm Call with the venue\nBills due:\n- SCE electric bill, $212.40\n"
+           "Autopay, nothing to do: Adobe, Port Alder Meat, Microsoft Xbox"
+   and "pay / confirm" not in look and "(monthly)" not in look, "the look-ahead is a short list: name and amount, autopay in one line\n" + look)
+ok(dayplan.tick(now=datetime(2026, 11, 1, 19), dry=True, items=[x for x in its29 if x["kind"] == "bill" and x["autopay"]]).get("silent"),
+   "a night of only autopay charges posts nothing")
+# ---------------------------------------------------------------- 30. a daily nudge into the team space (2026-11-02)
+# the owner, 2026-11-02 13:53, in the home space: the schedule tool could only reach the owners, so a daily ask to a team member in the
+# team space about the drone for Saturday's wedding could not be set. A schedule now takes `space` (+ `until`).
+import routines  # noqa: E402
+import space_reader  # noqa: E402
+from datetime import datetime as _dt, timedelta as _td  # noqa: E402
+_d0 = _dt.now().replace(hour=9, minute=1, second=0, microsecond=0)
+UNTIL30 = (_d0 + _td(days=5)).strftime("%Y-%m-%d")             # 2026-11-07 on the day it was asked
+TAG_ASK = "I meant tag him in a message every day in our group chat for the example-org Google space"
+TEAM = "spaces/AAQAteam30"
+space_reader.spaces = lambda max_age_s=600: [{"name": TEAM, "title": "example-org"}, {"name": core.home_space() or "spaces/HOME", "title": "Sage"}]
+seen30 = {}
+
+
+def fake_run_tag(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen30["schedule"] = gmcp.call("schedule", {"title": "Drone update", "when": {"daily": "09:00"}, "space": "example-org Google space",
+                                                "say": "staff1, any update on the drone for Saturday's wedding?", "until": UNTIL30})
+    return {"ok": True, "session": "S30", "text": "Done, I'll ask him in the team space every morning at 9 through Saturday."}
+
+
+brain._run_claude = fake_run_tag
+g0 = len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": TAG_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/tag30", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+r30 = [r for r in routines.active() if r.get("space")]
+ok(str(seen30.get("schedule", "")).startswith("accepted") and len(r30) == 1 and r30[0]["space"] == TEAM and r30[0]["until"] == UNTIL30,
+   f"'{TAG_ASK[:30]}...': the schedule is set in the team space ({str(seen30.get('schedule'))[:60]})")
+ok("can't" not in out.lower() and len(cap._load()["gaps"]) == g0, "the ask completes with no 'can't' and no new build")
+ok(routines.add({"title": "x", "when": {"daily": "09:00"}, "space": core.home_space() or "spaces/HOME", "say": "y"}, by="owner1")["status"] == "refused"
+   and routines.add({"title": "x", "when": {"daily": "09:00"}, "space": "example-org", "prompt": "look it up"}, by="owner1")["status"] == "refused",
+   "never the owners' home space, never a look-up in a team space")
+owners30, space30 = [], []
+for day in range(1, 8):
+    routines.tick(lambda k, t: owners30.append((k, t)), now=_d0 + _td(days=day), post_space=lambda s, t: space30.append((s, t)))
+ok(len(space30) == 5 and all(s == TEAM and t == "staff1, any update on the drone for Saturday's wedding?" for s, t in space30) and not owners30
+   and not [r for r in routines.active() if r.get("space")], "posts once a day through its last day in the team space only, then ends")
+import voice  # noqa: E402
+ok(voice.gate("staff1, any update on the drone for Saturday's wedding?", "routine", TEAM), "the line passes the voice gate")
+
+# ---------------------------------------------------------------- 31. a product-and-price research ask goes wider than the named site (gap g-31a02d)
+# the owner, 2026-11-03 18:06: the WinCo ask came back "I could not get a single real item with a price, so there is no ranked
+# list" because wincofoods.com has no catalog. The ask is a `do` that names the wider sources; the doer reads the ad and listings.
+WINCO_ASK = ("Research WinCo Foods (Brackwater / Marrow Bay County stores, winco.com and any store deli or hot-foods pages). owner1 wants cheap "
+             "high-protein premade or ready-to-eat food that could replace restaurant meals: deli hot food (rotisserie chicken, fried or "
+             "roasted chicken), refrigerated or frozen premade burritos, burrito bowls, meal-prep style packs, bulk deli trays. For each "
+             "real item found report: name, package size, price, price per serving or per burrito, calories and protein per serving if listed.")
+seen31 = {}
+
+
+def fake_run_winco(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen31["do"] = gmcp.call("do", {"lane": "personal", "text": "Research WinCo Foods in Brackwater / Marrow Bay County for cheap high-protein ready-to-eat "
+                                    "food (deli rotisserie or fried chicken, premade burritos, burrito bowls, meal-prep packs, deli trays). For each "
+                                    "real item: name, package size, price, price per serving or per burrito, calories and protein per serving. Compare "
+                                    "to under $5 a meal and El Pollo Loco family meals at about $12 a meal. If the named site has no catalog or prices, "
+                                    "use any site that lists the same items: the store's weekly ad, grocery delivery listings, the maker's own page."})
+    return {"ok": True, "session": "S31", "text": "I've sent off to price WinCo's ready-to-eat protein, from their weekly ad and listings where the site has no catalog."}
+
+
+brain._run_claude = fake_run_winco
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": WINCO_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/winco", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "weekly ad" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen31.get("do", "")).startswith("accepted") and tix and tix[-1]["payload"].get("thread") == "spaces/AAQAtest/threads/winco",
+   "the WinCo research ask becomes a doer job in its own thread, naming the wider sources")
+ok("single real item" not in out and "no ranked list" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   "no 'could not get a single real item' line, no build filed")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t31 = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("Prices or products to research: a `do` naming the store's ad" in t31 and "never relay \"I could not get a single real item\"" in t31,
+       f"{f}: a product-and-price research ask is a `do` with the wider sources")
+d31 = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
+ok("Asked to research products or prices" in d31 and "the store's weekly ad or flyer" in d31
+   and "every store, ad or listing that carries the items is related" in d31,
+   "the doer goes past a site with no catalog to the ad, listings and maker pages")
+# ---------------------------------------------------------------- 32. "cancel every gym membership" is a `do`, never "I couldn't find the agreement number" (gap g-9f9d49)
+# the owner, 2026-11-05 09:34: two Fitness 19 memberships on auto-pay; the answer was "Nothing is cancelled yet ... the form asks for
+# each membership's agreement number ... and I couldn't find the agreement numbers". The doer finds them and stops at each Cancel.
+GYM_ASK = ("Cancel every Fitness 19 gym membership for owner1 and owner6 example. The bank feed shows TWO live memberships, both on auto-pay: "
+           "(1) \"ABC*7980-FITNESS 19\", $11.99 charged on the 28th of each month to a card (club number 7980, last charge Oct 28 2026); "
+           "(2) \"FITNESS 19 ABC CLUB FEES\", $17.99 pulled by ACH from a bank account around the 24th each month (last Oct 26 2026). "
+           "Each also has a $49.99 annual fee. Fitness 19 emails go to owner4@example.invalid (sender noreply@fit19.com).")
+seen32 = {}
+
+
+def fake_run_gym(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen32["do"] = gmcp.call("do", {"lane": "money", "text": "Cancel both Fitness 19 memberships at cancel.fit19.com: (1) ABC*7980-FITNESS 19, "
+                                    "$11.99 on the 28th by card, club 7980; (2) FITNESS 19 ABC CLUB FEES, $17.99 by ACH around the 24th. Registered "
+                                    "email owner4@example.invalid. Find each agreement number by signing in to the member account, from the "
+                                    "noreply@fit19.com mail and the statements, or the site's own lookup; stop at each final Cancel for the tap."})
+    return {"ok": True, "session": "S32", "text": "I've sent off to cancel both Fitness 19 memberships; each one stops at Cancel for your tap."}
+
+
+brain._run_claude = fake_run_gym
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": GYM_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/gym32", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "agreement number" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen32.get("do", "")).startswith("accepted") and tix and tix[-1]["payload"].get("thread") == "spaces/AAQAtest/threads/gym32",
+   "'Cancel every Fitness 19 gym membership' becomes ONE doer job in its own thread, finding the agreement numbers itself")
+ok("Nothing is cancelled yet" not in out and "couldn't find the agreement" not in out and len(NOTES) == n0
+   and len(cap._load()["gaps"]) == g0, "no 'couldn't find the agreement numbers' line, no build filed")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t32 = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("Cancelling a membership, a subscription or a plan is a `do` that turn" in t32
+       and "Never \"I couldn't find the agreement number\"" in t32, f"{f}: a cancel ask is a `do`; the doer looks for the numbers")
+d32 = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
+ok("Asked to cancel a membership or subscription" in d32 and "ONE CHECKPOINT per membership" in d32 and "member portal" in d32,
+   "the doer finds the agreement number in the member account, mail or lookup and stops at each Cancel")
+# ---------------------------------------------------------------- 33. a text only lined up on the phone (2026-11-06)
+# the owner, 2026-11-06 13:13: 'Text to a team member: shoot day app' was tapped Send, went PHONE_QUEUED, the phone picked it up and
+# Chat said "Texted a team member Quillfeather at 1:14 PM". It never arrived. 13:26: "The send from phone now button is not working
+# either". Picked up is not sent; his words bring the card back as a fresh send card; the button's page runs the shortcut.
+import exec_store as es  # noqa: E402
+import phone_bridge  # noqa: E402
+import voice  # noqa: E402
+import mc_server  # noqa: E402
+PH_ASK = "The send from phone now button is not working either"
+PH_BODY = "Hey staff1, here is the shoot day app for Saturday."
+ph = cards.post([{"header": "Text to staff1: shoot day app", "lane": "wedding",
+                  "question": f"Text staff1 the shoot day app? [TEXT PREVIEW] To staff1 (+18055550142): {PH_BODY}",
+                  "options": [{"label": "Send (Recommended)"}, {"label": "Skip"}],
+                  "exec": {"kind": "imessage_send", "approve_label": "Send (Recommended)",
+                           "payload": {"to": "+18055550142", "body": PH_BODY, "account": "owner1-iphone"}}}],
+                owner="owner1", asked=True)
+phq = ph.get("qid") or ph.get("id")
+a33 = cards.answer(phq, "Send (Recommended)", by="gchat:owner1")
+ok(a33.get("ok") and a33.get("ticket"), "the text card is tapped Send and a ticket is minted")
+es.set_status(a33["ticket"], "done", "PHONE_QUEUED m-d347d53dfe16 -> ...0142")
+cards._retire(cards._read(cards.LIVE / f"{phq}.json"), "consumed")
+phone_bridge.save_json(phone_bridge.OUTBOX, {"items": [{"id": "m-d347d53dfe16", "ticket": a33["ticket"], "to": "+18055550142",
+                                                         "body": PH_BODY, "status": "handed", "ts_handed": time.strftime("%Y-%m-%dT13:14:00")}]})
+said33 = voice.reword("Text to +18055550142 handed to the phone at 1:14 PM; the phone's Shortcut sends it.")
+ok("Texted" not in said33 and "lined up on your phone" in said33, f"a text the phone only picked up is never 'Texted': {said33}")
+ok("NOT confirmed" in phone_bridge.state_words(a33["ticket"]), "its state for the brain says not confirmed, not 'sent in practice'")
+
+
+def fake_run_phone(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["phone"] = gmcp.call("approve", {"resend": True, "words": PH_ASK})
+    return {"ok": True, "session": "S33", "text": "The text to staff1 is back as a send card here; that link runs the send on your phone."}
+
+
+brain._run_claude = fake_run_phone
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": PH_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/phone33", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+back = cards._read(cards.LIVE / f"{phq}.json") or {}
+ok(str(seen.get("phone", "")).startswith("accepted") and "/phone/run" in seen["phone"],
+   f"the approve deed with resend is accepted and carries the send-now link: {seen.get('phone')}")
+ok(back.get("status") == "open" and "RESEND" in str((back.get("questions") or [{}])[0].get("question")),
+   "the text card is back open as a fresh send card, marked RESEND for the tap")
+ok("can't" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, "no 'can't' line, no build filed")
+# still waiting for the phone: the waiting copy is pulled first, so a resend never makes it go twice
+cards._retire(cards._read(cards.LIVE / f"{phq}.json"), "consumed")
+box = phone_bridge.load_json(phone_bridge.OUTBOX, {"items": []})
+box["items"][0]["status"] = "ready"
+phone_bridge.save_json(phone_bridge.OUTBOX, box)
+brain._run_claude = fake_run_phone
+bridge.handle({"channel": "local", "person": owner1, "text": "I don't see the text was sent, send it again", "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/phone33b", "space": "spaces/AAQAtest", "direct": True})
+ok(phone_bridge.load_json(phone_bridge.OUTBOX, {"items": []})["items"][0]["status"] == "recalled"
+   and es.fold()[a33["ticket"]]["status"] == "cancelled" and (cards._read(cards.LIVE / f"{phq}.json") or {}).get("status") == "open",
+   "a text still waiting for the phone is pulled from the outbox before its card comes back")
+page = mc_server.phone_run_page()
+ok("shortcuts://run-shortcut?name=" in page and "<a id='go'" in page and "Open in Safari" in page,
+   "the Send now from phone button opens a page with a tap target for the shortcut and the plain way if nothing happens")
+# 2026-11-07 06:31, same ask again: the tap was in quiet hours / on a text the phone had already picked up, so the
+# shortcut took nothing and the page said nothing. Now the page says why in one line, and says it once in the thread.
+told = []
+_say0, _quiet0 = phone_bridge._say, phone_bridge._quiet
+phone_bridge._say = lambda item, line, fallback=False: told.append((item.get("ticket"), line)) or True
+box = phone_bridge.load_json(phone_bridge.OUTBOX, {"items": []})
+box["items"][0].update(status="handed", ts_handed=time.strftime("%Y-%m-%dT13:14:00"))
+phone_bridge.save_json(phone_bridge.OUTBOX, box)
+phone_bridge._quiet = lambda: False
+pg = mc_server.phone_run_page(a33["ticket"])
+ok("id='why'" in pg and "already picked that text up at 1:14 PM" in pg and "send it again" in pg,
+   "a text the phone already picked up: the page says the shortcut won't take it again and how to resend")
+mc_server.phone_run_page(a33["ticket"])
+ok(len(told) == 1 and told[0][0] == a33["ticket"] and "already picked" in told[0][1],
+   f"the same line is said once in the card's thread, not on every tap: {told}")
+box["items"][0]["status"] = "ready"
+phone_bridge.save_json(phone_bridge.OUTBOX, box)
+phone_bridge._quiet = lambda: True
+pg = mc_server.phone_run_page(a33["ticket"])
+ok("quiet hours (9 PM to 7 AM)" in pg and len(told) == 2 and "quiet hours" in told[1][1],
+   "a tap in quiet hours (6:31 AM) says plainly nothing goes until 7 AM, on the page and in the thread")
+phone_bridge._quiet = lambda: False
+pg = mc_server.phone_run_page(a33["ticket"])
+ok("id='why'" not in pg and "shortcuts://run-shortcut?name=" in pg and len(told) == 2,
+   "a text still waiting outside quiet hours: just the tap target, no extra line")
+phone_bridge._say, phone_bridge._quiet = _say0, _quiet0
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("`resend` true" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a text that did not arrive is `approve` with `resend`")
+
+# ---------------------------------------------------------------- 34. "where did the other $1,000 on the card come from" (gap g-a6fb9d)
+# the owner, 2026-11-08 13:06 (voice note): the card was about $1,300 a month ago and is over $3,000 now, $1,000 of it a lens
+# rental. It was answered "I don't have the card's balance from a month ago". The `money` tool's `history` op works the
+# balance back through the ledger and lists every charge since, so the brain answers from the figures.
+from datetime import date as _date, timedelta as _td  # noqa: E402
+CARD_ASK = ("[voice note from owner1, transcribed on this machine: \"Could have sworn the credit card was sitting around $1,300 just a "
+            "month ago and now it's at over 3,000. I know $1,000 was a business expense. I'm gonna pay that off as soon as possible for the "
+            "rents lentils lens rental But I'm not sure where the other 1,000 about came from\"]")
+_d = lambda k: (_date.today() - _td(days=k)).isoformat()  # noqa: E731
+(TMP / "adata" / "money").mkdir(parents=True, exist_ok=True)
+(TMP / "adata" / "money" / "ledger.json").write_text(json.dumps({
+    "accounts": {"cc1": {"id": "cc1", "name": "Sapphire Card", "type": "credit", "balance": -3150.0, "balance_date": _d(0)},
+                 "chk": {"id": "chk", "name": "Everyday Checking", "type": "depository", "balance": 900.0, "balance_date": _d(0)}},
+    "transactions": {
+        "t1": {"id": "t1", "account_id": "cc1", "posted": _d(20), "amount": -1000.0, "description": "LENSRENTALS.COM", "bucket": "biz:gear"},
+        "t2": {"id": "t2", "account_id": "cc1", "posted": _d(12), "amount": -640.0, "description": "UNITED AIRLINES", "bucket": ""},
+        "t3": {"id": "t3", "account_id": "cc1", "posted": _d(5), "amount": -310.0, "description": "COSTCO WHSE", "bucket": ""},
+        "t4": {"id": "t4", "account_id": "cc1", "posted": _d(3), "amount": 100.0, "description": "PAYMENT THANK YOU", "bucket": ""},
+        "t0": {"id": "t0", "account_id": "cc1", "posted": _d(45), "amount": -75.0, "description": "OLD CHARGE", "bucket": ""}},
+    "pulled": {}}), encoding="utf-8")
+seen34 = {}
+
+
+def fake_run_card(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen34["history"] = gmcp.call("money", {"op": "history", "days": 30})
+    return {"ok": True, "session": "S34", "text": "A month ago the card owed $1,300; it's $3,150 now. The $1,000 lens rental is one piece; "
+                                                  "the rest is mostly a $640 United flight and a $310 Costco run, less a $100 payment."}
+
+
+brain._run_claude = fake_run_card
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": CARD_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/card34", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+h34 = str(seen34.get("history"))
+ok(h34.startswith("accepted") and "owed $1,300" in h34 and "owes $3,150" in h34 and "UNITED AIRLINES" in h34 and "LENSRENTALS" in h34
+   and "OLD CHARGE" not in h34 and "$1,000 of it in business envelopes" in h34 and "payments and credits $100" in h34,
+   f"'{CARD_ASK[60:110]}...': the money `history` deed works the card back to a month ago and lists every charge since ({h34[:160]!r})")
+ok("don't have the card's balance" not in out and len(cap._load()["gaps"]) == g0 and len(NOTES) == n0,
+   "the card ask is answered from the figures: no 'I don't have the balance' line, no build filed")
+import intents  # noqa: E402
+ok("history" in intents.MONEY_OPS and any(t["name"] == "money" and "history" in t["inputSchema"]["properties"]["op"]["enum"] for t in gmcp.TOOLS),
+   "the money tool offers `history` to the brain")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("money` `history`" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a balance then-and-now question has its rung")
+
+# ---------------------------------------------------------------- 35. "are you sure the lens rentals are due tomorrow?" (gap g-a9b3c1)
+# the owner, 2026-11-09 16:52: asked how Sage knew a bill was due and money was short, and for a breakdown; it was answered
+# "I can't move money myself". The `money` tool's `bills` op lists the predicted bills, how each is known, and each
+# account's balance against them, so the brain answers the question.
+BILLS_ASK = ("Are you sure the lens rentals are due tomorrow? Also, how do you know we don’t have enough money to pay our "
+             "expenses? Can you give me a breakdown?")
+_tx = {f"lr{k}": {"id": f"lr{k}", "account_id": "chk", "posted": _d(30 * k - 1), "amount": -450.0,
+                  "description": "LENSRENTALS.COM", "bucket": ""} for k in (1, 2, 3)}
+_tx.update({f"ins{k}": {"id": f"ins{k}", "account_id": "chk", "posted": _d(30 * k - 3), "amount": -620.0,
+                        "description": "STATE FARM INSURANCE", "bucket": ""} for k in (1, 2, 3)})
+(TMP / "adata" / "money" / "ledger.json").write_text(json.dumps({
+    "accounts": {"chk": {"id": "chk", "name": "Everyday Checking", "type": "depository", "balance": 900.0, "balance_date": _d(0)}},
+    "transactions": _tx, "pulled": {}}), encoding="utf-8")
+seen35 = {}
+
+
+def fake_run_bills(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen35["bills"] = gmcp.call("money", {"op": "bills"})
+    return {"ok": True, "session": "S35", "text": "Yes: Lensrentals has charged checking $450 every month, last on the same date, so "
+                                                  "tomorrow is predicted from that. With State Farm's $620 that's $1,070 against $900 in checking."}
+
+
+brain._run_claude = fake_run_bills
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": BILLS_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/bills35", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+b35 = str(seen35.get("bills"))
+ok(b35.startswith("accepted") and f"{_d(-1)} Lensrentals.Com" in b35 and "3 charges so far" in b35 and "State Farm" in b35
+   and "balance $900" in b35 and "bills $1,070" in b35 and "short $170" in b35,
+   f"'{BILLS_ASK[:50]}...': the money `bills` deed shows each bill, how it is known, and checking against them ({b35[:200]!r})")
+ok("can't move money" not in out and len(cap._load()["gaps"]) == g0 and len(NOTES) == n0,
+   "the bills ask is answered with the breakdown: no 'I can't move money' line, no build filed")
+ok("bills" in intents.MONEY_OPS and any(t["name"] == "money" and "bills" in t["inputSchema"]["properties"]["op"]["enum"] for t in gmcp.TOOLS),
+   "the money tool offers `bills` to the brain")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("money` `bills`" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: an 'is it really due / why short' question has its rung")
+
+# ---------------------------------------------------------------- 20. a voice note that failed to transcribe is tried again (gap g-21835d)
+# the owner, 2026-11-07 10:06: a voice note came in as "[voice note ... ; transcription failed]" and was answered "Your voice
+# note didn't come through on my end". The replay hands back only that line: the bridge transcribes the saved file again.
+import space_reader  # noqa: E402
+VOICE = TMP / "attachments" / "20261107-100631_voice_message_2026-11-07T1805Z.m4a"
+VOICE.parent.mkdir(parents=True, exist_ok=True)
+VOICE.write_bytes(b"\x00fake m4a")
+VOICE_ASK = f"[voice note from owner1 saved at {VOICE}; transcription failed]"
+SAID = "Find the venue timeline PDF in my Drive and send me the link"
+_tr0 = space_reader.transcribe
+space_reader.transcribe = lambda p, timeout=900: SAID if Path(p) == VOICE else ""
+
+
+def fake_run_voice(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    if SAID not in prompt:
+        return {"ok": True, "session": "S20", "text": "Your voice note didn't come through on my end, so I couldn't make out what you said."}
+    seen["voice_do"] = gmcp.call("do", {"lane": "wedding", "text": "Find the venue timeline PDF in the owner's Drive and send back the link."})
+    return {"ok": True, "session": "S20", "text": "On it, I'll find the venue timeline and send the link here."}
+
+
+brain._run_claude = fake_run_voice
+bridge.handle({"channel": "local", "person": owner1, "text": VOICE_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/voice", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "venue timeline" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen.get("voice_do")).startswith("accepted") and tix, "the replayed voice note is transcribed again and becomes a doer job")
+ok("didn't come through" not in out, f"no 'didn't come through' line: {out!r}")
+space_reader.transcribe = _tr0
+ok(space_reader.retry_failed_voice("[voice note from owner1 saved at C:\\nope.m4a; transcription failed]")
+   == "[voice note from owner1 saved at C:\\nope.m4a; transcription failed]", "a file that is gone leaves the line as it was")
+# the transcriber itself: a failed first run is tried once more offline, from the cached model
+runs = []
+
+
+class _R:
+    stderr, stdout = "ConnectionError: hub unreachable", ""
+
+
+def fake_sub(cmd, **kw):
+    runs.append((kw.get("env") or {}).get("HF_HUB_OFFLINE"))
+    if len(runs) == 2:
+        VOICE.with_suffix(".txt").write_text(SAID + "\n", encoding="utf-8")
+    return _R()
+
+
+_sub0, _wpy0 = space_reader.subprocess.run, space_reader.WHISPER_PY
+space_reader.subprocess.run, space_reader.WHISPER_PY = fake_sub, VOICE
+ok(space_reader.transcribe(VOICE) == SAID and runs == [None, "1"], f"a failed transcription retries offline once: {runs}")
+space_reader.subprocess.run, space_reader.WHISPER_PY = _sub0, _wpy0
+
+# ---------------------------------------------------------------- 21. a local file to a website is the PC lane's upload.py (gap g-29ce2a)
+# the owner, 2026-11-10 17:14: replacing ParasFinal.mov in Dropbox came back "the browser refuses to read files from
+# C:\Users\the owner\Videos, so nothing changed in Dropbox". The ask is a `do` where computer that runs doer/upload.py,
+# which gives the file to the signed-in page over CDP from any folder, any size.
+UP_ASK = ("Replace ParasFinal.mov in owner1's Dropbox on dropbox.com, account owner4@example.invalid (signed in earlier today "
+          "in the shared browser profile). Folder: Media/Video Projects. Current file there: ParasFinal.mov, 1.85 GB, modified "
+          "11/10/2026 2:34 pm, with an existing view-only share link that must keep working. Steps: open "
+          "https://www.dropbox.com/home/Media/Video%20Projects, click Upload > Files, pick the local file C:\\Users\\owner1\\Videos\\ParasFinal.mov")
+UP_CMD = ('python assistant/doer/upload.py --file "C:/Users/owner1/Videos/ParasFinal.mov" '
+          '--url "https://www.dropbox.com/home/Media/Video%20Projects" --replace')
+
+
+def fake_run_upload(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["upload_do"] = gmcp.call("do", {"lane": "wedding", "where": "computer",
+                                         "text": f"Replace ParasFinal.mov in Dropbox Media/Video Projects, keeping its share link: run {UP_CMD}"})
+    return {"ok": True, "session": "S21", "text": "I'm replacing ParasFinal.mov in Dropbox now; the share link stays the same."}
+
+
+brain._run_claude = fake_run_upload
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": UP_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/kingsmere", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "upload.py" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen.get("upload_do")).startswith("accepted") and tix and str(tix[-1]["payload"].get("where")) == "computer",
+   "the Dropbox replace ask becomes a PC job that runs upload.py")
+ok("refuses to read" not in out and "couldn't upload" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   f"no 'browser refuses' line, no build filed: {out!r}")
+for f in ("prompt.md", "templates/prompt.generic.md", "desk_prompt.md"):
+    ok("assistant/doer/upload.py" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a local file to a website has its rung")
+# the PC lane's hook lets the command run (tier A/B, no checkpoint), the script passes the scan
+sys.path.insert(0, str(ROOT / "doer"))
+import computer_policy  # noqa: E402
+tier, why = computer_policy.classify(UP_CMD)
+ok(tier in ("A", "B"), f"the PC lane may run upload.py without a checkpoint: {tier} {why}")
+ok(computer_policy.scan_script((ROOT / "doer" / "upload.py").read_text(encoding="utf-8"))[0] == "B", "upload.py passes the static scan")
+
+# upload.py itself, over a fake browser: finds the input after Upload > Files, gives the file, presses Replace, reads done
+import browser as _browser  # noqa: E402
+import upload  # noqa: E402
+FILM = TMP / "Videos" / "ParasFinal.mov"
+FILM.parent.mkdir(parents=True, exist_ok=True)
+FILM.write_bytes(b"\x00" * 2048)
+upload.OUT = TMP / "uploads"
+upload.BUSY = _browser.UPLOADS
+PAGE = {"id": "T1", "url": "https://www.dropbox.com/home/Media/Video%20Projects", "webSocketDebuggerUrl": "ws://fake/T1"}
+fake = {"input": False, "files": None, "clicked": [], "texts": ["Uploading 1 item 40% remaining", "Uploaded 1 item"], "held": []}
+
+
+def fake_cdp(ws, calls):
+    res = []
+    for method, params in calls:
+        if callable(params):
+            params = params(res)
+        if method == "DOM.setFileInputFiles":
+            fake["files"] = params.get("files")
+            fake["held"].append(bool(_browser.held_tabs()))
+            res.append({})
+            continue
+        expr = params.get("expression", "")
+        if expr == upload.FIND_INPUT_JS:
+            res.append({"result": {"objectId": "obj1"}} if fake["input"] else {"result": {"type": "object", "subtype": "null"}})
+        elif "document.readyState" == expr:
+            res.append({"result": {"value": "complete"}})
+        elif expr.startswith("(document.body"):
+            fake["held"].append("T1" in _browser.held_tabs())
+            res.append({"result": {"value": fake["texts"].pop(0) if len(fake["texts"]) > 1 else fake["texts"][0]}})
+        elif expr.startswith("((words)"):
+            words = json.loads(expr[expr.rindex("(") + 1:-1])
+            w = next((x for x in words if x in ("Upload", "Files") or (x == "Replace" and fake["files"] and "Replace" not in fake["clicked"])), "")
+            if w:
+                fake["clicked"].append(w)
+                fake["input"] = fake["input"] or w == "Files"
+            res.append({"result": {"value": w}})
+        else:
+            res.append({"result": {"value": "ok"}})
+    return res
+
+
+_cdp0, _open0, _pages0, _sleep0 = _browser._cdp_calls, _browser.open_browser, upload._pages, upload.time.sleep
+_browser._cdp_calls, _browser.open_browser, upload._pages = fake_cdp, (lambda show=None, wait_s=25.0: "http://127.0.0.1:1"), (lambda: [PAGE])
+upload.time.sleep = lambda s: None
+st = upload.run(str(FILM), url=PAGE["url"], replace=True, wait_s=60, background=False)
+ok(st["state"] == "done" and fake["files"] == [str(FILM.resolve())], f"upload.py gives the file and reads the upload done: {st}")
+ok(fake["clicked"][:2] == ["Upload", "Files"] and "Replace" in st.get("pressed", []), f"Upload > Files, then Replace: {fake['clicked']}")
+ok(any(fake["held"]) and "T1" not in _browser.held_tabs(), "the tab is held while it uploads and let go after")
+ok(Path(st["status_file"]).is_file(), "the end state is written to a status file")
+miss = upload.run(str(TMP / "nope.mov"), url=PAGE["url"], background=False)
+ok(miss["state"] == "failed" and "no file" in miss["why"], "a missing file fails plainly")
+_browser._cdp_calls, _browser.open_browser, upload._pages, upload.time.sleep = _cdp0, _open0, _pages0, _sleep0
+
 print(f"\nall {N} checks passed")

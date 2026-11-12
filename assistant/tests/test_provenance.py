@@ -6,6 +6,7 @@ win, gate/describe lines, and the engine files carry no organization. No network
    python assistant/tests/test_provenance.py
 """
 import json
+import re
 import sys
 import tempfile
 from datetime import datetime
@@ -140,6 +141,6 @@ except Exception:  # noqa: BLE001
     words = set()
 for p in (ROOT / "agent" / "provenance.py", ROOT / "agent" / "provenance_rules.json", ROOT / "agent" / "sentinels.json"):
     txt = p.read_text(encoding="utf-8").lower()
-    hits = sorted(w for w in words if str(w).lower() in txt)
+    hits = sorted(w for w in words if __import__("re").search(r"(?<![a-z])" + __import__("re").escape(str(w).lower()) + r"(?![a-z])", txt))   # whole words: 'Soren' is not 'variance'
     ok(not hits, f"{p.name} names no organization identity word: {hits[:3]}")
 print(f"ALL {N} OK")

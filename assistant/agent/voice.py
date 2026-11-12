@@ -69,6 +69,10 @@ _BUILT = re.compile(r"^(?:That's built now, the one you asked for|I built a fix 
                     r"(?:What changed: (?P<w>.*?))?(?:\s*If anything feels off.*)?$", re.S)
 _BUILT_PLAIN = re.compile(r"^I built (?:that thing|a couple of things) you asked for: (?P<w>.*?)\.? It's live now; if anything feels off.*$", re.S)
 _HANDED = re.compile(r"^Text to (?P<to>\S+) handed to the phone at (?P<when>[^;]+); the phone's Shortcut sends it\.?$")
+# queued is not sent (2026-11-04): the executor's line says "queued"; picked up is not sent either (2026-11-06: the text
+# to a team member was picked up, said "Texted", and never arrived): "Texted" is said only when something confirms it
+_QUEUED = re.compile(r"^Text to (?P<to>\S+) queued for the phone at (?P<when>[^;]+); it goes when the phone picks it up\.?$")
+_WAITING = re.compile(r"^Text to (?P<to>\S+) is still waiting for the phone after (?P<n>\d+) min; send it now from the phone:\s*(?P<url>\S*)$")
 _EMAILED = re.compile(r"^Sent by email to (?P<to>.+?) at (?P<when>\d{1,2}:\d\d ?[AP]M)(?: \(Message-ID [^)]*\))?(?P<rest>.*)$", re.S)
 def _crm_sent_re():
     """Regex for 'Sent in <CRM name> at HH:MM ...'; rebuilt each call so connector changes take effect."""
@@ -85,9 +89,15 @@ _CONFIRMED = re.compile(r"^Confirmed at \d{1,2}:\d\d ?[AP]M: (?P<kind>.+?) lande
 _NOT_DONE = re.compile(r"^Not done: (?P<why>.+?)\.? The card is back (?P<where>.+)$", re.S)
 _NOT_DONE2 = re.compile(r"^Not done: (?P<why>.+)$", re.S)
 _CODE_WAIT = re.compile(r"^I am waiting for a verification code: (?P<step>.*?)(?:\s*It was sent to your phone or email\.)?(?:\s*Open the card on Mission Control.*)?$", re.S)
-_DOER_BLOCKED = re.compile(r"^I could not finish on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)
-_DOER_FAILED = re.compile(r"^I couldn't finish on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)
-_DOER_STEP = re.compile(r"^One step needs you on [\"“](?P<job>.*?)[\"”…]*: (?P<why>.*)$", re.S)   # an owner-only block (2026-10-30)
+# the job's title ends at its CLOSING quote: with `*` a title holding ": " was cut at that colon and the rest of the
+# title came out as the reason (2026-11-04 12:42, "...again\": run `<venv…\": The setup run was refused by the hook")
+_DOER_BLOCKED = re.compile(r"^I could not finish on [\"“](?P<job>.*?)[\"”…]+: (?P<why>.*)$", re.S)
+_DOER_FAILED = re.compile(r"^I couldn't finish on [\"“](?P<job>.*?)[\"”…]+: (?P<why>.*)$", re.S)
+_DOER_STEP = re.compile(r"^One step needs you on [\"“](?P<job>.*?)[\"”…]+: (?P<why>.*)$", re.S)   # an owner-only block (2026-10-30)
+# a job's own report can carry the machinery's words; none of them is something a person says
+_HOOK = re.compile(r"\b(?:was |were |is |got )?(?:refused|blocked|denied|stopped) by (?:the|a|my) (?:\w+ )?hook\b(?:\s*\(\"[^\"]*\"\)|\s*\([^()]*\))?", re.I)
+_MACHINE = re.compile(r"`[^`]*`|\b[a-z]+_[a-z_]+\b|\bthe hook\b|\bexit code\b|\bTraceback\b|\bstderr\b|\bstdout\b|\bmaps to\b|\bregex\b", re.I)
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _ACKS = (
     (re.compile(r"^Handing that to Sage to work through; it comes back here with what was done\.?$"), "On it. I'll come back here with what I did."),
     (re.compile(r"^Got it, building it now with your OK\. You'll hear from me here when it lands, with an undo\.?$"), "On it. I'll tell you here when it's live."),
@@ -110,8 +120,8 @@ _IDS = (
     (re.compile(r"[ \t]{2,}"), " "),
 )
 _CODES = (
-    (re.compile(r"NOT_CONFIGURED smtp:(?P<a>\w+)(?:\s*\(set with [^)]*\))?", re.I), lambda m: f"the {m.group('a')} mail account has no send login yet (Mission Control > Setup fixes that)"),
-    (re.compile(r"NOT_CONFIGURED (?P<a>[\w:-]+)(?:\s*\(set with [^)]*\))?", re.I), lambda m: f"{m.group('a').replace(':', ' ')} isn't set up yet (Mission Control > Setup)"),
+    (re.compile(r"NOT_CONFIGURED smtp:(?P<a>\w+)(?:\s*\(set with [^)]*\))?", re.I), lambda m: f"the {m.group('a')} mail account has no send login yet (say 'set up {m.group('a')} mail' here and I bring its form)"),
+    (re.compile(r"NOT_CONFIGURED (?P<a>[\w:-]+)(?:\s*\(set with [^)]*\))?", re.I), lambda m: f"{m.group('a').replace(':', ' ')} isn't set up yet (say 'set it up' here and I bring its form)"),
     (re.compile(r"DELIVERY UNVERIFIED:?", re.I), lambda m: "I couldn't confirm it was delivered;"),
     (re.compile(r"PERMANENT:\s*", re.I), lambda m: ""),
     (re.compile(r"exec exception \w+ tk-[0-9a-f]+:?\s*", re.I), lambda m: "it hit an error: "),
@@ -245,7 +255,7 @@ def classify(text: str) -> str:
             return cls
     if _BUILT.match(t) or _BUILT_PLAIN.match(t):
         return "build_landed"
-    if _HANDED.match(t) or _EMAILED.match(t) or _crm_sent_re().match(t) or _CONFIRMED_TEXT.match(t) or _CONFIRMED.match(t):
+    if _HANDED.match(t) or _QUEUED.match(t) or _EMAILED.match(t) or _crm_sent_re().match(t) or _CONFIRMED_TEXT.match(t) or _CONFIRMED.match(t):
         return "send_result"
     if _NOT_DONE.match(t) or _NOT_DONE2.match(t):
         return "send_failed"
@@ -311,6 +321,13 @@ def polish(text: str) -> str:
     t = one_voice(text)
     for rx, rep in _IDS:
         t = rx.sub(rep, t)
+    try:                                   # chat-first (chatfirst.py, 2026-11-04): no sentence sends an owner to the computer
+        import chatfirst
+        if chatfirst.changed(t):
+            _ledger("pc_step", ",".join(chatfirst.violations(t)), t)
+            t = chatfirst.clean(t)
+    except Exception:  # noqa: BLE001
+        pass
     return t.strip()
 
 
@@ -323,6 +340,16 @@ def plain(error: str) -> str:
     s = re.sub(r"\s+", " ", s).strip(" :;,.-")
     s = re.sub(r"\(\s*\)", "", s).strip(" :;,.-")
     return s or "it hit an error"
+
+
+def human(why: str) -> str:
+    """A job's reason without the machinery's words: a hook's refusal reads as a safety rule, and a sentence that is
+    only code (backticks, snake_case names, 'maps to', a traceback) is dropped. '' when nothing a person would say
+    is left."""
+    s = " ".join(str(why or "").split())
+    s = _HOOK.sub("was blocked by one of my safety rules", s)
+    keep = [p for p in _SENT_SPLIT.split(s) if p.strip() and not _MACHINE.search(p)]
+    return " ".join(keep).strip()
 
 
 def _first_clause(s: str, n: int = 60) -> str:
@@ -361,7 +388,19 @@ def reword(text: str, channel: str = "") -> str:
     if m:
         to, when = m.group("to"), m.group("when").strip()
         who = person(to) or pretty_number(to)
-        return f"Texted {who} at {when}, from your phone."
+        return f"The text to {who} is lined up on your phone (it picked it up at {when})."
+    m = _QUEUED.match(t)
+    if m:
+        who = person(m.group("to")) or pretty_number(m.group("to"))
+        # no "I'll say here the moment it goes": the phone never reports back, so that promise was never kept
+        # (2026-11-07..10: said on every text, true on none)
+        return f"The text to {who} is lined up for your phone."
+    m = _WAITING.match(t)
+    if m:
+        who = person(m.group("to")) or pretty_number(m.group("to"))
+        url = m.group("url").strip()
+        tail = f" Tap this on your phone and it sends now: {url}" if url else ""
+        return f"The text to {who} hasn't gone yet. Your phone hasn't picked it up after {m.group('n')} minutes.{tail}"
     m = _EMAILED.match(t)
     if m:
         to, when, rest = m.group("to").strip(), m.group("when"), " ".join(str(m.group("rest") or "").split())
@@ -404,13 +443,26 @@ def reword(text: str, channel: str = "") -> str:
     m = _DOER_STEP.match(t)
     if m:
         job = _first_clause(m.group("job"))
-        why = " ".join(str(m.group("why") or "").split())
+        why = human(m.group("why"))
+        step = why
+        try:                               # is there still a step for the owner once the PC-pointing sentences are gone?
+            import chatfirst
+            step = chatfirst.clean(why, "")
+        except Exception:  # noqa: BLE001
+            pass
+        if step != why or not why:
+            # the "step" was at the computer, or was only machinery: nothing is the owner's to do, so this is the
+            # agent's own block, said as one (never "One step needs you ... nothing for you to do at a computer")
+            step = step or "I hit a block I can't get past by myself yet"
+            return f"I couldn't finish \"{job}\": {step}" if job else f"I couldn't finish that one: {step}"
         return f"One step needs you on \"{job}\": {why}" if job else f"One step needs you: {why}"
     m = _DOER_BLOCKED.match(t) or _DOER_FAILED.match(t)
     if m:
         job = _first_clause(m.group("job"))
-        why = " ".join(str(m.group("why") or "").split())
+        why = human(m.group("why")) or "I hit a block I can't get past by myself yet"
         return f"I couldn't finish \"{job}\": {why}" if job else f"I couldn't finish that one: {why}"
+    if _BUILD_ACK.match(t):
+        return build_ack(build_batch()) or _BUILD_ACK_PLAIN
     for rx, rep in _ACKS:
         if rx.match(t):
             return rep
@@ -422,6 +474,99 @@ def reword(text: str, channel: str = "") -> str:
         if m:
             return m.group("body").strip()
     return t
+
+
+# ------------------------------------------------------------------ build taps in a row (2026-10-19)
+# the owner tapped "Build it, I approve" on four cards in a minute and got four identical "building it now" lines, none
+# saying which build. The ack now names the build, and taps within BATCH_MIN of each other share ONE message that
+# chat_push.push_say edits in place: "Building all four: a, b, c and d."
+BATCH_MIN = 5
+_BUILD_ACK, _BUILD_ACK_PLAIN = next((rx, rep) for rx, rep in _ACKS if "building it now" in rx.pattern)
+_COUNT = {2: "both", 3: "all three", 4: "all four", 5: "all five", 6: "all six", 7: "all seven", 8: "all eight", 9: "all nine"}
+
+
+def is_build_ack(text: str) -> bool:
+    return bool(_BUILD_ACK.match(str(text or "").strip()))
+
+
+def _short_title(title: str) -> str:
+    t = re.sub(r"(?i)^build request\s*", "", str(title or "")).strip().rstrip(".")
+    if len(t) > 50:
+        t = t[:50].rsplit(" ", 1)[0]
+    if len(t) > 1 and t[0].isupper() and not t[1].isupper():
+        t = t[0].lower() + t[1:]
+    return t
+
+
+def build_batch(now: float | None = None) -> list:
+    """Short titles of the builds an owner approved in this run of taps: the latest approval, and each earlier one
+    no more than BATCH_MIN before the next (builds.json `answered`, written by builder.owner_answer before the ack)."""
+    now = now or time.time()
+    try:
+        import core
+        st = core.load(core.DATA / "builds.json", {})
+    except Exception:  # noqa: BLE001
+        return []
+    rows = []
+    for key, s in (st.items() if isinstance(st, dict) else []):
+        if not isinstance(s, dict) or not s.get("answered") or s.get("status") in ("retry", "dropped", "asked"):
+            continue
+        try:
+            ts = time.mktime(time.strptime(str(s["answered"])[:16], "%Y-%m-%d %H:%M"))
+        except (ValueError, OverflowError):
+            continue
+        rows.append((ts, len(rows), _short_title(s.get("title") or Path(str(key)).stem)))
+    rows.sort(key=lambda r: (-r[0], -r[1]))           # newest first; a same-minute tie keeps the file's order
+    out, last = [], now
+    for ts, _i, title in rows:
+        if last - ts > BATCH_MIN * 60 + 60:           # stamps are to the minute
+            break
+        if title and title not in out:
+            out.append(title)
+        last = ts
+    return list(reversed(out))
+
+
+def build_ack(titles: list) -> str:
+    """The one line for a run of build taps; '' when no title is known (the plain ack stands)."""
+    titles = [t for t in titles if t]
+    if not titles:
+        return ""
+    if len(titles) == 1:
+        return f"On it: building \"{titles[0]}\". I'll tell you here when it's live."
+    names = ", ".join(titles[:-1]) + " and " + titles[-1]
+    return f"Building {_COUNT.get(len(titles), f'all {len(titles)}')}: {names}. I'll tell you here as each one goes live."
+
+
+def _batch_path() -> Path:
+    return _seen_path().with_name("build_ack.json")
+
+
+def batch_message(space: str, now: float | None = None) -> str:
+    """The build-ack message posted to this space within BATCH_MIN, to edit instead of posting another."""
+    now = now or time.time()
+    try:
+        d = json.loads(_batch_path().read_text(encoding="utf-8"))
+        r = d.get(str(space)) or {}
+        return str(r.get("name") or "") if now - float(r.get("ts") or 0) <= BATCH_MIN * 60 + 60 else ""
+    except (OSError, ValueError, AttributeError, TypeError):
+        return ""
+
+
+def batch_remember(space: str, name: str, now: float | None = None) -> None:
+    p = _batch_path()
+    try:
+        d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        if not isinstance(d, dict):
+            d = {}
+    except (OSError, ValueError):
+        d = {}
+    d[str(space)] = {"name": str(name), "ts": now or time.time()}
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(d), encoding="utf-8")
+    except OSError:
+        pass
 
 
 # ------------------------------------------------------------------ dedupe

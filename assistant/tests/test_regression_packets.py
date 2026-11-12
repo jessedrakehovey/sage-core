@@ -78,6 +78,19 @@ fam = dict(good, expect_deeds=["card"], forbid_deeds=["post"])
 ok(rp.score("x", ["card:ask"], fam)[0] == "PASS" and rp.score("x", ["post:dm", "card:ask"], fam)[0] == "FAIL", "family deeds match any member")
 star = dict(good, expect_deeds=["ticket:*"], forbid_deeds=[])
 ok(rp.score("x", ["ticket:schedule"], star)[0] == "PASS", "a 'kind:*' expectation matches any member")
+carded = dict(good, expect_deeds=["card:ask"], forbid_deeds=[], require_phrases=["[PREVIEW]", "please send the keys"], forbid_phrases=["reassigned"])
+v, f = rp.score("Nothing sent. Your edit is a new draft, carded again.", ["card:ask"], carded)
+ok(v == "FAIL" and set(f) == {"missing:[PREVIEW]", "missing:please send the keys"}, f"with no said text a carded phrase is missing: {f}")
+v, f = rp.score("Nothing sent. Your edit is a new draft, carded again.", ["card:ask"], carded,
+                said=["Shown again for your read.\n[PREVIEW]\nTo: owner1\n\nPlease send the keys today."])
+ok(v == "PASS" and f == [], f"phrases are read across reply + the carded text: {f}")
+v, f = rp.score("Nothing sent.", ["card:ask"], carded, said=["[PREVIEW] please send the keys; I reassigned it"])
+ok(v == "FAIL" and f == ["said:reassigned"], f"a forbidden phrase on the card counts too: {f}")
+v, f = rp.score("Carded your edit. Your edit removed 'reassigned it to the vendor', so that line is gone.", ["card:ask"], carded,
+                said=["[PREVIEW] please send the keys today."])
+ok(v == "PASS" and f == [], f"a forbidden phrase is judged on the carded text, not on the reply's narration of what was dropped: {f}")
+v, f = rp.score("I reassigned it.", ["post:dm"], dict(carded, require_phrases=[], expect_deeds=[]))
+ok(v == "FAIL" and f == ["said:reassigned"], f"with nothing carded the reply is the text that is judged: {f}")
 
 # ---------------------------------------------------------------- flagging by tested_rule
 rf = lambda rule: {"chase.switch": ["scripts/agent/rules.json", "scripts/agent/prompt.py"]}.get(rule, [])  # noqa: E731

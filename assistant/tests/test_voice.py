@@ -98,9 +98,9 @@ held = voice.recent(1)
 ok(sum(v for k, v in held.items() if k.startswith("quiet:")) >= 10, f"what was held back is counted ({held})")
 
 # ------------------------------------------------------------------ 2. the lines a person would say, reworded
-ok(voice.gate("Text to +15550734973 handed to the phone at 12:19 PM; the phone's Shortcut sends it.") == "Texted Quinn Heathcote at 12:19 PM, from your phone.",
+ok(voice.gate("Text to +15550734973 handed to the phone at 12:19 PM; the phone's Shortcut sends it.") == "The text to Quinn Heathcote is lined up on your phone (it picked it up at 12:19 PM).",
    "a handed text names the person, not the number")
-ok(voice.gate("Text to +18055550123 handed to the phone at 1:00 PM; the phone's Shortcut sends it.") == "Texted (805) 555-0123 at 1:00 PM, from your phone.",
+ok(voice.gate("Text to +18055550123 handed to the phone at 1:00 PM; the phone's Shortcut sends it.") == "The text to (805) 555-0123 is lined up on your phone (it picked it up at 1:00 PM).",
    "...an unknown number reads as a phone number")
 ok(voice.gate("Sent by email to p5d59f2@example.invalid at 4:45 PM (Message-ID <0e1d2c3b4a5968778695a4b3c2d1e0f9@example.invalid>).") == "Emailed Corwin Castellan IV at 4:45 PM.",
    "an email result names the person and drops the Message-ID")
@@ -120,7 +120,7 @@ ok(voice.gate("Sent in AcmeCRM at 2:10 PM (AcmeCRM message 1a2b3c4d, status sent
    "a CRM send result without the ids")
 _crm_mod._connector = _orig_connector   # restore
 t = voice.gate("Not done: NOT_CONFIGURED smtp:personal (set with setup_creds.py mail personal). The card is back on your phone.")
-ok(t == "That didn't go: the personal mail account has no send login yet (Mission Control > Setup fixes that). The card is back for another tap.", f"an error code in plain words: {t!r}")
+ok(t == "That didn't go: the personal mail account has no send login yet (say 'set up personal mail' here and I bring its form). The card is back for another tap.", f"an error code in plain words: {t!r}")
 t = voice.gate('That\'s built now, the one you asked for: "A CRM send that was refused must not show a green check on the card". What changed: Approval cards now show an hourglass while a send is waiting. If anything feels off, say so and I\'ll undo it.')
 ok(t == "Done: Approval cards now show an hourglass while a send is waiting. Say if anything feels off and I'll undo it.", f"a build receipt says what changed: {t!r}")
 t = voice.gate('I built a fix for this one: "A card handed on after a draft-lint refusal posts in the thread where it was asked". What changed: Build request A card handed on after a dra. If anything feels off, say so and I\'ll undo it.')
@@ -284,7 +284,7 @@ for said, want in [
     ("It also tells the operator to answer in this thread.", "It also tells me to answer in this thread."),
     ("If it's still missing I'll have the operator draft one.", "If it's still missing I'll draft one."),
     ("Without the draft, an operator drafts it.", "Without the draft, I draft it."),
-    ("The doer's tools are on the PC. The doer's waiting on a code.", "My tools are on the PC. I'm waiting on a code."),
+    ("The doer's tools are ready. The doer's waiting on a code.", "My tools are ready. I'm waiting on a code."),
     ("The self-test failed on the undo window; the builder has it.", "The self-test failed on the undo window; I have it."),
     ("Want me to have the doer do it?", "Want me to do it?"),
     ("Still not built: Doer evidence file fails on paths with spaces.", "Still not built: Browser job evidence file fails on paths with spaces."),

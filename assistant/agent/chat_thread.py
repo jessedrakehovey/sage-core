@@ -31,6 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core  # noqa: E402
+import clock  # noqa: E402
 
 CHAT = "https://chat.googleapis.com/v1"
 CACHE = core.DATA / "chat_threads.json"
@@ -158,7 +159,7 @@ def space_tail(space: str, n: int = 4, exclude: str = "", hours: float = TAIL_HO
     Chat could not be read."""
     if not space or not str(space).startswith("spaces/"):
         return None
-    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - hours * 3600))
+    since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(clock.now() - hours * 3600))
     try:
         ms = _list(space, f'createTime > "{since}"', order="createTime desc", n=max(n * 3, 8))
     except Exception as e:  # noqa: BLE001

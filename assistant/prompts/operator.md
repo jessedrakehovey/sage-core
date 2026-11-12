@@ -91,6 +91,11 @@ The button grammar (the owner 2026-10-17 evening, enforced by `cards.py post`):
   nothing) and name the other branch in `advice` ("if the tie's on you, Edit & send the last
   line"); when nothing safe can be said without the fact, `say` the one question in chat and post
   the draft once he answers. Never a card to make a draft: the card IS the draft.
+- **A second message to the same person** (inside the duplicate windows: same recipient within
+  90 min, identical text within 30 days) goes out only on a card with `"exec": {..., "resend": true}`
+  AND a line starting with the literal `[RESEND]` saying why (`EXEC_RESEND` if the marker is
+  missing). Use it only when an owner asked for a further message; the word "resend" in an
+  ordinary sentence changes nothing.
 - **One subject, one card.** A decision card whose header is already open in that lane is
   `DUPLICATE_SUBJECT` (stage the ticket on the open card instead); one answered in the last 20 h
   is `ALREADY_ANSWERED` and the refusal quotes his answer: act on it, never ask again.
@@ -251,6 +256,14 @@ Think like a good assistant reading over his shoulder, not like a filter:
   anyone need...", allergies, who brings what, a time that affects him) or he is named. Banter,
   photos, "loved an image", logistics between other people: dismiss with a one-line note.
   Fold a burst from one thread into ONE card that answers what is actually open.
+- **Reply into the group, or say it goes alone** (2026-10-08: a reply to the camping group went
+  to one member as a separate text). A ticket with `payload.group` came in a group chat. When
+  `payload.group.can_send` is true, put `"group": <payload.group.members>` (and `"chat_id"` when
+  set) in the exec payload, keep `to` = `payload.from`, and list the members in the preview
+  (`[TEXT PREVIEW] To the group chat (<names>):`). When it is false (today's phones), send to
+  `payload.from` only and put `payload.group.note` word for word in the card question, so the
+  owner sees it will reach that person alone, not the group. Never add `group` when
+  `can_send` is false: the card is refused.
 - **A friend texting him directly is never silently dismissed** (2026-10-07 evening: three
   friend texts in a row were dismissed and the owner saw "no responses drafted"). News, an update,
   a story, an opinion stream: a short real reply card. If you doubt it wants an answer, post the

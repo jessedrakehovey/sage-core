@@ -30,6 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core  # noqa: E402
+import clock  # noqa: E402
 
 CONFIG = core.AGENT / "gchat.local.json"
 SCOPES = ["https://www.googleapis.com/auth/chat.bot", "https://www.googleapis.com/auth/pubsub"]
@@ -48,7 +49,8 @@ def configured() -> bool:
 
 
 def _token() -> str:
-    if _TOK["v"] and time.time() < _TOK["exp"] - 60:
+    clock.install()                     # token stamps from Google's time, not a wrong PC clock (2026-11-01)
+    if _TOK["v"] and clock.now() < _TOK["exp"] - 60:
         return _TOK["v"]
     from google.oauth2 import service_account
     import google.auth.transport.requests
@@ -58,7 +60,7 @@ def _token() -> str:
     # creds.expiry is a NAIVE UTC datetime; .timestamp() would read it as local time and keep a dead
     # token for hours (seen live 2026-10-05: 401s until the bridge restarted)
     from datetime import timezone
-    _TOK["exp"] = creds.expiry.replace(tzinfo=timezone.utc).timestamp() if creds.expiry else time.time() + 3000
+    _TOK["exp"] = creds.expiry.replace(tzinfo=timezone.utc).timestamp() if creds.expiry else clock.now() + 3000
     return _TOK["v"]
 
 
@@ -75,7 +77,11 @@ def _req(url: str, body=None, method: str = "", idempotent: bool = False) -> dic
             with urllib.request.urlopen(r, timeout=45) as resp:
                 txt = resp.read().decode()
                 return json.loads(txt) if txt.strip() else {}
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as e:
+            if e.code == 401 and attempt == 0:      # a token stamped from a stale clock: re-measure, fresh token, once
+                clock.reset()
+                _TOK["v"] = None
+                continue
             raise
         except Exception as e:  # noqa: BLE001
             last = e
@@ -142,11 +148,43 @@ def parse_click(ev: dict) -> dict | None:
     form = {}
     for name, v in ((common.get("formInputs") or (ev.get("common") or {}).get("formInputs") or {}) or {}).items():
         vals = ((v or {}).get("stringInputs") or {}).get("value") or []
+        if not vals and (v or {}).get("dateTimeInput"):     # a date-time picker (the Send later dialog, 2026-11-04)
+            vals = [str((v or {}).get("dateTimeInput", {}).get("msSinceEpoch") or "")]
         form[str(name)] = str(vals[0]) if vals else ""
     return {"email": str(snd.get("email") or "").lower(), "chat_user": str(snd.get("name") or ""),
             "name": str(snd.get("displayName") or ""), "space": space["name"],
             "msg_name": str(msg.get("name") or ""), "function": fn, "params": {k: str(v) for k, v in params.items()},
             "dialog": str((common.get("dialogEventType") or (ev.get("common") or {}).get("dialogEventType")) or ""), "form": form}
+
+
+def parse_home(ev: dict) -> dict | None:
+    """The owner opened the app's HOME tab (relay function onAppHome: no payload, only chat.user) -> {"email", "chat_user",
+    "name"}; None for anything else."""
+    if str(ev.get("relayFunction") or "") != "onAppHome":
+        return None
+    snd = (ev.get("chat") or {}).get("user") or {}
+    return {"email": str(snd.get("email") or "").lower(), "chat_user": str(snd.get("name") or ""), "name": str(snd.get("displayName") or "")}
+
+
+def parse_command(ev: dict) -> dict | None:
+    """A registered slash or quick command (add-on shape chat.appCommandPayload) -> {"id", "type", "text", "args",
+    "email", "chat_user", "name", "space", "thread", "dm", "msg_name"}; None otherwise."""
+    chat = ev.get("chat") or {}
+    p = chat.get("appCommandPayload")
+    if not isinstance(p, dict):
+        return None
+    meta = p.get("appCommandMetadata") or {}
+    msg = p.get("message") or {}
+    snd = msg.get("sender") or chat.get("user") or {}
+    space = msg.get("space") or p.get("space") or {}
+    text = str(msg.get("text") or "").strip()
+    args = str(msg.get("argumentText") or "").strip()
+    if not args and text.startswith("/"):
+        args = text.split(" ", 1)[1].strip() if " " in text else ""
+    return {"id": meta.get("appCommandId"), "type": str(meta.get("appCommandType") or ""), "text": text, "args": args,
+            "email": str(snd.get("email") or "").lower(), "chat_user": str(snd.get("name") or ""), "name": str(snd.get("displayName") or ""),
+            "space": str(space.get("name") or ""), "thread": str((msg.get("thread") or {}).get("name") or ""),
+            "dm": space.get("type") == "DM" or space.get("spaceType") == "DIRECT_MESSAGE", "msg_name": str(msg.get("name") or "")}
 
 
 def parse_added(ev: dict) -> dict | None:
@@ -204,7 +242,7 @@ def _space_added(space: str, person: dict | None) -> None:
         import space_reader
         space_reader.invalidate()
         wm = core.load(space_reader.WATERMARKS, {}) or {}
-        wm.setdefault(space, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 60)))
+        wm.setdefault(space, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(clock.now() - 60)))
         core.save(space_reader.WATERMARKS, wm)
     except Exception:  # noqa: BLE001
         pass
@@ -421,33 +459,156 @@ def ensure_mention(text: str, space: str, user_id: str) -> str:
     return scrub_never_tag(f"<{user_id}> {text}", space)
 
 
-def post(space: str, text: str, thread: str = "") -> str:
+_REPLY_OPT = "messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+
+
+def _tk():
+    import thread_keys
+    return thread_keys
+
+
+def _slug() -> str:
+    return re.sub(r"[^a-z0-9]+", "-", str(core.profile().get("name") or "agent").lower()).strip("-") or "agent"
+
+
+def _with_thread(space: str, body: dict, thread: str = "", key: str = "") -> tuple:
+    """(url, body) for one message create. A thread given is replied in. None given (the owner
+    2026-11-04, "hundreds of chat threads"): the post is keyed by its SUBJECT (thread_keys) -- the
+    first org-defined subject its words name, else this agent's thread for the day in that space.
+    The first post under a key sends a one-line header that names the thread, so threads label
+    themselves; later posts about the subject reply in it. `key` pins a subject the words would not
+    show. Never in a DM; off with org.json chat_thread_keys=false."""
+    url = f"https://chat.googleapis.com/v1/{space}/messages"
+    body = dict(body)
+    if thread:
+        body["thread"] = {"name": thread}
+        return url + "?" + _REPLY_OPT, body
+    try:
+        tk = _tk()
+        if _is_dm(space) or not tk.enabled():
+            return url, body
+        ent = _keyed_thread(space, body, key)
+    except Exception as e:  # noqa: BLE001
+        print(f"[gchat] thread_keys: {type(e).__name__}: {str(e)[:120]} (posting unthreaded)", file=sys.stderr)
+        return url, body
+    if ent and ent.get("thread"):
+        body["thread"] = {"name": ent["thread"]}
+    elif ent and ent.get("key"):
+        body["thread"] = {"threadKey": ent["key"]}
+    else:
+        return url, body
+    return url + "?" + _REPLY_OPT, body
+
+
+def _keyed_thread(space: str, body: dict, key: str = "") -> dict | None:
+    """The registry entry whose thread this post belongs in, opening it (and posting its header)
+    when the subject has none alive. The header carries thread.threadKey, so the key pins the
+    thread even when the registry is later lost; the entry then holds the thread name."""
+    tk = _tk()
+    words = tk.body_words(body)
+    slug = _slug()
+    if key:
+        base, days = tk.safe_key(key), 30
+    else:
+        base, days = tk.base_key(words, slug)
+    reg = tk.Registry()
+    ent = reg.entry(space, base, days)
+    if ent:
+        reg.touch(space, base)
+        return ent
+    title = tk.title_for(words, slug, str(core.profile().get("name") or ""))
+    if key and tk.base_key(words, slug)[0].startswith("day-"):
+        title = key                     # the words name no subject: the pinned key is the label
+    ent = reg.open(space, base, title)
+    try:
+        r = _req(f"https://chat.googleapis.com/v1/{space}/messages?{_REPLY_OPT}",
+                 {"text": title, "thread": {"threadKey": ent["key"]}}) or {}
+        reg.bind(space, base, thread=str((r.get("thread") or {}).get("name") or ""), header=str(r.get("name") or ""))
+    except Exception:  # noqa: BLE001
+        pass                            # the message itself still carries the threadKey
+    reg.touch(space, base)
+    return reg.entry(space, base, days) or ent
+
+
+def adopt_thread(space: str, thread: str, text: str = "") -> bool:
+    """A person opened (or continued) a thread about a subject: the agent's own keyed posts about
+    it follow them there, with no header."""
+    space = space or str(thread or "").split("/threads/")[0]
+    if not space or not thread or "/threads/" not in str(thread) or _is_dm(space):
+        return False
+    try:
+        return bool(_tk().Registry().adopt(space, thread, text, _slug()))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def thread_title(space: str, subject: str, title: str = "", mark: str | None = None) -> bool:
+    """Edit the header line that names a subject's thread. `subject` is a key or any text that
+    names one; `title` replaces the line; `mark` goes before it ("✅ done") and never stacks.
+    Only a header the app posted can be edited (an adopted thread has none)."""
+    tk = _tk()
+    reg = tk.Registry()
+    ents = reg.dump().get(space) or {}
+    base = tk.safe_key(subject) if subject in ents else tk.base_key(subject, _slug())[0]
+    ent = ents.get(base)
+    if not ent or not ent.get("header"):
+        return False
+    base_title = title or ent.get("title") or ""
+    mark = (mark if mark is not None else ent.get("mark") or "").strip()
+    shown = f"{mark} {base_title}".strip()
+    if not shown:
+        return False
+    try:
+        _req(f"https://chat.googleapis.com/v1/{ent['header']}?updateMask=text", {"text": shown[:MAX_TEXT]}, method="PATCH")
+    except Exception:  # noqa: BLE001
+        return False
+    reg.retitle(space, base, base_title, mark)
+    return True
+
+
+def _laid_out(text: str) -> tuple:
+    """(opening, card) for a long text, (text, None) for anything else; a fault in the layout never stops a post."""
+    try:
+        import layout
+        return layout.split(text)
+    except Exception:  # noqa: BLE001
+        return str(text or ""), None
+
+
+def post(space: str, text: str, thread: str = "", key: str = "") -> str:
     """Post as the app. Returns the first message's resource name ('' when nothing was posted),
-    so a placeholder can later be edited into the answer with patch()."""
+    so a placeholder can later be edited into the answer with patch(). No thread given: the post
+    joins its subject's thread (_with_thread); `key` pins the subject. A long text goes up laid out (layout.py):
+    its opening as the message, the rest in a card under it with each part folded behind Show more."""
+    if not str(text or "").strip() or not space.startswith("spaces/"):
+        return ""
+    lead, card = _laid_out(text)
+    if card:
+        try:
+            url, body = _with_thread(space, {"text": mentionize(to_gchat(lead), space)[:MAX_TEXT], "cardsV2": [card]}, thread, key)
+            r = _req(url, body)
+            return str(r.get("name") or "posted")
+        except urllib.error.HTTPError as e:
+            if e.code != 400:           # Chat refused the card itself: the same words go up as plain text, below
+                raise
     text = mentionize(to_gchat(text), space)
-    if not text or not space.startswith("spaces/"):
+    if not text:
         return ""
     first = ""
     for ch in [text[i:i + MAX_TEXT] for i in range(0, len(text), MAX_TEXT)]:
-        body = {"text": ch}
-        url = f"https://chat.googleapis.com/v1/{space}/messages"
-        if thread:
-            body["thread"] = {"name": thread}
-            url += "?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+        url, body = _with_thread(space, {"text": ch}, thread, key)
         r = _req(url, body)
         first = first or str(r.get("name") or "posted")
+        if not thread:              # the rest of a long text stays in the thread the first chunk opened
+            thread = str((r.get("thread") or {}).get("name") or "") or thread
     return first
 
 
-def post_body(space: str, body: dict, thread: str = "") -> str:
+def post_body(space: str, body: dict, thread: str = "", key: str = "") -> str:
     """Post a ready-made message body (cards with buttons) as the app. Returns the message name."""
     if not isinstance(body, dict) or not space.startswith("spaces/"):
         return ""
-    body = dict(body)
-    url = f"https://chat.googleapis.com/v1/{space}/messages"
-    if thread:
-        body["thread"] = {"name": thread}
-        url += "?messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD"
+    url, body = _with_thread(space, body, thread, key)
     r = _req(url, body)
     return str(r.get("name") or "")
 
@@ -463,9 +624,20 @@ def patch_body(name: str, body: dict) -> bool:
 
 def patch(name: str, text: str) -> bool:
     """Edit a message this app posted (the typing placeholder becomes the answer). Text past
-    one message's limit continues in a new message in the same space."""
+    one message's limit continues in a new message in the same space. A long text is laid out as in post()."""
+    if not str(text or "").strip() or not name.startswith("spaces/") or "/messages/" not in name:
+        return False
+    lead, card = _laid_out(text)
+    if card:
+        try:
+            _req(f"https://chat.googleapis.com/v1/{name}?updateMask=text,cardsV2",
+                 {"text": mentionize(to_gchat(lead), name.split("/messages/")[0])[:MAX_TEXT], "cardsV2": [card]}, method="PATCH")
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code != 400:
+                raise
     text = mentionize(to_gchat(text), name.split("/messages/")[0])
-    if not text or not name.startswith("spaces/") or "/messages/" not in name:
+    if not text:
         return False
     _req(f"https://chat.googleapis.com/v1/{name}?updateMask=text", {"text": text[:MAX_TEXT]}, method="PATCH")
     if len(text) > MAX_TEXT:

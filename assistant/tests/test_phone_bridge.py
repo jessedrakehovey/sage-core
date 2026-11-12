@@ -243,6 +243,20 @@ text_gate.owner_numbers = lambda: {"8055550193"}
 check("...while an owner's own number is never treated as team",
       text_gate.keep([{**mt, "payload": {**mt["payload"], "from": "+18055550193", "text": "home soon"}}]) == [])
 text_gate.team_member, text_gate.owner_numbers = _tm, _on
+# 2026-10-11: owner's texts came in saved as "owner Pennywhistle" at +15550106110 and still made a
+# 'Text reply: owner' card. An owner is skipped by number, by email handle and by the saved name.
+_on2 = text_gate.owner_numbers
+text_gate.owner_numbers = lambda: {"5550106110"}
+_pe2 = text_gate.exception_cfg
+text_gate.exception_cfg = lambda: {"enabled": True, "time": True, "money": True, "include_family": True}
+jh = {"source": "imessage", "kind": "imessage_in", "lane": "personal",
+      "payload": {"from": "+15550106110", "name": "owner6 Pennywhistle", "account": "owner1-iphone", "text": "Won both games, I scored"}}
+check("owner6 Pennywhistle at her own number is skipped (no reply card)", text_gate.keep([jh]) == [] and text_gate.owner_sender(jh["payload"]))
+check("...and by her saved name from another number, even a time-related text",
+      text_gate.keep([{**jh, "payload": {**jh["payload"], "from": "+18055550111", "text": "I love you, dinner Sunday at 6?"}}]) == [])
+check("...while a wedding party who shares her first name still comes through",
+      len(text_gate.keep([{**jh, "payload": {**jh["payload"], "from": "+18055550166", "name": "owner6 Glenrock"}}])) == 1)
+text_gate.owner_numbers, text_gate.exception_cfg = _on2, _pe2
 check("non-text items pass the gate untouched", text_gate.keep([{"kind": "email_in", "lane": "personal"}]) == [{"kind": "email_in", "lane": "personal"}])
 real_wo = text_gate.business_only
 text_gate.business_only = lambda: False           # phone.triage_all_texts = true: the old behaviour
@@ -430,6 +444,47 @@ check("re-nudge: never in quiet hours", phone_nudge.renudge_if_waiting(now=night
 _ob.write_text(_json.dumps({"items": []}), encoding="utf-8")
 phone_nudge.renudge_if_waiting(now=noon)
 check("re-nudge: the counter resets once the outbox is empty", _json.loads(phone_nudge.STATE.read_text(encoding="utf-8")).get("renudges", 0) == 0)
+
+# ---- a reply goes back into the group chat it came from, or the card says it goes alone (2026-10-08: the owner's
+# reply to the camping group's messages from 555-078-3878 went to that number as a separate text)
+text_gate.business_only = lambda: False
+CAMP = ["+15550783878", "+18055550301", "+18055550302", "+18055550303"]
+real_gso = pb.group_send_ok
+r = pb.inbound("555-078-3878", "Who's bringing the stove for the camping trip?", "Justin", account="owner1-iphone",
+               participants=", ".join(CAMP), chat_id="chat-camping-1")
+gt = [x for x in tickets._load().values() if x["kind"] == "imessage_in" and x["payload"]["from"] == CAMP[0]]
+g = (gt[0]["payload"].get("group") or {}) if gt else {}
+check("group text: ticket carries the members and the chat id", r.get("queued") == 1 and g.get("members") == CAMP
+      and g.get("chat_id") == "chat-camping-1" and g.get("source") == "phone", (r, g))
+check("group text: title says it came in a group chat", bool(gt) and "in a group chat" in gt[0]["title"], gt and gt[0]["title"])
+check("group text, phone can't address groups: the note says it goes to the person alone",
+      g.get("can_send") is False and "alone, not the group" in g.get("note", "") and "Justin" in g.get("note", ""), g)
+pb.inbound("805-555-0309", "see you at 6", "Elijah", account="owner1-iphone")
+one = [x for x in tickets._load().values() if x["kind"] == "imessage_in" and x["payload"]["from"] == "+18055550309"]
+check("one-on-one text carries no group", bool(one) and "group" not in one[0]["payload"], one)
+gp = {"account": "owner1-iphone", "to": CAMP[0], "body": "I've got the stove", "group": CAMP, "chat_id": "chat-camping-1"}
+check("group payload refused while the phone can't text a group (never quietly one-on-one)",
+      "can't text into a group chat" in es.validate_payload("imessage_send", gp), es.validate_payload("imessage_send", gp))
+ok_g, msg_g = pb.queue_outbound(gp, "tk-grp0")
+check("...and the outbox refuses it too", not ok_g and msg_g.startswith("PERMANENT"), msg_g)
+pb.group_send_ok = lambda account: account == "owner1-iphone"      # config phone.group_send_accounts = ["the owner-iphone"]
+g2 = pb.group_info(CAMP[0], "stove?", "owner1-iphone", CAMP, "chat-camping-1")
+check("group-capable phone: the reply goes into the group", g2.get("can_send") is True and "goes into that group" in g2["note"], g2)
+check("group payload valid on a group-capable phone", es.validate_payload("imessage_send", gp) == "", es.validate_payload("imessage_send", gp))
+check("the sender must be one of the members",
+      "one of the group's members" in es.validate_payload("imessage_send", {**gp, "to": "+18055550399"}))
+ok_g, _ = pb.queue_outbound(gp, "tk-grp1")
+got = pb.fetch_outbox("owner1-iphone")
+check("phone fetch gets every recipient and the chat id", ok_g and len(got) == 1 and got[0]["recipients"] == CAMP
+      and got[0]["chat_id"] == "chat-camping-1" and got[0]["to"] == CAMP[0], got)
+import whois  # noqa: E402
+real_resolve = whois.resolve
+whois.resolve = lambda handle, text=None, fresh=False: {"group": {"members": CAMP, "starter": CAMP[1], "topic": "camping", "size": 4}}
+g3 = pb.group_info(CAMP[0], "stove?", "owner1-iphone")
+check("a group read from the threads (guessed) never sends into the group, even on a capable phone",
+      g3.get("source") == "guessed" and g3.get("can_send") is False and "alone" in g3.get("note", ""), g3)
+whois.resolve = real_resolve
+pb.group_send_ok = real_gso
 
 print(f"\n{'ALL PASS' if not FAILS else str(len(FAILS)) + ' FAILED'}  (scratch {SCRATCH})")
 sys.exit(1 if FAILS else 0)

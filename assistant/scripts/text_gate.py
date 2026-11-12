@@ -19,6 +19,8 @@ Family is never a wedding party, even when a source above lists them (2026-10-10
 CRM contact, so her texts were carded): the owners (assistant/agent/people.json, and any
 CRM contact on an owner's email) and every phone in Wiki/People/Family and Friends.md are
 taken out of the wedding set, and their texts are never ticketed on any phone or lane (2026-10-11).
+A group text whose known members are all family / friends counts the same for every member
+(personal_groups, 2026-10-16: the groomsmen chat).
 Since 2026-10-11 the wedding-only rule covers owner's iPhone too and any lane a text arrives
 in: an unmatched number is logged only, never carded, unless an owner asks in chat.
 
@@ -114,6 +116,38 @@ def owner_numbers() -> set:
     return out
 
 
+def _owners() -> list:
+    """(first name, emails) of every owner in assistant/agent/people.json (staff are not owners)."""
+    out = []
+    try:
+        people = load_json(VAULT / "assistant" / "agent" / "people.json", {}) or {}
+        for u in (people.get("users") or {}).values():
+            if str(u.get("role") or "owner") == "owner":
+                first = (str(u.get("name") or "").split() or [""])[0].lower()
+                out.append((first, {str(e).strip().lower() for e in u.get("emails") or []}))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def owner_sender(payload: dict, numbers: set | None = None) -> bool:
+    """True when a text is from an owner by number, by email handle, or by the name the phone has
+    saved (2026-10-11: owner's texts came in as "owner Pennywhistle", her maiden name, and were carded).
+    A name alone counts only when the number is not a wedding party, so a client who shares an
+    owner's first name still comes through."""
+    p = payload or {}
+    if _key(p.get("from")) in owner_numbers():
+        return True
+    handle = str(p.get("from") or "").strip().lower()
+    first = (str(p.get("name") or "").split() or [""])[0].lower()
+    for name, emails in _owners():
+        if "@" in handle and handle in emails:
+            return True
+        if name and first == name and not is_business(p.get("from"), numbers):
+            return True
+    return False
+
+
 def business_numbers() -> set:
     """Last-10-digit keys of every wedding party's phone. Each source is read on its own so a
     missing or broken one never hides the others."""
@@ -182,6 +216,32 @@ def household_numbers() -> set:
     except OSError:
         pass
     out.discard("")
+    return out | personal_groups(out)
+
+
+_PERSONAL_KINDS, _BUSINESS_KINDS = ("owner", "family", "friend"), ("client", "lead", "vendor", "business")
+
+
+def personal_groups(home: set) -> set:
+    """Every member of a group text whose known members are all owners, family or friends (dream
+    2026-10-16: the groomsmen chat with Casey Juniper still made reply cards). A group (whois.py: threads
+    whose tapbacks quote each other) counts as personal when at least one member is in `home` or known
+    as family / a friend and none is a client, lead, vendor or business. Never raises."""
+    out = set()
+    try:
+        import whois
+        idx = whois.index()
+        seen = set()
+        for g in (idx._groups or {}).values():
+            if id(g) in seen:
+                continue
+            seen.add(id(g))
+            kinds = [("family" if _key(h) in home else str(idx.resolve(h).get("kind") or "")) for h in g.get("members") or []]
+            if any(k in _PERSONAL_KINDS for k in kinds) and not any(k in _BUSINESS_KINDS for k in kinds):
+                out.update(_key(h) for h in g.get("members") or [])
+    except Exception:  # noqa: BLE001  the plain household set still holds
+        pass
+    out.discard("")
     return out
 
 
@@ -213,7 +273,7 @@ def keep(items: list) -> list:
     """tickets.add_many's filter: drops every `imessage_in` item, on either phone and whatever lane
     it arrived in, whose number is not a wedding party (the owner 2026-10-11: "I only want you to draft
     for wedding clients stop handling personal text messages"). A text from an owner or a family /
-    friends number is always dropped. Matches on the owner's line are relaned `wedding`; on owner's
+    friends number is always dropped, and so is one whose saved name is an owner's (owner_sender). Matches on the owner's line are relaned `wedding`; on owner's
     they keep her lane. A text from one of our own team (not an owner) always comes through, laned
     `wedding` on either phone. Every other item passes untouched."""
     texts = [it for it in items if it.get("kind") == "imessage_in"]
@@ -226,6 +286,9 @@ def keep(items: list) -> list:
         if it in texts:
             p = it.get("payload") or {}
             k = _key(p.get("from"))
+            nums = business_numbers() if nums is None else nums
+            if owner_sender(p, nums):   # an owner, by number, email or saved name: never a card
+                continue
             if k and k not in owners and k not in home and team_member(p.get("from")):
                 out.append({**it, "lane": "wedding"})
                 continue
@@ -315,3 +378,39 @@ def supersede_older(card) -> list:
         return out
     except Exception:  # noqa: BLE001  never in the way of posting a card
         return []
+
+
+def retire_personal() -> list:
+    """Close every open personal-text REPLY card that the gate would no longer let through, so nobody
+    taps Skip on each one after triage is narrowed (dream 2026-10-11: owner's reply cards stayed open
+    after her texts stopped being carded). A card is closed only when the text could not come through
+    whatever it said: to an owner, to family / friends while the ruling-13 exception leaves them out, or
+    to anyone personal while the exception is off. A card an owner asked for (in chat or a thread), a
+    wedding party's, or one of our own team's is never touched. Returns the closed ids. Never raises."""
+    if not business_only():
+        return []
+    try:
+        import cards
+        pe, owners, home, nums, out = exception_cfg(), owner_numbers(), household_numbers(), None, []
+        for c in cards._live():
+            q = (c.get("questions") or [{}])[0] or {}
+            ex = q.get("exec") or {}
+            if c.get("status") != "open" or c.get("asked") or c.get("chat_thread") \
+                    or ex.get("kind") != "imessage_send" or not cards._is_reply(q):
+                continue
+            to = (ex.get("payload") or {}).get("to")
+            k = _key(to)
+            nums = business_numbers() if nums is None else nums
+            if not k or (k in nums and k not in home) or (k not in owners and team_member(to)):
+                continue
+            if k in owners or not pe["enabled"] or (k in home and not pe["include_family"]):
+                if cards.close_card(c["id"], why="personal texts no longer get reply cards"):
+                    out.append(c["id"])
+        return out
+    except Exception:  # noqa: BLE001  housekeeping: never in the way of the spine
+        return []
+
+
+if __name__ == "__main__":
+    if sys.argv[1:2] == ["retire"]:
+        print(f"PERSONAL_CLOSE closed={len(retire_personal())}")

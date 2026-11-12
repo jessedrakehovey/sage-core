@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core  # noqa: E402
 import gchat  # noqa: E402
+import clock  # noqa: E402  Google's time: a fast PC clock put the watermark past unread lines (2026-11-01)
 
 import google_api  # noqa: E402
 
@@ -64,11 +65,12 @@ def configured() -> bool:
     return TOKEN.exists() and gchat.configured()
 
 
-def _creds():
+def _creds(fresh: bool = False):
+    clock.install()
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     creds = Credentials.from_authorized_user_file(str(TOKEN), SCOPES)
-    if not creds.valid:
+    if fresh or not creds.valid:
         creds.refresh(Request())
         TOKEN.write_text(creds.to_json(), encoding="utf-8")
     return creds
@@ -77,14 +79,18 @@ def _creds():
 def _get(url: str, raw: bool = False, timeout: int = 20):
     """A read with one quick retry: Google's socket occasionally times out (under 1 % of
     polls on day one, each one freezing the loop for the full timeout)."""
-    last = None
+    last, fresh = None, False
     for attempt in range(2):
-        req = urllib.request.Request(url, headers={"Authorization": "Bearer " + _creds().token})
+        req = urllib.request.Request(url, headers={"Authorization": "Bearer " + _creds(fresh).token})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = resp.read()
             return data if raw else (json.loads(data.decode()) if data.strip() else {})
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as e:
+            if e.code == 401 and not fresh:         # stale token / stale clock: re-measure, refresh, once
+                clock.reset()
+                fresh = True
+                continue
             raise
         except Exception as e:  # noqa: BLE001
             last = e
@@ -171,7 +177,7 @@ def poll() -> list:
     for sp in spaces():
         # a space seen for the first time (just added to) is read NEW_SPACE_WINDOW_S back, so a line written right
         # after the add is answered even when the list refreshed late (2026-10-27)
-        since = wm.get(sp["name"]) or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - NEW_SPACE_WINDOW_S))
+        since = wm.get(sp["name"]) or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(clock.now() - NEW_SPACE_WINDOW_S))
         q = urllib.parse.urlencode({"pageSize": "50", "orderBy": "createTime asc", "filter": f'createTime > "{since}"'})
         try:
             r = _get(f"{CHAT}/{sp['name']}/messages?{q}")
@@ -212,16 +218,37 @@ def download(att: dict, stamp: str = "") -> Path | None:
 
 
 def transcribe(path: Path, timeout: int = 900) -> str:
-    """Local faster-whisper through scripts/transcribe.py. '' on failure."""
+    """Local faster-whisper through scripts/transcribe.py. '' on failure. A failed run is tried once more
+    offline (the cached model, no hub check), since one hiccup lost the owner's voice note (2026-11-07)."""
     if not WHISPER_PY.exists():
         return ""
-    try:
-        subprocess.run([str(WHISPER_PY), str(core.VAULT / "scripts" / "transcribe.py"), str(path), "--out-dir", str(path.parent)],
-                       capture_output=True, text=True, timeout=timeout, cwd=str(core.VAULT), creationflags=core.NO_WINDOW)
-        txt = path.with_suffix(".txt")
-        return txt.read_text(encoding="utf-8", errors="replace").strip() if txt.exists() else ""
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
+    txt = path.with_suffix(".txt")
+    for offline in (False, True):
+        env = dict(os.environ, HF_HUB_OFFLINE="1") if offline else None
+        try:
+            r = subprocess.run([str(WHISPER_PY), str(core.VAULT / "scripts" / "transcribe.py"), str(path), "--out-dir", str(path.parent)],
+                               capture_output=True, text=True, timeout=timeout, cwd=str(core.VAULT), env=env,
+                               creationflags=core.NO_WINDOW)
+            if txt.exists() and txt.read_text(encoding="utf-8", errors="replace").strip():
+                return txt.read_text(encoding="utf-8", errors="replace").strip()
+            print(f"space_reader: transcription of {path.name} failed{' (offline retry)' if offline else ''}: "
+                  f"{(r.stderr or r.stdout or '').strip()[-300:]}", file=sys.stderr)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            print(f"space_reader: transcription of {path.name} failed: {type(e).__name__}", file=sys.stderr)
+    return ""
+
+
+_FAILED_VOICE = re.compile(r"\[voice note from (?P<who>[^\]]*?) saved at (?P<path>[^\]]+?); transcription failed\]")
+
+
+def retry_failed_voice(text: str) -> str:
+    """A voice-note line whose transcription failed is transcribed again whenever it reaches the brain once
+    more (a capability replay, a held re-run), so the ask is heard instead of apologised for (2026-11-07)."""
+    def sub(m: re.Match) -> str:
+        p = Path(m.group("path").strip())
+        tr = transcribe(p) if p.exists() else ""
+        return f'[voice note from {m.group("who")}, transcribed on this machine: "{tr}"]' if tr else m.group(0)
+    return _FAILED_VOICE.sub(sub, text or "")
 
 
 def describe_attachments(atts: list, who: str, stamp: str = "") -> list:

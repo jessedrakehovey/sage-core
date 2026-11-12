@@ -83,6 +83,18 @@
    "expect": "SWEEP"
   },
   {
+   "name": "personal-text-close",
+   "cmd": [
+    "python",
+    "assistant/scripts/text_gate.py",
+    "retire"
+   ],
+   "every_min": 60,
+   "timeout_s": 60,
+   "_what": "close open personal-text reply cards the text gate no longer lets through (to an owner; family / any personal number when the ruling-13 exception leaves them out), so nobody taps Skip on each; owner-asked cards stay",
+   "expect": "PERSONAL_CLOSE"
+  },
+  {
    "name": "reflex",
    "cmd": [
     "python",
@@ -178,6 +190,17 @@
    "timeout_s": 1000,
    "_what": "the doer (assistant/doer): if an agent_run ticket is waiting (Sage's `do`), run ONE browser task in a headless model turn (sonnet) on the shared signed-in profile; irreversible steps stop at a checkpoint card. Sage wakes this at once when it queues a task; the spine is the backstop. Zero tokens when nothing waits",
    "group": "long"
+  },
+  {
+   "name": "shots-sweep",
+   "cmd": [
+    "python",
+    "assistant/scripts/shots.py",
+    "sweep"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "delete every screenshot the live job card hosted in the shared drive past its lifetime (scripts/shots.py, config shots.ttl_s; 2026-11-03). Zero-LLM; exits at once when hosting is off or no shared drive exists"
   },
   {
    "name": "learn-tick",
@@ -527,7 +550,18 @@
     23
    ],
    "timeout_s": 180,
-   "_what": "READ-ONLY bank feed for Relay: Plaid /transactions/sync (cursor) + /accounts/balance/get -> the same data/money/ledger.json; ~4 pulls a day (feeds[plaid].max_pulls_per_day caps it). NOT_CONFIGURED / NOT_LINKED until the owner enters the keys and links Relay from /setup"
+   "_what": "READ-ONLY bank feed for Relay: Plaid /transactions/sync (cursor) + /accounts/balance/get -> the same data/money/ledger.json; ~4 pulls a day (feeds[plaid].max_pulls_per_day caps it). NOT_CONFIGURED / NOT_LINKED until the owner enters the keys and links Relay in Google Chat (say 'set up Plaid')"
+  },
+  {
+   "name": "money-plaid-hosted",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/plaid_wizard.py",
+    "hosted-check"
+   ],
+   "every_min": 10,
+   "timeout_s": 120,
+   "_what": "a bank signed in on Plaid's own page from a Chat button (chat_forms.py, 2026-11-01): reads the finished session back (/link/token/get), stores the read-only access token and says in chat what it sees. The watcher thread does this within seconds; this catches a sign-in finished after the watcher's half hour or across a restart. Does nothing when no sign-in is pending."
   },
   {
    "name": "money-categorize",
@@ -583,6 +617,34 @@
    ],
    "timeout_s": 120,
    "_what": "the 1st-of-month money readback (income, spend by bucket, business profit vs last month, balances, where the next quarterly stands) to the owners' shared space via agent/bridge.post; gated inside to money.json -> monthly.day/after, once per month"
+  },
+  {
+   "name": "money-budget",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/budget.py"
+   ],
+   "every_min": 60,
+   "window": [
+    7,
+    22
+   ],
+   "timeout_s": 120,
+   "_what": "the envelope budget (give every dollar a job): harvests the owner's taps and typed words on the fund cards (and applies the moves typed on the weekly card), posts ONE 'fund the envelopes' card per side on money.json -> budget.fund_day; Mission Control /money. An envelope is a number in data/money/budget.json; nothing moves money at a bank"
+  },
+  {
+   "name": "money-reconcile",
+   "cmd": [
+    "python",
+    "assistant/scripts/money/reconcile.py"
+   ],
+   "every_min": 60,
+   "window": [
+    8,
+    21
+   ],
+   "timeout_s": 120,
+   "_what": "the weekly reconciliation (money.json -> reconcile.day/after, once per ISO week, held for the Monday digest): every spending account and card's bank balance vs the ledger since the last baseline (names duplicates, stuck pendings, the one row equal to the difference), overspent envelopes with what can cover them, the week's unplaced rows, age of money; 'Reconciled' re-baselines on the bank"
   },
   {
    "name": "tracking-chains",
@@ -716,6 +778,22 @@
    "timeout_s": 1800,
    "expect": "CORE_RELEASE",
    "_what": "once a week: when the sage-core checkout is ahead of its public remote, every privacy gate (core_sync audit / people / history) and the template's tests run, and ONE card 'Publish the template update' is posted (held for the Monday digest); the tap runs jobs.json core_publish, which checks everything again before it pushes and releases. A failed gate is a Mission Control note, never a card; zero LLM (2026-10-30)"
+  },
+  {
+   "name": "shoot-day",
+   "cmd": [
+    "python",
+    "apps/shoot-day/shoot_day.py",
+    "tick"
+   ],
+   "every_min": 10,
+   "timeout_s": 240,
+   "window": [
+    5,
+    23.5
+   ],
+   "expect": "SHOOT_DAY",
+   "_what": "the shoot-day app in the OS (apps/shoot-day/shoot_day.py, 2026-11-01): two days out builds the page + places the ShareGrid gear hold through the doer; the day before says what to pack and where the app is; on the day starts the day-of agent (agent_bridge.py) detached and keeps it up; the day after stops it and says which cards still hold footage"
   }
  ]
 }

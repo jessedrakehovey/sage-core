@@ -8,4 +8,7 @@ google-auth>=2.30
 google-auth-oauthlib>=1.2
 requests>=2.32
 cryptography>=42
+tzdata>=2024.1   # Windows ships no zone database; zoneinfo needs this (the shoot-day spine job crashed without it, 2026-11-06)
 # Optional extra: assistant/requirements-semantic.txt (fastembed + numpy for scripts/semantic.py, the local semantic search).
+trafilatura>=1.12   # optional: cleaner page text for the agent's web_read (websearch.py works without it)
+ddgs>=9   # optional: one more free search backend for web_search

@@ -86,7 +86,8 @@ check("scrub rewrites every record holding the token", n == 2 and token not in t
 check("scrub of a short value is refused", connect.scrub("abc") == 0)
 
 hint = connect.chat_hint()
-check("the CONNECTIONS hint names the chat-settable connection", "Chat setup available" in hint and "simplefin" in hint, hint)
+check("the CONNECTIONS hint names the Chat-form connections, never Mission Control as the place to type",
+      "Chat forms" in hint and "bank-simplefin" in hint and "never Mission Control" in hint, hint)
 
 # the morning brief's CONNECTIONS sentence (plan 2026-10-18 section 2): what is NOT connected + how to fix it, config-driven
 status = {"mail-personal": {"state": "not_configured"}, "calendar-personal": {"state": "not_configured"}, "google-owner6": {"state": "not_configured"},
@@ -98,9 +99,10 @@ check("names every watched connection that is not working, in config order, neve
       [n for n in ("your personal Gmail (owner4@example.invalid)", "your personal calendar", "owner6's Google account", "the Relay bank feed (Plaid)", "the NEXT Insurance login") if n in line]
       == ["your personal Gmail (owner4@example.invalid)", "your personal calendar", "owner6's Google account", "the Relay bank feed (Plaid)", "the NEXT Insurance login"]
       and "owner3@example.invalid" not in line and "acme-crm" not in line, line)
-check("each one carries its fix: the Setup-page button or the chat phrase",
-      "Setup page: Enter app password" in line and "Setup page: Enter calendar link" in line and "Setup page: Run setup (she signs in)" in line
-      and 'say "set up plaid" here' in line and "Setup page: Sign in" in line, line)
+check("each one carries its fix: a Chat form for anything typed in (never a Mission Control box), else the button or the chat phrase",
+      "Setup page: Enter app password" not in line and "Setup page: Enter calendar link" not in line
+      and line.count("ask me in Chat and its form comes up") >= 2 and "say 'set it up' in chat and its card comes up (she signs in)" in line
+      and 'say "set up plaid" here' in line and "Setup page" not in line, line)
 check("dead vs never set up are worded apart", "the Relay bank feed (Plaid) (stopped working" in line and "the NEXT Insurance login (not connected yet" in line, line)
 check("plain names come from the registry's brief_name, not the technical name", "Mail: owner1" not in line and "Calendar (read)" not in line, line)
 check("all working -> '' (the brief omits the line)", connect.brief_line({k: {"state": "live"} for k in watch}, watch) == "")

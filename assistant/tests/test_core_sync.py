@@ -271,6 +271,46 @@ r = subprocess.run([sys.executable, str(V / "assistant" / "core_sync.py"), "--va
 check("history fails on a name one commit added even though HEAD no longer has it", r.returncode == 1 and "Pat Quinn" in r.stdout
       and "Pat" not in (core_text("assistant/LEAK.md") or ""), r.stdout[-400:])
 
+# ---------------------------------------------------------------- 12. a record "name" that is an ordinary word is not a person
+(V / "assistant" / "data").mkdir(exist_ok=True)
+(V / "assistant" / "data" / "contacts.json").write_text(json.dumps([{"name": "Ewan Quinlivan"}, {"name": "Code File"}, {"name": "Rowan Owner"}, {"name": "Lena Marchetti"}]), encoding="utf-8")
+cs._PEOPLE = None
+cs._COMMON = None
+pp = cs.vault_people(V, {"people_sources": ["assistant/data/contacts.json"]})
+check("surnames from the records: real ones kept, ordinary words of the engine's own text (owner, file) dropped",
+      {"Quinlivan", "Marchetti"} <= pp["surnames"] and not ({"Owner", "File"} & pp["surnames"]), sorted(pp["surnames"]))
+check("a two-word record whose first or last word is an ordinary word is a merchant or a phrase, not a person",
+      "Ewan Quinlivan" in pp["full"] and "Lena Marchetti" in pp["full"] and "Code File" not in pp["full"] and "Rowan Owner" not in pp["full"], sorted(pp["full"]))
+check("the common words come from the engine text, at least two files each", {"owner", "code", "file"} <= cs.common_words(V, {}) and not ({"marchetti", "quinlivan"} & cs.common_words(V, {})))
+
+# ---------------------------------------------------------------- 13. a line that only changed its line ending is not an addition
+ALPHA = "assistant/scripts/alpha.py"
+cfg = json.loads((V / "assistant" / "core_sync.json").read_text(encoding="utf-8"))
+cfg["niche_policy"] = "hold"
+w("assistant/core_sync.json", json.dumps(cfg, indent=1))
+raw = (V / ALPHA).read_bytes()
+check("the fixture: alpha carries an older niche line that already shipped", b'KIND = "sourdough"' in raw and ALPHA not in state()["holds"])
+flipped = raw.replace(b"\r\n", b"\n") if b"\r\n" in raw else raw.replace(b"\n", b"\r\n")
+(V / ALPHA).write_bytes(flipped)
+c13 = commit("alpha: line endings only")
+rc, out = sync()
+check("a commit that only flips a file's line endings adds nothing: the older niche line is not a hold",
+      rc == 0 and "held=0" in out and ALPHA not in state()["holds"], out[-300:])
+s13 = state()
+s13["holds"][ALPHA] = {"since": c13, "lines": {'KIND = "sourdough"': {"why": "niche: niche sourdough", "line": 1}}, "subject": "alpha: line endings only", "noted": True, "build": ""}
+(DATA / "core_sync_state.json").write_text(json.dumps(s13), encoding="utf-8")
+rc, out = sync()
+check("a hold whose every line stood in the file before it began releases itself on the next run", rc == 0 and ALPHA not in state()["holds"], out[-300:])
+(V / ALPHA).write_bytes((V / ALPHA).read_bytes() + b'MORE = "croissant"\n')
+commit("alpha: a second niche constant")
+rc, out = sync()
+h13 = state()["holds"].get(ALPHA) or {}
+check("a line that IS new is still held, and only that line", "held=1" in out and list(h13.get("lines") or {}) == ['MORE = "croissant"'], out[-200:] + json.dumps(h13)[:300])
+rc, out = sync()
+check("and it stays held on the next run (it was not there before the hold began)", ALPHA in state()["holds"] and "MORE" not in (core_text(ALPHA) or ""), out[-200:])
+check("_added_lines: a moved or re-indented line is not counted, a second copy of it is",
+      cs.norm("  a   b ") == "a b" and hasattr(cs, "settle_holds"))
+
 print()
 print(f"{'ALL OK' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}  ({TMP})")
 sys.exit(1 if FAILS else 0)

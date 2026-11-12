@@ -1119,7 +1119,7 @@ def directory(days: int = 30, limit: int = 45) -> str:
         lines.append(f"- {len(autos)} automated/business senders (codes, promos, campaigns; never a reply): " + ", ".join(names[:14]) + ("…" if len(names) > 14 else ""))
     if idx.book_loaded is False:
         lines.append("- (no iPhone contacts have been imported yet: 'saved' names come from the texts, memory and the records; "
-                     "the owners can upload the phone's contacts on Mission Control /contacts)")
+                     "the owners can share the phone's contacts file (.vcf) in chat and it is imported)")
     return "\n".join(lines)
 
 

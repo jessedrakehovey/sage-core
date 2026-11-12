@@ -187,5 +187,11 @@ check("classify: an automated business-lane sender is a notification, not a vend
       comms_state.classify("concierge@crm.example.com", _biz, {}, {}) == ("notification", "")
       and comms_state.classify("drew@planner.example.com", "", {}, {}) == ("personal", ""))
 
+# clock skew (port from the sister agent, 2026-11-03): a last_wake stamped in the future after the PC clock
+# was moved back must not hold every wake until the clock catches up
+check("skew: a future last_wake counts as long ago", comms_probe._since(time.time() + 3600) == float("inf"))
+check("skew: a recent last_wake still gates", 0 <= comms_probe._since(time.time() - 30) < 60)
+check("skew: a missing or junk stamp never gates", comms_probe._since(None) > 1e9 and comms_probe._since("x") == float("inf"))
+
 print(f"\n{'ALL OK' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}  ({len(FAILS)} failures)")
 sys.exit(1 if FAILS else 0)

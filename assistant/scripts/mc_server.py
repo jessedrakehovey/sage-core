@@ -26,7 +26,7 @@ from the CLI: answer / undo a card, and drop a request into the operator queue.
 
   The owners' iPhones (phone_bridge.py; every call needs the token, header X-example-Token or ?token=;
   account = owner-iphone (default) or the owner-iphone):
-  POST /api/phone/inbound     {from, text, name?, received?, account?}  an incoming text -> ticket
+  POST /api/phone/inbound     {from, text, name?, received?, account?, participants?, chat_id?, chat_name?}  an incoming text -> ticket
   GET  /api/phone/outbox?account=<a>  approved texts for THAT phone to send (each handed over ONCE)
   POST /api/phone/ack         {id}  the phone sent it
 
@@ -113,7 +113,7 @@ def _build_page(force=False):
             try:
                 import dashboard
                 dashboard.build()
-                _page["html"] = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("<body>", "<body>" + NAV_CHAT, 1)
+                _page["html"] = (ROOT / "web" / "index.html").read_text(encoding="utf-8").replace("<body>", "<body>" + ("" if mc_read_only() else NAV_CHAT), 1)
             except Exception as e:
                 _log(f"page build failed: {type(e).__name__}: {e}")
                 try:
@@ -126,6 +126,70 @@ def _build_page(force=False):
 
 
 MAX_UPLOAD = 30 * 1024 * 1024
+
+# ---------------------------------------------------------------- the organization's own pages (2026-11-01)
+# config.json -> pages: {"modules": {"<name>": {"file": "<path from the org root>", "page": "<fn -> html>", "api": "<fn -> dict>",
+# "nav": "<link text>"}}, "static": {"<mount>": "<folder from the org root>"}}. /<name> renders the module's page function,
+# /api/<name> its api function as JSON; /<mount>/<path> serves that file from <folder> (index.html for a folder).
+# The engine carries no page of any organization's own: with no `pages` key nothing here answers.
+_SAFE_SEG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}")
+_STATIC_TYPES = {".html": "text/html", ".png": "image/png", ".webmanifest": "application/manifest+json", ".json": "application/json",
+                 ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".css": "text/css", ".js": "text/javascript", ".ico": "image/x-icon"}
+_PAGE_MODULES: dict = {}
+
+
+def pages_cfg() -> dict:
+    cfg = (load_json(ROOT / "config.json", {}) or {}).get("pages") or {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _page_module(name: str, spec: dict):
+    import importlib.util
+    f = ROOT.parent / str(spec.get("file") or "")
+    key = str(f)
+    mod = _PAGE_MODULES.get(key)
+    if mod is None or getattr(mod, "__mtime__", 0) != f.stat().st_mtime:
+        s = importlib.util.spec_from_file_location(f"page_{re.sub(r'[^a-z0-9]', '_', name.lower())}", str(f))
+        mod = importlib.util.module_from_spec(s)
+        s.loader.exec_module(mod)
+        mod.__mtime__ = f.stat().st_mtime
+        _PAGE_MODULES[key] = mod
+    return mod
+
+
+def _extra_page(p: str):
+    """-> (code, body, ctype) for a configured page or static file, else None."""
+    cfg = pages_cfg()
+    mods, static = cfg.get("modules") or {}, cfg.get("static") or {}
+    seg = [x for x in p.split("/") if x]
+    if not seg:
+        return None
+    name, api = (seg[0], False) if len(seg) == 1 else ((seg[1], True) if len(seg) == 2 and seg[0] == "api" else ("", False))
+    spec = mods.get(name) if name else None
+    if isinstance(spec, dict) and spec.get("file"):
+        try:
+            mod = _page_module(name, spec)
+            if api:
+                fn = getattr(mod, str(spec.get("api") or "status"))
+                return 200, json.dumps(fn(), ensure_ascii=False, default=str), "application/json"
+            fn = getattr(mod, str(spec.get("page") or "page"))
+            return 200, fn(), "text/html"
+        except Exception as e:  # noqa: BLE001
+            _log(f"page {name} failed: {type(e).__name__}: {e}")
+            return 500, f"<pre>{name} page failed: {type(e).__name__}: {e}</pre>", "text/html"
+    if seg[0] in static and len(seg) <= 8:
+        rest = seg[1:]
+        if any(not _SAFE_SEG.fullmatch(x) or x.startswith(".") for x in rest):
+            return 404, '{"error":"not found"}', "application/json"
+        f = ROOT.parent / str(static[seg[0]])
+        for x in rest:
+            f = f / x
+        if f.is_dir() or not rest or p.endswith("/"):
+            f = f / "index.html"
+        if not f.is_file():
+            return 404, '{"error":"not found"}', "application/json"
+        return 200, f.read_bytes(), _STATIC_TYPES.get(f.suffix.lower(), "application/octet-stream")
+    return None
 
 
 def _parse_multipart(body: bytes, boundary: bytes):
@@ -147,6 +211,64 @@ def _parse_multipart(body: bytes, boundary: bytes):
         elif name:
             fields[name.group(1)] = data.decode("utf-8", "replace")[:4000]
     return fields, files
+
+
+_RUN_TOLD: set = set()   # (ticket, why) already said in the card's thread by this server
+
+
+def _hm(ts) -> str:
+    try:
+        return time.strftime("%I:%M %p", time.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S")).lstrip("0")
+    except ValueError:
+        return ""
+
+
+def phone_run_why(ticket: str = "", items=None) -> tuple[str, str]:
+    """Why a tap on "Send now from phone" would send nothing for this text, as (reason, plain line); ("", "") when
+    the shortcut will pick it up. The shortcut only takes texts still waiting, and never in quiet hours: the owner tapped
+    at 6:31 AM and on a text the phone had already picked up (2026-11-06/07), and the page said nothing."""
+    items = phone_bridge.load_json(phone_bridge.OUTBOX, {"items": []})["items"] if items is None else items
+    it = next((i for i in items if ticket and i.get("ticket") == ticket), None)
+    st = str((it or {}).get("status") or "")
+    if st == "sent":
+        return "sent", f"That text is confirmed sent{' at ' + _hm(it.get('ts_sent')) if it.get('ts_sent') else ''}."
+    if st == "handed":
+        return "handed", (f"Your phone already picked that text up at {_hm(it.get('ts_handed'))}, so the shortcut won't take it again. "
+                          "If it never went out, say \"send it again\" under the card.")
+    if st in ("expired", "recalled"):
+        return st, "That text was not sent and is no longer waiting. Say \"send it again\" under the card to send it."
+    if phone_bridge.held_by_quiet(it):
+        return "quiet", (f"It's quiet hours ({es.QUIET_START - 12} PM to {es.QUIET_END} AM), so the phone isn't given texts now. "
+                         f"Tap the button again after {es.QUIET_END} AM.")
+    return "", ""
+
+
+def phone_run_page(ticket: str = "") -> str:
+    """The page behind "Send now from phone": a big tap target that runs the phone's send shortcut, and, when the
+    shortcut would send nothing for this card's text, why in one plain line (also said once in the card's thread)."""
+    import html as _html
+    from urllib.parse import quote
+    name = str(orgcfg.get("phone_send_shortcut", "") or "Send Texts")
+    url = "shortcuts://run-shortcut?name=" + quote(name)
+    n = _html.escape(name)
+    why, line = ("", "")
+    try:
+        why, line = phone_run_why(ticket)
+        if why and why != "sent" and (ticket, why) not in _RUN_TOLD:
+            _RUN_TOLD.add((ticket, why))
+            phone_bridge._say({"ticket": ticket}, line)
+    except Exception as e:  # noqa: BLE001  (the page always loads)
+        _log(f"phone run page state failed: {e}")
+    note = (f"<p id='why' style='padding:12px;border-radius:12px;background:#3F503A'>{_html.escape(line)}</p>" if line else "")
+    return ("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Send now from phone</title></head><body style='font-family:sans-serif;background:#050B07;color:#FBFFFA;padding:24px'>"
+            + note +
+            f"<p><a id='go' href='{_html.escape(url)}' style='display:block;padding:18px;border-radius:12px;background:#4A5C43;"
+            f"color:#FBFFFA;text-align:center;font-size:20px;text-decoration:none'>Tap to send the waiting texts</a></p>"
+            f"<p>This runs the “{n}” shortcut on this iPhone, which picks up the approved texts and sends them.</p>"
+            f"<p>If nothing happens: open this page in Safari (the share button, then Open in Safari), or open the Shortcuts app "
+            f"and tap “{n}”. It only works on the iPhone that has that shortcut.</p>"
+            "</body></html>")
 
 
 class H(BaseHTTPRequestHandler):
@@ -253,6 +375,16 @@ class H(BaseHTTPRequestHandler):
         of the owner / owner tapped a card (either may approve, the owner 2026-10-01)."""
         return (self.headers.get("Tailscale-User-Login") or "local").strip()[:80]
 
+    def _client_gone(self) -> bool:
+        """True when the caller has closed its side of the connection (a readable socket that reads empty)."""
+        try:
+            import select
+            import socket
+            r, _, _ = select.select([self.connection], [], [], 0)
+            return bool(r) and self.connection.recv(1, socket.MSG_PEEK) == b""
+        except Exception:  # noqa: BLE001
+            return True
+
     def _phone_ok(self, body=None):
         from urllib.parse import parse_qs, urlparse
         tok = self.headers.get(phone_bridge.TOKEN_HEADER) or (parse_qs(urlparse(self.path).query).get("token") or [""])[0]             or str((body or {}).get("token") or "")
@@ -270,31 +402,46 @@ class H(BaseHTTPRequestHandler):
                 _log(f"phone outbox 403: header_present={tok is not None} len={len(tok or '')} "
                      f"stripped_len={len((tok or '').strip())} other_token_headers={[h for h in self.headers.keys() if 'token' in h.lower()]}")
                 return self._send(403, '{"error":"bad token"}')
+            from urllib.parse import parse_qs, urlparse
+            acct = (parse_qs(urlparse(self.path).query).get("account") or [phone_bridge.DEFAULT_ACCOUNT])[0]
+            try:   # a text approved seconds ago is still in its undo window: hold this answer until it is out
+                #    (phone_bridge.wait_for_release; the phone now asks when its owner leaves the chat app)
+                waited = phone_bridge.wait_for_release(acct)
+                if waited:
+                    _log(f"phone outbox ({acct}) held {waited:.0f}s for a text in its undo window")
+                    if self._client_gone():
+                        # the phone gave up while we waited: hand nothing over (an item marked handed to a closed
+                        # connection would never be sent, and is never offered twice); the next fetch takes it
+                        _log(f"phone outbox ({acct}): the phone hung up during the wait; nothing handed")
+                        return
+            except Exception as e:
+                _log(f"phone fetch wait failed: {e}")
             try:   # release approved texts whose undo window has passed, then hand them over
                 import drain as _drain
                 _drain.drain(lane="phone", min_age_s=cards.UNDO_S + 5)
             except Exception as e:
                 _log(f"phone drain failed: {e}")
-            from urllib.parse import parse_qs, urlparse
-            acct = (parse_qs(urlparse(self.path).query).get("account") or [phone_bridge.DEFAULT_ACCOUNT])[0]
             items = phone_bridge.fetch_outbox(acct)
             if items:
                 _log(f"phone outbox ({acct}) handed {len(items)}: " + ",".join(i["id"] for i in items))
             resp = {"items": items, "count": len(items)}
-            if phone_bridge._quiet():
+            if phone_bridge._quiet() and not items:
                 resp["held"] = "quiet hours (21:00-07:00): nothing is sent now; a text still waiting in the morning comes back as a card instead of going out late"
             return self._send(200, json.dumps(resp, ensure_ascii=False))
         if p == "/phone/run":
-            # the "Send now from phone" button (Chat card / page): bounce to the Shortcuts URL scheme,
-            # which runs the phone's own fetch-and-send shortcut. Nothing here sends or changes state.
-            self.send_response(302)
-            self.send_header("Location", "shortcuts://run-shortcut?name=example%20Send%20Texts")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return None
+            # the "Send now from phone" button (Chat card / page). A bare 302 to shortcuts:// did nothing
+            # (2026-11-06): Chat's in-app browser drops a redirect to a custom scheme. So this is a page
+            # with a link the owner taps (a tap is allowed to open Shortcuts) and, if even that fails,
+            # the plain way to do it by hand. Nothing here sends or changes state; ?t=<ticket> (the card's text) adds
+            # why a tap would send nothing for it (quiet hours, already picked up), said once in the card's thread too.
+            from urllib.parse import parse_qs, urlparse
+            t = (parse_qs(urlparse(self.path).query).get("t") or [""])[0][:80]
+            return self._send(200, phone_run_page(t), "text/html")
         if p in ("/", "/index.html"):
             return self._send(200, _build_page(), "text/html")
         if p in ("/chat", "/chat/"):
+            if mc_read_only():
+                return self._send(200, _chat_only_page("Talk to the agent in Google Chat", "This page no longer takes messages: everything you type goes through Google Chat."), "text/html")
             return self._send(200, chat_page.page(chat_page.who_for(self._who())), "text/html")
         if p == "/setup/plaid" or p.startswith("/api/setup/plaid/"):
             # connect Relay through Plaid from the phone (scripts/money/plaid_wizard.py): keys to Credential
@@ -343,11 +490,16 @@ class H(BaseHTTPRequestHandler):
         if p in ("/desk", "/desk/"):
             return self._send(200, _build_desk(), "text/html")
         if p in ("/contacts", "/contacts/"):
+            if mc_read_only():
+                return self._send(200, _chat_only_page("Contacts come in through Google Chat", "Share your contacts export (.vcf) with the agent in Google Chat; it imports them into your phone book there."), "text/html")
             import contacts
             return self._send(200, _contacts_page(contacts.load(), self._who()), "text/html")
         if p in ("/comms", "/comms/"):
             import comms_page
             return self._send(200, comms_page.page(), "text/html")
+        extra = _extra_page(p)                # the organization's own pages and static mounts (config.json -> pages)
+        if extra is not None:
+            return self._send(*extra)
         if p == "/api/comms":
             return self._send(200, json.dumps(load_json(DATA / "comms_state.json", {}), ensure_ascii=False))
         if p.startswith("/api/doer/shot/"):
@@ -381,6 +533,10 @@ class H(BaseHTTPRequestHandler):
 
     def _post(self):
         p = self.path.split("?")[0]
+        if p in ENTRY_POSTS and mc_read_only():
+            # nothing is typed into Mission Control (config.json -> mission_control.read_only, the owner 2026-11-01)
+            _log(f"refused {p} from {self._who()}: Mission Control is read-only, data entry is in Google Chat")
+            return self._send(410, json.dumps({"ok": False, "reason": CHAT_ONLY}))
         if p == "/api/contacts/import":
             return self._contacts_import()
         if p == "/api/agent/upload":
@@ -411,12 +567,16 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/phone/inbound":
                 # which fields the phone actually filled (lengths only, never the text): the
                 # Shortcut's token wiring is the usual fault when this returns 400
-                _log("phone inbound fields: " + ", ".join(f"{k}={len(str(body.get(k) or ''))}" for k in ("from", "sender", "name", "text", "content", "account")))
+                _log("phone inbound fields: " + ", ".join(f"{k}={len(str(body.get(k) or ''))}" for k in ("from", "sender", "name", "text", "content", "account", "participants", "chat_id")))
                 if (DATA / "phone_debug_once").exists():          # one-shot raw dump while wiring a new phone; delete the marker to stop
                     _log("phone inbound RAW: " + json.dumps(body, ensure_ascii=False)[:400])
                 r = phone_bridge.inbound(body.get("from") or body.get("sender") or "", body.get("text") or body.get("content") or "",
                                          str(body.get("name") or ""), str(body.get("received") or ""),
-                                         account=str(body.get("account") or phone_bridge.DEFAULT_ACCOUNT))
+                                         account=str(body.get("account") or phone_bridge.DEFAULT_ACCOUNT),
+                                         # a group chat, when the Shortcut can say so (the Message trigger gives only sender + text today)
+                                         participants=body.get("participants") or body.get("recipients"),
+                                         chat_id=str(body.get("chat_id") or body.get("chat") or ""),
+                                         chat_name=str(body.get("chat_name") or ""))
                 try:   # a reply proves our unconfirmed text to them went out: mark it sent, close its card
                     import text_confirm
                     tc = text_confirm.run()
@@ -461,6 +621,8 @@ class H(BaseHTTPRequestHandler):
             qid, option = str(body.get("qid") or ""), str(body.get("option") or "")
             if not qid or not option:
                 return self._send(400, '{"ok":false,"reason":"qid and option required"}')
+            if mc_read_only() and (str(body.get("text") or "").strip() or str(body.get("revised") or "").strip()):
+                return self._send(410, json.dumps({"ok": False, "reason": CHAT_ONLY}))   # a tap is fine; typed words go through Chat
             r = cards.answer(qid, option, str(body.get("text") or ""), str(body.get("revised") or ""),
                              _int(body.get("q")), by="mc:" + self._who())
             _build_page(force=True)
@@ -486,6 +648,26 @@ class H(BaseHTTPRequestHandler):
                                        "summary": text[:600], "payload": {"text": text, "via": "mission-control"}}], "mc")
             return self._send(200, json.dumps({"ok": added > 0, "queued": added}))
         return self._send(404, '{"error":"not found"}')
+
+
+ENTRY_POSTS = ("/api/contacts/import", "/api/agent/upload", "/api/agent/say", "/api/ask")
+CHAT_ONLY = "Mission Control does not take typing any more: say it to the agent in Google Chat."
+
+
+def mc_read_only() -> bool:
+    try:
+        import alib
+        return alib.mc_read_only()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _chat_only_page(title: str, line: str) -> str:
+    from html import escape
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>{escape(title)}</title><style>body{{margin:0;background:#050B07;color:#FBFFFA;font:16px/1.5 Poppins,system-ui,sans-serif;padding:32px 16px}}'
+            f'main{{max-width:520px;margin:0 auto}}h1{{font:500 24px "Playfair Display",Georgia,serif}}a{{color:#9DB392}}</style></head><body><main>'
+            f'<h1>{escape(title)}</h1><p>{escape(line)}</p><p><a href="/">Back to Mission Control</a></p></main></body></html>')
 
 
 def _contacts_page(db, who):
@@ -573,7 +755,7 @@ def _respawn():
     import subprocess
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe")
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    flags = 0x08000000 | 0x00000200 if os.name == "nt" else 0          # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     try:
         subprocess.Popen([str(pyw if pyw.exists() else exe), str(Path(__file__).resolve())], cwd=str(HERE.parent.parent),
                          creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

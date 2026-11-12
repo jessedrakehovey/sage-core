@@ -479,6 +479,27 @@ def _allowed(cls: str) -> bool:
         return True
 
 
+def _job_reported(row: dict) -> bool:
+    """Did this browser job's own result line reach the owner? The agent's transcript holds a line of its own
+    (not a progress note) carrying the job's ticket id, written at or after the run was claimed. Never raises."""
+    try:
+        ref = str(row.get("ref") or "")
+        if ref.startswith("tk-"):                       # an approved step: the executor ticket names the job it resumed
+            import exec_store as es
+            ref = str(((es.fold().get(ref) or {}).get("payload") or {}).get("ticket") or "")
+        if not ref:
+            return False
+        sys.path.insert(0, str(HERE.parent / "agent"))
+        import core
+        since = str(row.get("created") or "")[:16].replace("T", " ")
+        me = str(core.profile().get("name", "Agent"))
+        return any(str(r.get("ref") or "") == ref and not r.get("note") and str(r.get("who") or "") == me
+                   and str(r.get("ts") or "") >= since[:13]
+                   for r in core.rows(core.TRANSCRIPT)[-600:])
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def ask_owner(row: dict, dry: bool = False, failed: bool = False) -> dict:
     """ONE card per unverified row: the system cannot read the record, so the owner's answer is the evidence.
     Every button is something the code does on the tap (It went -> verified; Send it again -> the original
@@ -487,6 +508,12 @@ def ask_owner(row: dict, dry: bool = False, failed: bool = False) -> dict:
     who = _who(row)
     if row.get("ask_card"):
         return {"posted": False, "reason": "already asked"}
+    if kind == "agent_run" and not failed and _job_reported(row):
+        # the job already told the owner how it ended, in the conversation it was asked in, caveat included ("I could
+        # not check this one"): a "Not confirmed" card an hour later asks about work they have already read about
+        # (2026-11-04: three of them, one for a fix that had been read back live)
+        set_state(row["id"], "abandoned", {}, "closed quietly: the job's own report already reached the owner", escalation="none")
+        return {"posted": False, "reason": "already reported"}
     if kind in ("task", "do", "imessage_send") and not failed:
         # a hand-off has its own voice (commitments.py, one receipt where it was asked) and a handed text is sent:
         # a second "Not confirmed: task" / "Did this text go?" card on top was noise (2026-10-24 19:10, 20:50, 07:04)

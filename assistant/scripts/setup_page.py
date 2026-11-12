@@ -43,7 +43,7 @@ main{padding:12px 16px 40px;max-width:720px;margin:0 auto}
 .add{margin-top:18px;color:var(--mute);font-size:13px}
 .add code{background:#111c14;padding:1px 5px;border-radius:5px}
 </style></head><body>
-<header><h1>Setup</h1><a href="/chat">Chat</a><a href="/">Cards</a></header>
+<header><h1>Setup</h1><a href="/">Cards</a></header>
 <main>
 <div class="intro" id="org"></div>
 <div class="filters" id="filters"></div>

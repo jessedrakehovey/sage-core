@@ -283,7 +283,7 @@ def reindex() -> None:
     stale). Skipped in tests (scoped state) and when the venv is missing."""
     if core.STATE != core.AGENT / "state" or os.environ.get("AGENT_NO_REINDEX"):
         return
-    flags = 0x00000008 | 0x00000200 | core.NO_WINDOW if os.name == "nt" else 0
+    flags = 0x00000200 | core.NO_WINDOW if os.name == "nt" else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     try:
         subprocess.Popen([sys.executable, "scripts/wiki_tool.py", "index"], cwd=str(core.VAULT), creationflags=flags,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

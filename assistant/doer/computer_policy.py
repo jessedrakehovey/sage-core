@@ -41,7 +41,15 @@ _PS = re.compile(r"(?:^|[\s;&|(])(?:powershell|pwsh)(?:\.exe)?\s", re.I)
 
 
 def _policy() -> dict:
-    return json.loads(POLICY_FILE.read_text(encoding="utf-8"))
+    pol = json.loads(POLICY_FILE.read_text(encoding="utf-8"))
+    # the pack's own write roots (config.json -> computer.write_roots, 2026-11-06): the engine's policy stays org-free,
+    # an organization adds the folders its own apps keep (never Raw, Memory, Schema or a secret path)
+    try:
+        extra = ((json.loads((ROOT / "config.json").read_text(encoding="utf-8")).get("computer") or {}).get("write_roots") or [])
+        pol["write_roots"] = list(pol.get("write_roots", [])) + [str(r) for r in extra if str(r).strip()]
+    except (OSError, ValueError, AttributeError):
+        pass
+    return pol
 
 
 def _rx(items) -> list:

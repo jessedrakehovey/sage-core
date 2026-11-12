@@ -164,6 +164,11 @@ def poll() -> list:
                         # the ambiguous middle: a small model reads the room (example's tier 2, 2026-10-08);
                         # on any failure the rule applies: an owner's line in the home space is for the agent
                         direct, why = addressed.decide(m["text"], person, addressed.history_block(m["space"]), bool(m["thread"]))
+                if m.get("thread") and person:
+                    try:    # a person's thread about a subject becomes the agent's thread for it (thread_keys, 2026-11-04)
+                        _gchat().adopt_thread(m["space"], m["thread"], m["text"])
+                    except Exception:  # noqa: BLE001
+                        pass
                 out.append({"channel": "gchat", "person": person, "text": m["text"], "space": m["space"],
                             "thread": m["thread"], "convo": m["space"], "raw_from": m["email"] or m["chat_user"],
                             "direct": direct, "why": why, "msg_name": m["msg_name"], "attachments": m["attachments"],
@@ -395,6 +400,7 @@ def card_for_thread(thread: str) -> dict | None:
     if not m:
         return None
     tid = m.group(1)
+    inside = []
     try:
         cards, _ = _cards()
         for p in sorted(cards.LIVE.glob("q*.json")):
@@ -402,10 +408,29 @@ def card_for_thread(thread: str) -> dict | None:
             for name in (c.get("chat") or {}).values():
                 mm = re.search(r"/messages/([^/.]+)", str(name))
                 if mm and mm.group(1) == tid:
-                    return c
+                    if card_started_thread(c, thread):
+                        return c
+                    inside.append(c)
+                    break
     except Exception as e:  # noqa: BLE001
         log(f"card_for_thread failed: {type(e).__name__}: {str(e)[:120]}")
-    return None
+    # no card started this thread: the newest card posted into it is the one a "send it" there means
+    return max(inside, key=lambda c: float(c.get("ts") or 0)) if inside else None
+
+
+def card_started_thread(card: dict | None, thread: str) -> bool:
+    """True when this card's Chat message is the thread's FIRST message (named .../messages/ID.ID, or a bare ID). A
+    card posted as a reply inside a thread is named .../messages/<thread id>.<its own id>: it sits in the thread, it
+    did not start it, and that thread (one per space per day, thread_keys.py) is not the card's own (2026-11-10)."""
+    m = re.search(r"/threads/([^/]+)$", str(thread or ""))
+    if not m or not card:
+        return False
+    tid = m.group(1)
+    for name in (card.get("chat") or {}).values():
+        mm = re.search(r"/messages/([^/]+)$", str(name))
+        if mm and mm.group(1) in (tid, f"{tid}.{tid}"):
+            return True
+    return False
 
 
 def card_context(card: dict) -> str:
@@ -474,6 +499,25 @@ def post(person_key: str, text: str, channel: str = "") -> None:
             core.note_thread_root(_thread_of(name), core.profile().get("name", "Agent"), text, channel or "post", space)
         except Exception as e:  # noqa: BLE001
             log(f"gchat post to {person_key} failed: {type(e).__name__}: {str(e)[:160]}")
+
+
+def post_space(space: str, text: str, channel: str = "routine") -> None:
+    """One top-level message into a team space (a schedule aimed there, 2026-11-02), through the voice gate;
+    gchat.post turns a name that opens it ("a team member, ...") into a real tag."""
+    core.append(OUTBOX, {"ts": core.stamp(), "to": "space", "text": text, "via": channel, "convo": space})
+    try:
+        import voice
+        text = voice.gate(text, channel, space)
+    except Exception as e:  # noqa: BLE001
+        log(f"voice gate failed: {type(e).__name__}: {str(e)[:120]}")
+    g = _gchat()
+    if not text or not g or not str(space).startswith("spaces/") or space == core.home_space():
+        return
+    try:
+        name = g.post(space, text)
+        core.note_thread_root(_thread_of(name), core.profile().get("name", "Agent"), text, channel, space)
+    except Exception as e:  # noqa: BLE001
+        log(f"gchat post to {space} failed: {type(e).__name__}: {str(e)[:160]}")
 
 
 def post_in(convo: str, thread: str, text: str) -> None:
@@ -643,6 +687,9 @@ def command(text: str, person: dict) -> str | None:
         return core.render_memory() or "Nothing in long-term memory yet."
     if cmd == "/schedules":
         return routines.render() or "No schedules."
+    if cmd == "/grants":
+        import grants_chat
+        return grants_chat.render()
     if cmd == "/changes":
         ch = core.changes_since(24 * 7)[-15:]
         return "\n".join(f"{c['id']} {c['ts'][5:]} {c['summary'][:110]}" for c in ch) or "No changes in the last week."
@@ -693,7 +740,14 @@ def command(text: str, person: dict) -> str | None:
         return org.render() + "\n\n" + org.status_text()
     if cmd == "/setup":
         import brain as _b
-        return (_b.connections_block() or "No connections registered yet.") + f"\n\nOne button for each, from your phone: {_mc_url()}/setup"
+        try:
+            sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+            import chat_forms
+            forms = ", ".join(s["name"] for s in chat_forms.rows())
+        except Exception:  # noqa: BLE001
+            forms = ""
+        return ((_b.connections_block() or "No connections registered yet.")
+                + (f"\n\nAnything that needs typing in ({forms}) comes as a form right here: ask me to set it up." if forms else ""))
     if cmd == "/health":
         return health_text()
     if cmd == "/library":
@@ -704,9 +758,9 @@ def command(text: str, person: dict) -> str | None:
         import connect
         if len(parts) == 2:
             rid = parts[1] if connect.row(parts[1]) else next((r["id"] for r in connect.chat_rows() if parts[1].lower() in r["id"]), "")
-            return connect.steps(rid) or "I don't have chat steps for that one; its button is on the Setup page."
+            return connect.steps(rid) or "I don't have chat steps for that one yet; tell me what you want connected and I'll bring its card here."
         rows_ = connect.chat_rows()
-        return ("I can set these up right here: " + "; ".join(f"{r.get('name')} (/connect {r['id'].split('-')[-1]})" for r in rows_)) if rows_ else "Nothing has chat steps yet; everything is on the Setup page."
+        return ("I can set these up right here: " + "; ".join(f"{r.get('name')} (/connect {r['id'].split('-')[-1]})" for r in rows_)) if rows_ else "Nothing has chat steps yet; tell me what to connect and I'll bring its card here."
     if cmd == "/help":
         return ("/rules  /memory  /schedules  /changes  /undo cN  /promises  /reflex  /projects  /open  /failed  /evidence <card>  /who <number or name>  "
                 "/switch <job> on|off|run  /digest now  /quiet until <time>  /signin <site>  /skills  /org  /setup  /health  /connect  /library. Anything else, just ask.")
@@ -789,12 +843,14 @@ def signin_text(site: str) -> str:
         row = next((r for r in rows if want in str(r.get("id") or "").lower() or want in str(r.get("name") or "").lower()
                     or want in str(r.get("url") or "").lower()), None)
         if not row:
-            return f"I don't have a sign-in row for \"{site}\". Tell me its site and I'll add it (org services), or use the Setup page: {_mc_url()}/setup"
-        r = setup_actions.run(str(row.get("id")), "signin", by="chat")
-        return (f"{row.get('name') or row.get('id')}: {r.get('message') or 'the browser is on the PC screen at the sign-in page.'} "
-                f"Sign in there; 'What the PC shows' on the Setup page ({_mc_url()}/setup) follows it, and the session is kept.")
+            return f"I don't have a sign-in for \"{site}\" yet. Tell me its web address and I'll add it, then sign in from my vault."
+        r = setup_actions.run_chat(str(row.get("id")), by="chat")     # chat-first: the vault signs in, never a window to go to
+        line = str(r.get("message") or "I'm signing in from my vault.")
+        if r.get("state") in ("needs_login", "failed") and r.get("site"):
+            line += f" Say 'save my {r['site']} login' and the form comes up here."
+        return line
     except Exception as e:  # noqa: BLE001
-        return f"I could not open that sign-in ({type(e).__name__}); its button is on the Setup page: {_mc_url()}/setup"
+        return f"I could not start that sign-in ({type(e).__name__}); ask me again in a minute."
 
 
 def _mc_url() -> str:
@@ -848,7 +904,7 @@ def health_text() -> str:
         import setup_actions
         bad = [r for r in setup_actions.rows() if r.get("state") in ("dead", "not_configured")]
         if bad:
-            L.append("Not connected: " + ", ".join(r["name"] for r in bad[:8]) + f". One button each at {_mc_url()}/setup")
+            L.append("Not connected: " + ", ".join(r["name"] for r in bad[:8]) + ". Ask me to set one up and its form comes here")
         else:
             L.append("Every connection I know of is live")
     except Exception:  # noqa: BLE001
@@ -883,7 +939,7 @@ def _import_contacts(atts: list, person: dict, stamp: str) -> tuple:
             import contacts
             path = space_reader.download(att, stamp)
             if not path:
-                lines.append("I could not download the contacts file; share it again or upload it on Mission Control /contacts.")
+                lines.append("I could not download the contacts file; share it here again and I'll retry.")
                 continue
             r = contacts.import_file(path, owner=person["key"], source="chat")
             if r.get("ok"):
@@ -894,7 +950,7 @@ def _import_contacts(atts: list, person: dict, stamp: str) -> tuple:
                 lines.append(f"That contacts file did not import: {r.get('reason')}.")
         except Exception as e:  # noqa: BLE001
             log(f"contacts import from chat failed: {type(e).__name__}: {str(e)[:160]}")
-            lines.append("The contacts import failed on my side; upload the file on Mission Control /contacts instead.")
+            lines.append("The contacts import failed on my side; share the file here again and I'll retry.")
         finally:
             try:
                 if path and Path(path).exists():
@@ -930,7 +986,7 @@ def _vault_offer(msg: dict | None, text: str, person: dict) -> str:
                 log(f"vault card not posted: {type(e).__name__}: {str(e)[:120]}")
         line = vault_chat.refusal_line(site, n) if secret else vault_chat.offer_line(ask)
         if not posted:
-            line += " (The Enter login button is on Mission Control's Setup page too.)"
+            line += " (Ask me in Google Chat and the Enter login button comes with the answer.)"   # data entry never on Mission Control (2026-11-01)
         return line
     except Exception as e:  # noqa: BLE001
         log(f"vault offer failed: {type(e).__name__}: {str(e)[:160]}")
@@ -954,13 +1010,29 @@ def _chat_setup(text: str, person: dict, msg: dict | None = None) -> str:
             n = connect.scrub(value)
             log(f"chat setup: {rid} claim done; scrubbed {n} file(s)")
             return out
+        # data entry happens in a Chat form, never on Mission Control (chat_forms.py, the owner 2026-11-01)
+        import chat_forms
+        fid = chat_forms.match(text)
+        if fid and core.can(person, "approve") and msg and msg.get("channel") == "gchat":
+            if chat_forms.post(fid, str(msg.get("space") or ""), str(msg.get("thread") or "")):
+                log(f"chat setup: posted the {fid} form for {person['key']}")
+                return chat_forms.offer_line(fid)
+            log(f"chat setup: the {fid} form could not be posted")
+            return "I couldn't put the form up just now. Ask me again in a minute and it will come with the answer."
         return connect.answer(text)
     except Exception as e:  # noqa: BLE001
         log(f"chat setup failed: {type(e).__name__}: {str(e)[:160]}")
     return ""
 
 
-_CODE_LINE = re.compile(r"^\s*(?:(?:the\s+|my\s+)?code(?:\s+is)?\s*[:\-]?\s*|it'?s\s+|here'?s\s+)?(\d[\d \-]{2,14}\d)\s*[.!]?\s*$", re.I)
+# the digits may come with the code named around them ("148198 for share grid code", "sharegrid code is 148198",
+# 2026-11-05); a trailing phrase must end in code / login / sign-in, so "2000 for the retainer" is never taken
+_CODE_WORD = r"(?:verification\s+|login\s+|sign[\s\-]?in\s+|one[\s\-]time\s+)?code"
+_CODE_LINE = re.compile(r"^\s*(?:(?:the\s+|my\s+)?(?:[a-z][\w\-]*\s+){0,3}" + _CODE_WORD
+                        + r"(?:\s+(?:is|for\s+(?:the\s+)?[a-z][\w\-]*(?:\s+[a-z][\w\-]*){0,2}(?:\s+is)?))?\s*[:\-]?\s*"
+                        r"|it'?s\s+|here'?s\s+(?:the\s+)?(?:code\s+)?)?(\d[\d \-]{2,14}\d)"
+                        r"(?:\s*,?\s+(?:is\s+)?(?:the\s+)?(?:for|from)\s+(?:the\s+|my\s+)?(?:[a-z][\w\-]*\s+){0,3}"
+                        r"(?:" + _CODE_WORD + r"|login|sign[\s\-]?in))?\s*[.!]?\s*$", re.I)
 
 
 def _code_for_card(text: str, person: dict) -> str:
@@ -1084,6 +1156,9 @@ def handle(msg: dict, pre_ack: str = "") -> None:
             return
         parts = (space_reader.describe_attachments(rest, person["name"], stamp) if rest else []) + vcf_lines
         text = "\n".join([text] + parts if text else parts)
+    if "; transcription failed]" in text:
+        # a voice note that failed to transcribe is tried again (a replay hands back only this line, 2026-11-07)
+        text = space_reader.retry_failed_voice(text)
     if not text:
         _drop_ack(str(msg.get("_ack") or pre_ack or ""))
         return
@@ -1118,13 +1193,13 @@ def handle(msg: dict, pre_ack: str = "") -> None:
         if len(_ambient_asks) >= AMBIENT_PER_HOUR:
             log(f"ambient budget spent ({AMBIENT_PER_HOUR}/h): skipped {person['key']} in {convo}")
             core.say(convo, person["name"], text, channel=msg["channel"], meta={"ambient": "skipped", "thread": thread})
-            followups.note_reply(person["key"], convo, thread)
+            followups.note_reply(person["key"], convo, thread, text)
             _drop_ack(pre_ack)
             return
         _ambient_asks.append(now)
     if not rerun:
         core.say(convo, person["name"], text, channel=msg["channel"], meta={"thread": thread})
-        followups.note_reply(person["key"], convo, thread)      # they spoke: an awaited answer may be here
+        followups.note_reply(person["key"], convo, thread, text)      # they spoke: an awaited answer may be here
     if not msg.get("attachments") and ackgate.is_pure_ack(text, names=(name, person["name"])):
         # "ok thanks" / a thumbs-up: consumed silently, no placeholder, no model turn (example's ack gate)
         log(f"ack from {person['key']} consumed without a turn")
@@ -1140,8 +1215,61 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     # inside Sage chat"): code answers "set up simplefin" with the steps and links, and a pasted
     # one-time setup token is claimed, stored and scrubbed from the record. No model turn, so the
     # token never reaches the model's context either.
+    # "let me sign in" under a browser job's sign-in is ONE step, by code (signin.py, 2026-11-04: "Go ahead" twice with
+    # nothing open): the sign-in card's own "I'll sign in myself" is pressed, the browser comes up at the page, and the
+    # Carry on card follows. No model turn. '' when there is no sign-in to hand over: the brain answers as before.
+    if core.is_owner(person) and not msg.get("attachments"):
+        try:
+            import signin
+            out = signin.owner_signs_in(text, person)
+        except Exception as e:  # noqa: BLE001
+            out = ""
+            log(f"sign-in hand-over crashed: {type(e).__name__}: {str(e)[:160]}")
+        if out:
+            log(f"sign-in hand-over: {person['key']} takes the sign-in; the card was answered by code")
+            core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
+            reply(msg, out, pre_ack)
+            return
+        # three reply words, by code (2026-11-09): "I'm done" after a takeover resumes the waiting job (resume.py);
+        # "what do you do on your own" / "ask me again about X" list or take back standing yeses (grants_chat.py);
+        # "why?" under a card or a posted line answers from the record (why.py). None needs a model turn.
+        for mod_name in ("resume", "grants_chat"):
+            try:
+                mod = __import__(mod_name)
+                out = mod.handle(text, person)
+            except Exception as e:  # noqa: BLE001
+                out = ""
+                log(f"{mod_name} crashed: {type(e).__name__}: {str(e)[:160]}")
+            if out:
+                log(f"{mod_name}: answered {person['key']} by code")
+                core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
+                reply(msg, out, pre_ack)
+                return
+    why_note = ""
+    if core.is_owner(person) and direct:
+        try:
+            import why
+            if why.is_why(text):
+                tcard0 = card_for_thread(thread) if thread else None
+                out = why.explain(convo, thread, tcard0, person)
+                if out:
+                    log(f"why: answered {person['key']} from the record")
+                    core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
+                    reply(msg, out, pre_ack)
+                    return
+                why_note = why.note(convo, thread)
+        except Exception as e:  # noqa: BLE001
+            log(f"why crashed: {type(e).__name__}: {str(e)[:160]}")
     out = _chat_setup(text, person, msg)
     if out:
+        try:   # the same setup ask again, about to get the same answer: that answer did not work the first time
+            #    (correction.repeat_of, 2026-11-04); the ledger row is what the reflex turns into a fix
+            rep = correction.repeat_of(convo, thread, person, text)
+            if rep and correction.same_answer(rep.get("reply", ""), out):
+                correction.record(person, "repeat", text, rep, "", [], "", False, out, convo=convo, thread=thread)
+                log(f"repeat from {person['key']}: the same setup ask got the same answer {rep.get('n')} time(s) before; recorded for a fix")
+        except Exception as e:  # noqa: BLE001
+            log(f"repeat check crashed: {type(e).__name__}: {str(e)[:120]}")
         core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
         reply(msg, out, pre_ack)
         return
@@ -1171,12 +1299,28 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     if direct:
         try:
             corr_kind = correction.kind(text)
-            if corr_kind:
+            if not corr_kind:
+                # the same ask again inside two hours is an ask that did not work (correction.repeat_of, 2026-11-04)
+                corr_ask = correction.repeat_of(convo, thread, person, text)
+                if corr_ask:
+                    corr_kind = "repeat"
+                    corr_expected = correction.expected_deed(corr_ask.get("text", ""))
+                    log(f"repeat from {person['key']}: asked {corr_ask.get('n')} time(s) before in this thread; treated as a correction")
+            elif corr_kind:
                 corr_ask = correction.original_ask(convo, thread, person)
                 corr_expected = correction.expected_deed(corr_ask.get("text", "")) if corr_ask else ""
                 # "where is the card" in a thread the card already landed in: point at it, never a second card
                 # (2026-10-18, the Hollis text: tapped Send, then told it "closed unsent" and made again)
                 corr_here = correction.card_in_thread(thread, corr_ask) if corr_kind == "card" and thread else {}
+                if corr_kind == "card" and not corr_here:
+                    # the card the last reply pointed at is not in this conversation (held for the digest, or posted in
+                    # another space): the owner is waiting on it, post it here (2026-11-05 06:09 "There is no card")
+                    sp = str(msg.get("space") or "")
+                    away = correction.card_not_here(convo, thread, sp, corr_ask)
+                    if away:
+                        corr_here = correction.surface(away, convo, thread, sp if str(convo).startswith("dm:") else "")
+                        if corr_here:
+                            log(f"correction (card) from {person['key']}: posted the held card {corr_here.get('id')} here")
                 if corr_here:
                     corr_expected = ""
                     log(f"correction (card) from {person['key']}: the card {corr_here.get('id')} is already in this thread")
@@ -1212,7 +1356,8 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     # keeps questions, standing instructions, card threads and team spaces. The owner hears one receipt here.
     try:
         why_desk = desk.wants(text, msg, person, tcard, correction_kind=corr_kind, card_here=bool(corr_here),
-                              scope=core.scope_of(convo, str(msg.get("space") or "")))
+                              scope=core.scope_of(convo, str(msg.get("space") or "")),
+                              card_root=card_started_thread(tcard, thread) if tcard else True)
     except Exception as e:  # noqa: BLE001
         why_desk = ""
         log(f"desk check crashed: {type(e).__name__}: {str(e)[:120]}")
@@ -1240,6 +1385,8 @@ def handle(msg: dict, pre_ack: str = "") -> None:
         log(f"desk block crashed: {type(e).__name__}: {str(e)[:120]}")
     if mute_note:
         extra = mute_note + "\n" + extra
+    if why_note:
+        extra = why_note + "\n" + extra
     if corr_here:
         extra = correction.here_note(corr_here) + "\n" + extra
     elif corr_ask:
@@ -1417,6 +1564,8 @@ def handle(msg: dict, pre_ack: str = "") -> None:
             # "can't" and not "I'm building it"; a replay that failed again says nothing and was refiled (2026-10-30)
             if msg.get("_capability_replay"):
                 out, silent = "", True
+            elif capability.answers_anyway(text, out):
+                log("gap filed behind a question: the answer is posted as it is, not replaced by the receipt")
             else:
                 out, silent = capability.ACK_LINE, False
         if not out and (silent or not direct):
@@ -1766,6 +1915,20 @@ def step() -> int:
     return n
 
 
+def pickup_fire() -> int:
+    """The check-backs the desk set for itself (pickup.py: "the upload is not done yet, look again in ten minutes")
+    that are due: each starts its own desk turn, which finishes the ask or stays silent. Never raises."""
+    try:
+        import pickup
+        started = pickup.tick()
+        for j in started:
+            log(f"pick-up: check-back due, desk {j.get('id')} looks again")
+        return len(started)
+    except Exception as e:  # noqa: BLE001
+        log(f"pick-up tick crashed: {type(e).__name__}: {str(e)[:160]}")
+        return 0
+
+
 def followups_fire() -> int:
     """Send the check-in for a follow-up that came due. The brain looks at that person's
     conversation and the records first and answers NO_REPLY when it is settled; otherwise its
@@ -1889,6 +2052,7 @@ def loop() -> None:
     last_tick = 0.0
     last_promises = 0.0
     started = time.time()
+    started_mono = time.monotonic()
     respawn = False
     global ASYNC
     ASYNC = True
@@ -1915,6 +2079,14 @@ def loop() -> None:
             log("agent code changed on disk; restarting myself on the new code")
             respawn = True
             break
+        if clock_jumped(started, started_mono):
+            # 2026-11-01: the PC clock was set back an hour (it had missed the end of daylight time); every
+            # "every N seconds" throttle stamped from the old clock then stalled for an hour, this loop's code check
+            # included, and a cached clock correction made every Google token expired. A fresh process starts every
+            # timer and cache on the new time.
+            log("the computer's clock was changed; restarting myself on the new time")
+            respawn = True
+            break
         core.save(ALIVE, {"pid": os.getpid(), "ts": time.time(), "at": core.stamp()})
         try:
             step()
@@ -1929,6 +2101,7 @@ def loop() -> None:
                 if fired:
                     log(f"routines fired={fired}")
                 followups_fire()
+                pickup_fire()
             except Exception as e:  # noqa: BLE001
                 log(f"routines tick crashed: {type(e).__name__}: {str(e)[:200]}")
             try:
@@ -1980,10 +2153,11 @@ def _tick_loop() -> None:
             if time.time() - last_tick >= 60:
                 last_tick = time.time()
                 try:
-                    fired = routines.tick(lambda k, t: post(k, t, "routine"))
+                    fired = routines.tick(lambda k, t: post(k, t, "routine"), post_space=post_space)
                     if fired:
                         log(f"routines fired={fired}")
                     followups_fire()
+                    pickup_fire()
                 except Exception as e:  # noqa: BLE001
                     log(f"routines tick crashed: {type(e).__name__}: {str(e)[:200]}")
                 try:
@@ -2060,12 +2234,23 @@ def _tick_loop() -> None:
 _code_check = {"at": 0.0}
 
 
+def clock_jumped(started: float, started_mono: float, now: float | None = None, mono: float | None = None) -> bool:
+    """The wall clock moved apart from the monotonic clock by more than CLOCK_JUMP_S since this process started:
+    the PC clock was set (by hand, a sync, a missed daylight-time change)."""
+    now = time.time() if now is None else now
+    mono = time.monotonic() if mono is None else mono
+    return abs((now - started) - (mono - started_mono)) > CLOCK_JUMP_S
+
+
+CLOCK_JUMP_S = 60
+
+
 def _code_changed(started: float) -> bool:
     """True when any .py or .md under assistant/agent (or chat_push/cards in scripts) is newer than
     this process. Checked at most every 30 s."""
-    if time.time() - _code_check["at"] < 30:
+    if 0 <= time.monotonic() - _code_check["at"] < 30:      # monotonic: a clock set back never stalls the check
         return False
-    _code_check["at"] = time.time()
+    _code_check["at"] = time.monotonic()
     try:
         files = list(core.AGENT.glob("*.py")) + [core.AGENT / "prompt.md", core.AGENT / "prompt.local.md", core.AGENT / "profile.json",
                                                 core.AGENT.parent / "scripts" / "chat_push.py", core.AGENT.parent / "scripts" / "cards.py"]
@@ -2103,7 +2288,7 @@ def ensure() -> str:
         return "RUNNING"
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe")
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    flags = 0x08000000 | 0x00000200 if os.name == "nt" else 0          # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     try:
         err = open(LOG.with_name("agent-bridge.err.log"), "a", encoding="utf-8")   # a crash leaves its traceback here, not in DEVNULL
     except OSError:

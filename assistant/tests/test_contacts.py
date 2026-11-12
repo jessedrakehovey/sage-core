@@ -103,6 +103,13 @@ def post(path, data, headers):
         return e.code, json.loads(e.read() or b"{}")
 
 
+# a read-only Mission Control (config.json -> mission_control.read_only, 2026-11-01) takes no upload: the .vcf goes in Chat
+mc_server.mc_read_only = lambda: True
+code, j = post("/api/contacts/import?owner=owner1", VCF, {"X-example-Contacts": "1"})
+check("read-only Mission Control refuses the upload and points to Chat", code == 410 and "Google Chat" in j.get("reason", ""), (code, j))
+with urllib.request.urlopen(base + "/contacts") as resp:
+    check("read-only: the contacts page has no upload box", "<input" not in resp.read().decode())
+mc_server.mc_read_only = lambda: False   # the upload itself, for an organization that keeps it
 code, _ = post("/api/contacts/import?owner=owner1", VCF, {"Content-Type": "text/vcard"})
 check("upload without the page's header refused", code == 403, code)
 code, _ = post("/api/contacts/import?owner=owner1", VCF, {"X-example-Contacts": "1", "Origin": "https://evil.example"})

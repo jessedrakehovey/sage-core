@@ -165,6 +165,29 @@ def overrides(e) -> dict:
         return {}
 
 
+def hint_of(e) -> str:
+    """The plain-words hint saved with an entry (upgrade 15, 2026-11-08: Grok Bot's vault items carry one): which account
+    this is, which page to use, what the site asks after the password. Never a secret; shown to the doer on a failed fill."""
+    return str(overrides(e).get("hint") or "")[:200] if e is not None else ""
+
+
+def set_hint(e, hint: str) -> None:
+    o = overrides(e)
+    if str(hint or "").strip():
+        o["hint"] = str(hint).strip()[:200]
+    else:
+        o.pop("hint", None)
+    e.notes = json.dumps(o, ensure_ascii=False) if o else ""
+
+
+def hint_for_url(url: str) -> str:
+    try:
+        kp = _open()
+        return hint_of(find_for_url(kp, url))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 # ------------------------------------------------------------------ commands (no secrets printed)
 def cmd_init() -> int:
     kp = _open(create=True)
@@ -197,7 +220,7 @@ def cmd_import_chrome(path: str) -> int:
     return 0
 
 
-def cmd_add(title: str, url: str, username: str, totp: bool) -> int:
+def cmd_add(title: str, url: str, username: str, totp: bool, hint: str = "") -> int:
     kp = _open(create=True)
     g = _group(kp)
     pw = getpass.getpass(f"password for {title} (hidden): ")
@@ -209,8 +232,10 @@ def cmd_add(title: str, url: str, username: str, totp: bool) -> int:
         secret = getpass.getpass("TOTP secret (base32, from the site's 'can't scan?' link; hidden): ").replace(" ", "")
         if secret:
             e.otp = f"otpauth://totp/{title}?secret={secret}"
+    if hint:
+        set_hint(e, hint)
     kp.save()
-    print(f"added {title} ({host_of(url)}, {username}){' with TOTP' if totp else ''}")
+    print(f"added {title} ({host_of(url)}, {username}){' with TOTP' if totp else ''}{' with a hint' if hint else ''}")
     return 0
 
 
@@ -243,6 +268,8 @@ def cmd_add_stdin() -> int:
     e = kp.add_entry(g, title, user, pw, url=url if "://" in url else "https://" + url)
     if totp:
         e.otp = f"otpauth://totp/{title}?secret={totp}"
+    if str(d.get("hint") or "").strip():
+        set_hint(e, str(d.get("hint")))
     kp.save()
     print(f"ADDED {title} {host} {user} totp={'yes' if totp else 'no'}")
     return 0
@@ -252,7 +279,8 @@ def cmd_list() -> int:
     kp = _open()
     rows = sorted(_group(kp).entries, key=lambda e: (e.title or "").lower())
     for e in rows:
-        print(f"{(e.title or '')[:30]:<30} {host_of(e.url or ''):<32} {(e.username or '')[:32]:<32} {'TOTP' if e.otp else ''}")
+        print(f"{(e.title or '')[:30]:<30} {host_of(e.url or ''):<32} {(e.username or '')[:32]:<32} {'TOTP' if e.otp else ''}"
+              + (f"  hint: {hint_of(e)[:60]}" if hint_of(e) else ""))
     print(f"({len(rows)} logins)")
     return 0
 
@@ -263,7 +291,7 @@ def cmd_has(url: str) -> int:
     if not e:
         print(f"NO_ENTRY {host_of(url)}")
         return 1
-    print(f"ENTRY {e.title} user={e.username} totp={'yes' if e.otp else 'no'}")
+    print(f"ENTRY {e.title} user={e.username} totp={'yes' if e.otp else 'no'}" + (f" hint={hint_of(e)}" if hint_of(e) else ""))
     return 0
 
 
@@ -308,6 +336,8 @@ def main() -> int:
     sub.add_parser("init")
     p = sub.add_parser("import-chrome"); p.add_argument("csv")
     p = sub.add_parser("add"); p.add_argument("title"); p.add_argument("--url", required=True); p.add_argument("--username", required=True); p.add_argument("--totp", action="store_true")
+    p.add_argument("--hint", default="", help="plain words for the doer: which account, which page, what the site asks after the password")
+    p = sub.add_parser("hint", help="set or clear the hint on an existing entry"); p.add_argument("title"); p.add_argument("text", nargs="?", default="")
     sub.add_parser("add-stdin", help="one JSON login on stdin (the Chat dialog path); prints ADDED or VAULT_ERROR")
     sub.add_parser("list")
     p = sub.add_parser("has"); p.add_argument("url")
@@ -320,7 +350,17 @@ def main() -> int:
     if a.cmd == "import-chrome":
         return cmd_import_chrome(a.csv)
     if a.cmd == "add":
-        return cmd_add(a.title, a.url, a.username, a.totp)
+        return cmd_add(a.title, a.url, a.username, a.totp, a.hint)
+    if a.cmd == "hint":
+        kp = _open()
+        e = kp.find_entries(title=a.title, group=_group(kp), first=True)
+        if not e:
+            print(f"no entry {a.title!r}")
+            return 1
+        set_hint(e, a.text)
+        kp.save()
+        print(f"hint {'set' if a.text else 'cleared'} on {a.title}")
+        return 0
     if a.cmd == "add-stdin":
         return cmd_add_stdin()
     if a.cmd == "list":

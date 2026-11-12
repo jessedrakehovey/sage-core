@@ -138,6 +138,22 @@ check("said once only", bridge.stalled_turns() == 0 and len(posted) == 1)
 turn_rows = [r for r in oc.fold().values() if r.get("kind") == "turn"]
 check("and a failed `turn` row for the scorecard", turn_rows and turn_rows[0]["state"] == "failed", turn_rows)
 
+# drain._run on a timeout kills the whole process tree (ported 2026-10-29): a launcher's child must not live on
+import subprocess as _sp  # noqa: E402
+_late = TMP / "late_send.txt"
+_child = f"import time, pathlib; time.sleep(4); pathlib.Path({str(_late)!r}).write_text('sent')"
+_parent = f"import subprocess, sys; subprocess.run([sys.executable, '-c', {_child!r}])"
+_t0 = time.time()
+try:
+    drain._run([sys.executable, "-c", _parent], timeout=1)
+    check("a script past its timeout raises TimeoutExpired", False)
+except _sp.TimeoutExpired:
+    check("a script past its timeout raises TimeoutExpired", time.time() - _t0 < 4)
+time.sleep(5)
+check("and its child process is killed too (no late send)", not _late.exists())
+_ok = drain._run([sys.executable, "-c", "print('hi')"], timeout=30)
+check("a normal script still returns its output", _ok.returncode == 0 and _ok.stdout.strip() == "hi", _ok)
+
 print()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}", f"({TMP})")
 sys.exit(1 if FAILS else 0)

@@ -96,7 +96,8 @@ def _source_pairs(org_name: str, owners: list, out_name: str) -> tuple:
     for s in sorted(v["surnames"], key=len, reverse=True):
         people.append((engine._rx_word(s), org_name))
     return infra + people, infra
-GENERIC_CONNECTIONS = ["claude-token", "mission-control", "tailscale", "agent-bridge", "doer-browser", "doer-vault", "doer-sessions", "pw-profiles"]
+GENERIC_CONNECTIONS = ["claude-token", "mission-control", "tailscale", "agent-bridge", "doer-browser", "doer-vault", "doer-sessions", "pw-profiles",
+                       "chat-home", "shots-drive", "remote-desktop"]   # the Chat app's Google-side setup and the screenshots drive as Chat buttons (2026-11-04)
 
 
 def _read_any(f: Path) -> str:
@@ -376,6 +377,9 @@ def main() -> int:
                              "nothing goes out on its own. `onboarding.py golive` lists the standing exceptions to switch on by name.",
                      "on": True, "since": time.strftime("%Y-%m-%d")}
     cfg["habits"] = {"_doc": "habits.py: an ask class that succeeded verified N times becomes a build request to codify it.", "codify": False, "min_verified": 3}
+    cfg["onboarding"] = {"_doc": "onboarding.py in chat: Discovery and Training questions ride in the agent's ONBOARDING line, one a turn, "
+                                 "answered in the owners' own words (the `onboard` deed). false once the organization is long past onboarding.",
+                         "in_chat": True}
     (out / "assistant" / "config.json").write_text(json.dumps(cfg, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     # tracking.json (assistant/TRACKING_DESIGN.md): the cadences carry over; the two detectors that read example's own
     # record sources (the delivery ledger + editor, the CRM snapshot) start OFF until the new org names theirs.

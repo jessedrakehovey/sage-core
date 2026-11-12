@@ -79,8 +79,21 @@ def post(ev: dict, out_dir: Path) -> dict | None:
     return None
 
 
+STOP_FILE = "stop.json"
+STOP_MESSAGE = ("The owner tapped Stop on this job's card. Do nothing more on the page: end your turn now with exactly "
+                "`DOER_BLOCKED: stopped by the owner`.")
+
+
+def stopped(out_dir: Path) -> bool:
+    """The owner's Stop tap (livecard.request_stop wrote <out_dir>/stop.json)."""
+    return (out_dir / STOP_FILE).is_file()
+
+
 def pre(ev: dict, out_dir: Path) -> dict | None:
-    """After the cap, only looking is allowed."""
+    """After the cap, only looking is allowed; after the owner's Stop, nothing is."""
+    if stopped(out_dir):
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                       "permissionDecisionReason": STOP_MESSAGE}}
     st = _load(out_dir)
     key = st.get("capped")
     if not key or str(ev.get("tool_name") or "").endswith(LOOK_ONLY):

@@ -135,6 +135,12 @@ def handle(ev: dict, log=lambda s: None, late: float | None = None) -> dict:
             + " params=" + json.dumps(common.get("parameters") or {})[:160]
             + " platform=" + str(ev.get("clientPlatform") or common.get("platform") or "")
             + " chat_keys=" + ",".join(sorted((ev.get("chat") or {}).keys())[:6]))
+        h = gchat.parse_home(ev)
+        if h:                       # the owner opened the app's Home tab (2026-11-04)
+            return home_open(ev, h, log)
+        c = gchat.parse_command(ev)
+        if c:                       # a registered slash or quick command
+            return command_event(ev, c, log, late)
         m = gchat.parse_event(ev)
         if m:
             gchat.queue_inbound(m)
@@ -144,6 +150,15 @@ def handle(ev: dict, log=lambda s: None, late: float | None = None) -> dict:
         if a:                       # an owner added Sage: their DM is recorded, cards reach them from now on
             who = gchat.record_added(a)
             log(f"gchat app added in {'a DM' if a.get('dm') else 'a space'} by {who or 'a non-owner'}")
+            if who and a.get("dm") and a.get("space"):
+                # the start-up sequence (startup.py, 2026-11-04): what the agent can set up by itself arrives as ONE card
+                # the moment an owner first adds it; nothing is a step at a computer
+                try:
+                    import startup
+                    if startup.offer(str(a["space"])):
+                        log(f"start-up card offered to {who}")
+                except Exception as e:  # noqa: BLE001
+                    log(f"start-up offer failed: {type(e).__name__}: {str(e)[:120]}")
             return _reply_text(ev, "Connected. Cards for you will arrive here, with buttons to answer them.") if who else {}
         k = gchat.parse_click(ev)
         if not k:
@@ -171,7 +186,7 @@ def _plain(option: str) -> str:
     return re.sub(r"\s*\(Recommended\)\s*", "", str(option or "")).strip()
 
 
-def _answer_soon(qid: str, option: str, q_index: int, person: dict, before, log) -> dict:
+def _answer_soon(qid: str, option: str, q_index: int, person: dict, before, log, grant: str = "") -> dict:
     """cards.answer on a worker thread. Returns {"r": result} when it finished within TAP_WAIT_S,
     else {} (the worker reports any failure itself when it is done)."""
     import threading
@@ -181,7 +196,7 @@ def _answer_soon(qid: str, option: str, q_index: int, person: dict, before, log)
 
     def work():
         try:
-            r = cards.answer(qid, option, q_index=q_index, by=f"gchat:{person['key']}")
+            r = cards.answer(qid, option, q_index=q_index, by=f"gchat:{person['key']}", grant=grant)
         except Exception as e:  # noqa: BLE001
             r = {"ok": False, "reason": f"{type(e).__name__}: {str(e)[:160]}"}
         box["r"] = r
@@ -220,7 +235,7 @@ def _after(qid: str, option: str, person: dict, before, r: dict, log) -> None:
     report_failed(qid, option, reason, before, log)
 
 
-def _late_answer(qid: str, option: str, q_index: int, person: dict, before, late: float, log) -> dict:
+def _late_answer(qid: str, option: str, q_index: int, person: dict, before, late: float, log, grant: str = "") -> dict:
     """A tap the relay held while this server was unreachable. Nobody waits on the reply."""
     import cards
     import chat_push
@@ -232,7 +247,7 @@ def _late_answer(qid: str, option: str, q_index: int, person: dict, before, late
         log(f"late tap {qid} {option!r} held {int(age)}s: too old to act on, reposting")
         report_failed(qid, option, f"your tap reached me {int(age // 60)} minutes late", before, log)
         return {}
-    r = cards.answer(qid, option, q_index=q_index, by=f"gchat:{person['key']}")
+    r = cards.answer(qid, option, q_index=q_index, by=f"gchat:{person['key']}", grant=grant)
     log(f"late tap {qid} {option!r} by {person['key']} (held {int(age)}s): ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''}")
     if r.get("ok"):
         card = cards._read(cards.LIVE / f"{qid}.json") or before
@@ -310,8 +325,14 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
     if not person or not core.can(person, "approve"):
         log(f"ignored click {fn} from unknown {k.get('email') or k.get('chat_user')!r}")
         return _reply_text(ev, "These cards are for the owners.")
+    if fn == "home_action":
+        return home_click(ev, k, person, log)
     if fn in ("vault_add", "vault_add_submit"):
         return vault_click(ev, k, person, log)
+    if fn in ("form_open", "form_submit", "form_action"):
+        return form_click(ev, k, person, log, late=late)
+    if p.get("job") and not p.get("qid"):
+        return job_click(ev, k, person, log)
     qid = str(p.get("qid") or "")
     if not QID.fullmatch(qid):
         return _reply_text(ev, "That card id is not valid.")
@@ -319,10 +340,11 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
     if fn == "card_answer":
         option = str(p.get("option") or "")
         q_index = int(p.get("q") or 0)
+        grant = str(p.get("grant") or "")                 # the Always button (scripts/policy.py): the tap stands
         before = cards._read(cards.LIVE / f"{qid}.json")
         if late is not None:
-            return _late_answer(qid, option, q_index, person, before, late, log)
-        box = _answer_soon(qid, option, q_index, person, before, log)
+            return _late_answer(qid, option, q_index, person, before, late, log, grant=grant)
+        box = _answer_soon(qid, option, q_index, person, before, log, grant=grant)
         r = box.get("r")
         if r is None:
             # still working after TAP_WAIT_S: the tap is taken; the card shows the choice now and a
@@ -341,6 +363,7 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
         if not r.get("ok"):
             return _reply_text(ev, f"That card could not be answered: {r.get('reason')}")
         card = cards._read(cards.LIVE / f"{qid}.json")
+        _wake_doer(card or before)
         if not card:
             return _reply_text(ev, f"Answered: {option}.")
         body = chat_push.body_for(card, "answered", {"option": option, "by": person["key"], "ticket": r.get("ticket"),
@@ -368,8 +391,13 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
         card = cards._read(cards.LIVE / f"{qid}.json")
         if not card or card.get("status") != "open":
             return _reply_text(ev, "That card is no longer open.")
+        if p.get("mode") == "later":
+            log(f"click send-later {qid} by {person['key']}: picker opened")
+            return _reply_dialog(ev, chat_push.later_dialog(card, int(p.get("q") or 0), tz_offset_min=_tz_offset_min(ev)))
         log(f"click edit {qid} by {person['key']}: dialog opened")
         return _reply_dialog(ev, chat_push.edit_dialog(card, int(p.get("q") or 0)))
+    if fn == "card_edit_submit" and p.get("mode") == "later":
+        return later_submit(ev, k, person, qid, log)
     if fn == "card_edit_submit":
         revised = str((k.get("form") or {}).get("body") or "").strip()
         if not revised:
@@ -377,6 +405,20 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
         card = cards._read(cards.LIVE / f"{qid}.json")
         q = ((card or {}).get("questions") or [{}])[int(p.get("q") or 0)] if card else {}
         approve = str(((q.get("exec") or {}).get("approve_label")) or "Approve")
+        if ((q.get("exec") or {}).get("payload") or {}).get("ask_code"):
+            # the code dialog (chat_push.code_dialog): the digits are the note-box text, minted into the step, never kept
+            digits = re.sub(r"\D", "", revised)[:10]
+            if not 4 <= len(digits) <= 10:
+                return _reply_dialog(ev, chat_push.code_dialog(card, int(p.get("q") or 0), error="A code is 4 to 10 digits."))
+            r = cards.answer(qid, approve, text=digits, q_index=int(p.get("q") or 0), by=f"gchat:{person['key']}")
+            log(f"click code-submit {qid} by {person['key']}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''} (code not logged)")
+            core.say(convo, person["name"], f"[typed the verification code into card {qid}]", channel="gchat", meta={"click": True})
+            if not r.get("ok"):
+                return _reply_close(ev, f"The code did not go in: {r.get('reason')}")
+            card = cards._read(cards.LIVE / f"{qid}.json") or card
+            chat_push.mark_answered(card, {"option": approve, "by": person["key"], "ticket": r.get("ticket"), "mint_error": r.get("mint_error")})
+            _wake_doer(card)
+            return _reply_close(ev, "Got the code. Signing in now; the card and this thread say when it is through.")
         r = cards.answer(qid, approve, revised=revised, q_index=int(p.get("q") or 0), by=f"gchat:{person['key']}")
         log(f"click edit-submit {qid} by {person['key']}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''} revised={len(revised)} chars")
         if r.get("blanks") and card and late is None:
@@ -399,6 +441,161 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
     return _reply_text(ev, "That button is not known.")
 
 
+def _tz_offset_min(ev: dict) -> int | None:
+    """The owner's time zone offset in minutes from the event (commonEventObject.timeZone.offset is in ms), or None."""
+    try:
+        off = ((ev.get("commonEventObject") or {}).get("timeZone") or {}).get("offset")
+        return int(off) // 60000 if off is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def later_submit(ev: dict, k: dict, person: dict, qid: str, log=lambda s: None) -> dict:
+    """The Send later dialog's submit: the picked time -> cards.answer(send_at=...), the not_before an owner's words
+    would mint. The dialog closes with the time in words."""
+    import cards
+    import chat_push
+    import exec_store as es
+    core = _core()
+    p = k.get("params") or {}
+    card = cards._read(cards.LIVE / f"{qid}.json")
+    if not card or card.get("status") != "open":
+        return _reply_close(ev, "That card is no longer open.")
+    ms = str((k.get("form") or {}).get("when") or "")
+    try:
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(int(ms) / 1000))
+        send_at = es.parse_not_before(when)
+    except (TypeError, ValueError) as e:
+        return _reply_dialog(ev, chat_push.later_dialog(card, int(p.get("q") or 0), tz_offset_min=_tz_offset_min(ev),
+                                                        error=f"Pick a time that works: {str(e)[:120] or 'that one is not valid'}."))
+    q = (card.get("questions") or [{}])[int(p.get("q") or 0)]
+    approve = str(((q.get("exec") or {}).get("approve_label")) or "Approve")
+    r = cards.answer(qid, approve, q_index=int(p.get("q") or 0), by=f"gchat:{person['key']}", send_at=send_at)
+    log(f"click send-later {qid} by {person['key']} at {send_at}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''}")
+    core.say(chat_push_convo(person), person["name"], f"[approved card {qid} for {es.when_text(send_at)}]", channel="gchat", meta={"click": True})
+    if not r.get("ok"):
+        return _reply_close(ev, f"Not scheduled: {r.get('reason')}")
+    card = cards._read(cards.LIVE / f"{qid}.json") or card
+    chat_push.mark_answered(card, {"option": approve, "by": person["key"], "ticket": r.get("ticket"), "mint_error": r.get("mint_error")})
+    if r.get("mint_error"):
+        return _reply_close(ev, f"Recorded, but not set up: {str(r['mint_error'])[:150]}")
+    return _reply_close(ev, f"Goes out {es.when_text(send_at)}. Undo on the card works until then.")
+
+
+# ------------------------------------------------------------------ the Home tab and the registered commands (home_tab.py, 2026-11-04)
+def _home_tab():
+    import home_tab
+    return home_tab
+
+
+def home_open(ev: dict, h: dict, log=lambda s: None) -> dict:
+    core = _core()
+    ht = _home_tab()
+    person = core.person_for(email=h.get("email", ""), chat_user=h.get("chat_user", ""))
+    if not person or not core.can(person, "approve"):
+        log(f"home tab opened by non-owner {h.get('email') or h.get('chat_user')!r}")
+        return ht.render({"sections": [{"widgets": [{"textParagraph": {"text": "This desk is for the owners."}}]}]}, push=True)
+    log(f"home tab opened by {person['key']}")
+    return ht.render(ht.desk("home"), push=True)
+
+
+def home_click(ev: dict, k: dict, person: dict, log=lambda s: None) -> dict:
+    ht = _home_tab()
+    p = k.get("params") or {}
+    do = str(p.get("do") or "desk")
+    ctx = str(p.get("ctx") or ("msg" if k.get("msg_name") else "home"))
+    card, toast = ht.act(do, dict(p, ctx=ctx), k.get("form") or {}, person)
+    log(f"home {do} by {person['key']} ({ctx}): {toast or 'ok'}")
+    if do in ("answer", "stop", "show", "switch"):
+        try:
+            _core().say(chat_push_convo(person), person["name"], f"[{do} from the desk: {toast or do}]", channel="gchat", meta={"click": True})
+        except Exception:  # noqa: BLE001
+            pass
+    if ctx == "home":
+        return ht.render(card, push=False, toast=toast)
+    return _reply_update(ev, ht.message(card))
+
+
+def command_event(ev: dict, c: dict, log=lambda s: None, late: float | None = None) -> dict:
+    """A registered command: ours are answered on the spot with a card; any other goes to the brain as a message."""
+    import gchat
+    core = _core()
+    ht = _home_tab()
+    person = core.person_for(email=c.get("email", ""), chat_user=c.get("chat_user", ""))
+    view = ht.command_for(c.get("id"), c.get("text", ""))
+    if not view:
+        if c.get("text") and c.get("space"):
+            gchat.queue_inbound({"email": c.get("email", ""), "chat_user": c.get("chat_user", ""), "name": c.get("name", ""),
+                                 "space": c["space"], "dm": bool(c.get("dm")), "thread": c.get("thread", ""), "text": c["text"],
+                                 "msg_name": c.get("msg_name", ""), "attachments": []})
+            log(f"gchat command {c.get('text')!r} from {c.get('email') or c.get('chat_user')} queued for the brain")
+        return {}
+    if not person or not core.can(person, "approve"):
+        return _reply_text(ev, "That one is for the owners.")
+    body = ht.command(view, c.get("args", ""), person)
+    log(f"gchat command {view} by {person['key']}" + (" (late: posted by REST)" if late is not None else ""))
+    if late is not None and c.get("space"):
+        try:
+            gchat.post_body(c["space"], body, c.get("thread", ""))
+        except Exception as e:  # noqa: BLE001
+            log(f"late command post failed: {type(e).__name__}")
+        return {}
+    if _addon(ev):
+        return {"hostAppDataAction": {"chatDataAction": {"createMessageAction": {"message": body}}}}
+    return body
+
+
+def _wake_doer(card: dict | None) -> None:
+    """An agent_run card answered: the doer picks the answer up now, not at its next 10-minute tick (2026-11-03).
+    Two doors, because an answer travels one of two ways: an answer the doer reads by itself ("I'll sign in myself",
+    "No code came") needs a doer tick; an APPROVAL minted an exec ticket, which only drain hands to the doer, so that
+    lane is drained once the undo window has passed (2026-11-04: a login saved from chat waited ten minutes)."""
+    try:
+        ex = ((card or {}).get("questions") or [{}])[0].get("exec") or {}
+        if ex.get("kind") != "agent_run":
+            return
+        sys.path.insert(0, str(HERE.parent / "doer"))
+        import doer
+        doer.wake()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import drain
+        import exec_store
+        drain.kick(str(exec_store.KIND_LANES.get("agent_run") or "doer"))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ------------------------------------------------------------------ the live job card (doer/livecard.py, 2026-11-03)
+# Its buttons carry {"job": <ticket id>, "option": "Stop" | "Show on screen"} through the same card_answer relay function
+# as every other card, so the Apps Script relay needs no new function; the tap is answered with the redrawn card.
+def job_click(ev: dict, k: dict, person: dict, log=lambda s: None) -> dict:
+    p = k.get("params") or {}
+    tid, option = str(p.get("job") or ""), str(p.get("option") or "")
+    if not re.fullmatch(r"[0-9a-f]{16}", tid):
+        return _reply_text(ev, "That job is not known.")
+    try:
+        sys.path.insert(0, str(HERE.parent / "doer"))
+        import livecard
+        if option == "Do later":                 # a page left open for the owner (doer/leftopen.py, 2026-11-08)
+            import leftopen
+            body = leftopen.later(tid, person)
+        else:
+            body = livecard.action(tid, option, person)
+    except Exception as e:  # noqa: BLE001
+        log(f"job click {tid} {option!r} crashed: {type(e).__name__}: {str(e)[:160]}")
+        body = {}
+    log(f"job click {tid} {option!r} by {person['key']}: {'redrawn' if body else 'no live card'}")
+    try:
+        _core().say(chat_push_convo(person), person["name"], f"[tapped \"{option}\" on the live card of job {tid}]", channel="gchat", meta={"click": True})
+    except Exception:  # noqa: BLE001
+        pass
+    if not body:
+        return _reply_text(ev, "That job is not running any more.")
+    return _reply_update(ev, body)
+
+
 # ------------------------------------------------------------------ the vault dialog (sage-core, 2026-10-28)
 # "Enter login" opens a dialog; its submit carries site / username / password / totp as formInputs, which go to
 # doer/vault.py add-stdin in the keyring interpreter. The values live in this process for the length of the
@@ -419,13 +616,19 @@ def vault_click(ev: dict, k: dict, person: dict, log=lambda s: None) -> dict:
     core = _core()
     fn, p, form = k.get("function", ""), k.get("params") or {}, k.get("form") or {}
     site = str(p.get("site") or "")
+    qid = str(p.get("qid") or "")                 # set when the dialog came from a sign-in card (report.py login)
+    if not QID.fullmatch(qid):
+        qid = ""
+    rid = str(p.get("rid") or "")                 # set when it came from a setup job's card (chat_forms.job_card): the job runs again
+    if not re.fullmatch(r"[\w-]{2,64}", rid):
+        rid = ""
     if fn == "vault_add":
-        log(f"vault dialog opened by {person['key']} for {site or 'an unnamed site'}")
-        return _reply_dialog(ev, chat_push.vault_dialog(site))
+        log(f"vault dialog opened by {person['key']} for {site or 'an unnamed site'}" + (f" (card {qid})" if qid else "") + (f" (job {rid})" if rid else ""))
+        return _reply_dialog(ev, chat_push.vault_dialog(site, qid=qid, rid=rid))
     fields = {"site": str(form.get("site") or site).strip(), "username": str(form.get("username") or "").strip(),
               "password": str(form.get("password") or ""), "totp": str(form.get("totp") or "")}
     if not (fields["site"] and fields["username"] and fields["password"]):
-        return _reply_dialog(ev, chat_push.vault_dialog(fields["site"], error="Site, username and password are all needed.", username=fields["username"]))
+        return _reply_dialog(ev, chat_push.vault_dialog(fields["site"], error="Site, username and password are all needed.", username=fields["username"], qid=qid, rid=rid))
     try:
         line = _vault_add(fields)
     except Exception as e:  # noqa: BLE001
@@ -434,15 +637,266 @@ def vault_click(ev: dict, k: dict, person: dict, log=lambda s: None) -> dict:
         fields["password"] = fields["totp"] = ""
     if not line.startswith("ADDED"):
         log(f"vault add by {person['key']} failed: {line[:160]}")
-        return _reply_dialog(ev, chat_push.vault_dialog(fields["site"], error=line.replace("VAULT_ERROR", "Not saved:").strip(), username=fields["username"]))
+        return _reply_dialog(ev, chat_push.vault_dialog(fields["site"], error=line.replace("VAULT_ERROR", "Not saved:").strip(), username=fields["username"], qid=qid, rid=rid))
     parts = line.split()
     host, user = (parts[2] if len(parts) > 2 else fields["site"]), (parts[3] if len(parts) > 3 else fields["username"])
-    log(f"vault add by {person['key']}: {host} for {user} (totp={'yes' if 'totp=yes' in line else 'no'})")
+    # the sign-in name never goes into the log or the transcript (2026-11-09: it was written to both in plain text)
+    log(f"vault add by {person['key']}: {host} (totp={'yes' if 'totp=yes' in line else 'no'})")
     try:
-        core.say(chat_push.agent_convo(person["key"]), person["name"], f"[saved a login for {host} ({user}) in the vault]", channel="gchat", meta={"click": True})
+        core.say(chat_push.agent_convo(person["key"]), person["name"], f"[saved a login for {host} in the vault]", channel="gchat", meta={"click": True})
     except Exception:  # noqa: BLE001
         pass
+    if rid == "startup":
+        # the start-up sequence stopped at a sign-in: with the login saved it carries on from that job by itself
+        import gchat
+        import startup
+        name = str(k.get("msg_name") or "")
+
+        def on_update(body: dict) -> None:
+            if name:
+                try:
+                    gchat.patch_body(name, body)
+                except Exception as e:  # noqa: BLE001
+                    log(f"start-up card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+        started = _run_startup(person["key"], on_update)
+        log(f"vault add by {person['key']} carries the start-up sequence on: {started}")
+        return _reply_close(ev, f"Saved the {host} login. Carrying on with the setup now; the card shows each step." if started
+                            else f"Saved the {host} login for {user}.")
+    if rid:
+        # a setup job stopped at this site's sign-in: with the login saved it runs again by itself, and its card follows
+        import chat_forms
+        import gchat
+        import setup_actions
+        name = str(k.get("msg_name") or "")
+
+        def done(res: dict) -> None:
+            log(f"job {rid} after the vault login for {person['key']}: {res.get('state') or ('ok' if res.get('ok') else 'failed')}: {str(res.get('message') or '')[:160]}")
+            if name:
+                try:
+                    gchat.patch_body(name, chat_forms.job_card(rid, result=res))
+                except Exception as e:  # noqa: BLE001
+                    log(f"job {rid} result card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+        if name:
+            try:                                      # the working card first, so the result (minutes away) is the last edit
+                gchat.patch_body(name, chat_forms.job_card(rid, running=True))
+            except Exception as e:  # noqa: BLE001
+                log(f"job {rid} working card edit failed: {type(e).__name__}: {str(e)[:120]}")
+        started = _run_job(setup_actions, rid, person["key"], done)
+        log(f"vault add by {person['key']} restarts job {rid}: {started}")
+        what = str((chat_forms.spec(rid) or {}).get("name") or rid)
+        return _reply_close(ev, f"Saved the {host} login. Running {what} again now; its card says how it went." if started
+                            else f"Saved the {host} login for {user}. Tap the job's button to run it again.")
+    if qid:
+        # the sign-in card: the saved login IS its approval; the job carries on from where it stopped (doer.run_login_resume)
+        import cards
+        card = cards._read(cards.LIVE / f"{qid}.json")
+        q = ((card or {}).get("questions") or [{}])[0]
+        approve = str(((q.get("exec") or {}).get("approve_label")) or "Enter login")
+        r = cards.answer(qid, approve, by=f"gchat:{person['key']}") if card else {"ok": False, "reason": "that card is no longer open"}
+        log(f"vault add answered sign-in card {qid}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''}")
+        if r.get("ok") and card:
+            card = cards._read(cards.LIVE / f"{qid}.json") or card
+            chat_push.mark_answered(card, {"option": approve, "by": person["key"], "ticket": r.get("ticket"), "mint_error": r.get("mint_error")})
+            _wake_doer(card)
+            return _reply_close(ev, f"Saved the {host} login. The job picks back up in under a minute; this thread says how it went.")
+        return _reply_close(ev, f"Saved the {host} login for {user} in the vault, but the job did not restart ({r.get('reason') or r.get('mint_error')}). Ask me here to try it again.")
     return _reply_close(ev, f"Saved the {host} login for {user} in the vault. Nothing was kept in chat.")
+
+
+# ------------------------------------------------------------------ data-entry forms (chat_forms.py, 2026-11-01)
+# the owner: "Make all data entry for anything go through google chat never mission control." A connection's card has
+# one button that opens a dialog; the submit stores the values on this PC and closes the dialog with one line. What
+# comes next (Plaid: the bank sign-in card) is posted as a fresh message in the same thread. Values are never logged.
+def form_click(ev: dict, k: dict, person: dict, log=lambda s: None, late: float | None = None) -> dict:
+    import chat_forms
+    import gchat
+    core = _core()
+    fn, p, form = k.get("function", ""), k.get("params") or {}, k.get("form") or {}
+    rid = str(p.get("rid") or "")
+    if rid == "startup":                          # the start-up sequence's own card (startup.py)
+        return startup_click(ev, k, person, log, late=late)
+    if not chat_forms.spec(rid):
+        return _reply_text(ev, "That form is not known any more.")
+    thread = gchat.thread_of(k.get("msg_name", "")) if k.get("msg_name") else ""
+    if (chat_forms.spec(rid) or {}).get("store") == "job" and (fn == "form_open" or p.get("do") == "run"):
+        return job_run_click(ev, k, person, rid, log, late=late)
+    if fn == "form_open":
+        log(f"form {rid} opened by {person['key']}")
+        return _reply_dialog(ev, chat_forms.dialog(rid, params=({"from": str(p["from"])} if p.get("from") else None)))
+    if fn == "form_action" and (chat_forms.spec(rid) or {}).get("store") == "job_form":
+        return job_form_click(ev, k, person, rid, log, late=late)
+    if fn == "form_action":
+        if rid == "bank-plaid":
+            log(f"form {rid} action {p.get('do')} by {person['key']}")
+            if p.get("do") == "relink" and p.get("item"):
+                sys.path.insert(0, str(HERE / "money"))
+                import plaid_wizard
+                r = plaid_wizard.hosted_start(update_item=str(p["item"]))
+                if not r.get("ok"):
+                    return _reply_text(ev, r.get("message") or "Plaid would not start the re-sign-in.")
+                body = {"text": "Re-sign-in through Plaid.", "cardsV2": [{"cardId": "plaid-relink", "card": {
+                    "header": {"title": "Sign in to your bank again", "subtitle": "Plaid's sign-in page, read-only"},
+                    "sections": [{"widgets": [{"buttonList": {"buttons": [chat_forms._link_btn("Sign in again", r["url"])]}}]}]}}]}
+                return _reply_update(ev, body)
+            return _reply_update(ev, chat_forms.plaid_connect_card())
+        return _reply_text(ev, "That button is not known.")
+    if (chat_forms.spec(rid) or {}).get("store") == "job_form":
+        return job_form_click(ev, k, person, rid, log, late=late)
+    values = {n: str(form.get(n) or "") for n, _ in (chat_forms.spec(rid) or {}).get("fields", [])}
+    r = chat_forms.submit(rid, form)
+    log(f"form {rid} submitted by {person['key']}: ok={r.get('ok')} (values not logged)")
+    if not r.get("ok"):
+        keep = {n: v for n, v in values.items() if n in ("client_id",)}   # never echo a secret back into the dialog
+        return _reply_dialog(ev, chat_forms.dialog(rid, error=r.get("message") or "Not stored.", values=keep))
+    try:
+        core.say(chat_push_convo(person), person["name"], f"[entered {chat_forms.spec(rid)['title']} for {chat_forms.spec(rid)['name']} in a Chat form]",
+                 channel="gchat", meta={"click": True})
+    except Exception:  # noqa: BLE001
+        pass
+    if r.get("next") and str(k.get("space") or "").startswith("spaces/"):
+        try:
+            gchat.post_body(k["space"], r["next"], thread)
+        except Exception as e:  # noqa: BLE001
+            log(f"form {rid} follow-up card not posted: {type(e).__name__}: {str(e)[:120]}")
+    return _reply_close(ev, r.get("message") or "Stored.")
+
+
+def job_run_click(ev: dict, k: dict, person: dict, rid: str, log=lambda s: None, late: float | None = None) -> dict:
+    """A job row's button (chat_forms.job_card, 2026-11-04): the job runs on a thread (minutes), the tap is answered now
+    with the card in its working state, and the card is edited by REST with the result when the job ends. A tap the
+    relay held (late): Chat already shows the relay's own "got it" card, so the working card goes up by REST too."""
+    import chat_forms
+    import gchat
+    import setup_actions
+    core = _core()
+    name = str(k.get("msg_name") or "")
+    if late is not None and name:
+        try:
+            gchat.patch_body(name, chat_forms.job_card(rid, running=True))
+        except Exception as e:  # noqa: BLE001
+            log(f"job {rid} working card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+    def done(res: dict) -> None:
+        log(f"job {rid} for {person['key']}: {res.get('state') or ('ok' if res.get('ok') else 'failed')}: {str(res.get('message') or '')[:160]}")
+        try:
+            core.say(chat_push_convo(person), person["name"], f"[{rid}: {str(res.get('message') or '')[:200]}]", channel="gchat", meta={"click": True})
+        except Exception:  # noqa: BLE001
+            pass
+        if name:
+            try:
+                gchat.patch_body(name, chat_forms.job_card(rid, result=res))
+            except Exception as e:  # noqa: BLE001
+                log(f"job {rid} result card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+    started = _run_job(setup_actions, rid, person["key"], done)
+    log(f"job {rid} started by {person['key']}: {started}")
+    if not started:
+        return _reply_text(ev, "That job is not known any more.")
+    return _reply_update(ev, chat_forms.job_card(rid, running=True))
+
+
+def _run_job(setup_actions, rid: str, by: str, done) -> bool:
+    """Replaceable in tests."""
+    return setup_actions.run_job_async(rid, by, done)
+
+
+def _job_form_call(spec: dict, what: str, values: dict, by: str) -> dict:
+    """module.func(**values, by=) for a submit, module.on_action(do, by=) for a result card's button. Replaceable in tests."""
+    import importlib
+    mod = importlib.import_module(str(spec.get("module") or ""))
+    if what == "submit":
+        return getattr(mod, str(spec.get("func") or "run"))(**values, by=by)
+    return mod.on_action(what, by=by)
+
+
+def job_form_click(ev: dict, k: dict, person: dict, rid: str, log=lambda s: None, late: float | None = None) -> dict:
+    """A job that needs something typed first (setup kind job_form, 2026-11-04). The form's submit hands the values to the
+    row's module on a thread and closes the dialog at once; a button on the result card (form_action do=<action>) runs the
+    module's on_action the same way. Either way the card that carried the button is edited with the result. The values
+    are never logged, said or kept by this module."""
+    import threading
+    import chat_forms
+    import gchat
+    spec = chat_forms.spec(rid) or {}
+    fn, p, form = k.get("function", ""), k.get("params") or {}, k.get("form") or {}
+    name = str(k.get("msg_name") or "")
+    if fn == "form_submit":
+        values = {n: str(form.get(n) or "").strip() for n, _ in spec.get("fields", [])}
+        if not all(values.values()):
+            return _reply_dialog(ev, chat_forms.dialog(rid, error="Every box is needed.", params={"from": str(p.get("from") or "")}))
+        what = "submit"
+    else:
+        values, what = {}, str(p.get("do") or "")
+
+    def work():
+        try:
+            res = _job_form_call(spec, what, values, person["key"])
+        except Exception as e:  # noqa: BLE001
+            res = {"ok": False, "state": "failed", "message": f"{type(e).__name__}: {str(e)[:160]}"}
+        log(f"job form {rid} {what} for {person['key']}: {res.get('state') or ('ok' if res.get('ok') else 'failed')} (values not logged)")
+        if name:
+            try:
+                body = chat_forms.job_card(rid, result=res)
+                if res.get("ok") and str(p.get("from") or "") == "startup":
+                    import startup
+                    body = startup.card()                # back to the sequence's own card, with this step done
+                gchat.patch_body(name, body)
+            except Exception as e:  # noqa: BLE001
+                log(f"job form {rid} result card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+    threading.Thread(target=work, daemon=True, name=f"jobform-{rid}").start()
+    try:
+        _core().say(chat_push_convo(person), person["name"], f"[{spec.get('title') or rid}: {'filled in the form' if what == 'submit' else what}]", channel="gchat", meta={"click": True})
+    except Exception:  # noqa: BLE001
+        pass
+    if fn == "form_submit":
+        return _reply_close(ev, "Got it. Working on it now; the card says how it went.")
+    if late is not None:
+        return {}
+    return _reply_update(ev, chat_forms.job_card(rid, running=True))
+
+
+def _run_startup(by: str, on_update) -> bool:
+    """The whole start-up sequence on a thread; `on_update(card body)` after each step. Replaceable in tests."""
+    import startup
+    return startup.run_async(by, on_update)
+
+
+def startup_click(ev: dict, k: dict, person: dict, log=lambda s: None, late: float | None = None) -> dict:
+    """"Set up everything" on the start-up card: every job still to do runs in order on this PC and the card redraws
+    after each step (REST edits of the same message). The tap itself is answered at once with the working card."""
+    import gchat
+    import startup
+    name = str(k.get("msg_name") or "")
+
+    def on_update(body: dict) -> None:
+        if name:
+            try:
+                gchat.patch_body(name, body)
+            except Exception as e:  # noqa: BLE001
+                log(f"start-up card edit failed: {type(e).__name__}: {str(e)[:120]}")
+
+    started = _run_startup(person["key"], on_update)
+    log(f"start-up sequence started by {person['key']}: {started}")
+    try:
+        _core().say(chat_push_convo(person), person["name"], "[tapped Set up everything on the start-up card]", channel="gchat", meta={"click": True})
+    except Exception:  # noqa: BLE001
+        pass
+    if not started:
+        return _reply_update(ev, startup.card())
+    todo = startup.pending(fresh=False)
+    body = startup.card(running=(todo[0]["rid"] if todo else ""), st=startup.status(fresh=False))
+    if late is not None:
+        on_update(body)
+        return {}
+    return _reply_update(ev, body)
+
+
+def chat_push_convo(person: dict) -> str:
+    import chat_push
+    return chat_push.agent_convo(person["key"])
 
 
 def audiences() -> list:

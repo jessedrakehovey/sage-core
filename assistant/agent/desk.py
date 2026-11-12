@@ -34,6 +34,7 @@ Generic: no organization, person or service is named here; names come from profi
   python assistant/agent/desk.py classify "<line>"       # desk or brain, and why
   python assistant/agent/desk.py run <job id>            # the child process (started by start())
   python assistant/agent/desk.py note <job id> "<line>"  # a milestone line into the ask's thread
+  python assistant/agent/desk.py later <job id> <minutes> "<what to look at>"   # a check-back on the job's own ask (pickup.py)
   python assistant/agent/desk.py status [--json]         # the jobs of the last day
 """
 from __future__ import annotations
@@ -148,8 +149,32 @@ def classify(text: str) -> tuple[str, str]:
     return "brain", "a question or a statement"
 
 
+# A card that was only POSTED INTO a thread (a browser step's checkpoint card in the day's thread) does not make
+# every later line there a reply to that card. 2026-11-10: one such card at 10:24 sent every WORK line of the day
+# ("Send [her] the final link", "Try again. Also I exported ...", "Send [him] the request link") to the read-only
+# chat brain, which could only promise. Only a line that reads as a yes / no / revision of a card stays with it.
+_CARD_YESNO = re.compile(r"^\W*(?:(?:yes|yep|yeah|ok(?:ay)?|sure|great|perfect|please|and|then|now|just)[\s,.!-]+)*"
+                         r"(?:yes|yep|yeah|ok(?:ay)?|sure|approved?|go ahead|looks? (?:good|great|fine)|perfect|good|"
+                         r"send(?: (?:it|that|this|them|both|the (?:card|text|message|email|draft|reply)))?|do it|"
+                         r"no|nope|not yet|don'?t(?: send(?: (?:it|that|this|them))?)?|cancel(?: (?:it|that|this))?|"
+                         r"hold(?: (?:it|that|off))?|wait|skip(?: (?:it|that|this))?|drop (?:it|that|this))"
+                         r"(?:[\s,.!-]+(?:please|now|thanks?|thank you|for now|(?:at|by|in|on|tomorrow|tonight|today|later|after|before)\b.{0,40}))*\W*$", re.I)
+_CARD_EDIT = re.compile(r"^\W*(?:(?:ok(?:ay)?|yes|no|and|but|also|please|just|actually)[\s,.!-]+)*"
+                        r"(?:change|make|reword|rewrite|rephrase|shorten|lengthen|edit|fix|tweak|soften|say|use|add|remove|"
+                        r"take out|cut|drop|swap|replace|sign)\b.{0,160}\b(?:it|that|this|card|draft|wording|message|text|email|"
+                        r"reply|line|sentence|greeting|sign-?off|tone|part)\b", re.I)
+
+
+def card_talk(text: str) -> bool:
+    """A short yes / no / when, or a revision that points at the draft: a line for the card in this thread."""
+    t = re.sub("[‘’]", "'", str(text or "")).strip()
+    if not t or len(t.split()) > 24:
+        return False
+    return bool(_CARD_YESNO.match(t)) or (len(t.split()) <= 18 and bool(_CARD_EDIT.match(t)))
+
+
 def wants(text: str, msg: dict, person: dict | None, tcard: dict | None = None, correction_kind: str = "",
-          card_here: bool = False, scope: str = "") -> str:
+          card_here: bool = False, scope: str = "", card_root: bool = True) -> str:
     """'' when the chat brain should take this line, else why the desk takes it."""
     if not cfg().get("enabled", True):
         return ""
@@ -159,13 +184,15 @@ def wants(text: str, msg: dict, person: dict | None, tcard: dict | None = None, 
         return ""
     if not msg.get("direct", True) or str(msg.get("why") or "").endswith("(weak)"):
         return ""
-    if tcard:
-        return ""                                      # a card's thread: approvals and revisions are the brain's
+    if tcard and card_root:
+        return ""                                      # a card's own thread: approvals and revisions are the brain's
     if scope == "business":
         return ""                                      # a team space: the brain's business-only turn
     t = str(text or "").strip()
     if not t or t.startswith("/") or t.startswith("["):
         return ""
+    if tcard and card_talk(t):
+        return ""                                      # a card sits in this thread and the line is about it
     if correction_kind in ("card", "redo", "fix") and not card_here:
         return "correction: the ask comes back and the desk does it"
     kind, why = classify(t)
@@ -216,7 +243,7 @@ def start(msg: dict, person: dict, text: str, ctx: dict, spawn: bool = True) -> 
            "convo": str(ctx.get("convo") or ""), "thread": str(ctx.get("thread") or ""), "space": str(ctx.get("space") or ""),
            "channel": str(ctx.get("channel") or msg.get("channel") or ""), "why": str(ctx.get("why") or ""),
            "correction": str(ctx.get("correction") or ""), "ask": ctx.get("ask") or {},
-           "status": "running", "notes": [], "cards": [], "reply": "", "pid": 0, "model": cfg().get("model")}
+           "resume": ctx.get("resume") or {}, "status": "running", "notes": [], "cards": [], "reply": "", "pid": 0, "model": cfg().get("model")}
     _save(job)
     if spawn:
         env = {**os.environ, "AGENT_DESK_JOB": jid}
@@ -282,7 +309,19 @@ def _running_text(job: dict) -> str:
     return "\n".join(lines)
 
 
+def _resume_text(job: dict) -> str:
+    """A pick-up after a browser step ended, or a check-back the desk set for itself (pickup.py)."""
+    try:
+        import pickup
+        return pickup.block(job)
+    except Exception as e:  # noqa: BLE001
+        log(f"{job.get('id')} pick-up block failed: {type(e).__name__}: {str(e)[:120]}")
+        return ""
+
+
 def _correction_text(job: dict) -> str:
+    if job.get("resume"):
+        return _resume_text(job)
     if not job.get("correction"):
         return ""
     ask = job.get("ask") or {}
@@ -427,6 +466,16 @@ def posted_cards(jid: str) -> list:
     return out
 
 
+_NO_REPLY = re.compile(r"\bNO[_ ]REPLY\b\.?", re.I)
+
+
+def quiet_pickup(reply: str, r: dict, posted: list, lines: list) -> bool:
+    """A pick-up turn stays silent when it failed, or answered NO_REPLY with no card posted and no deed line."""
+    if not r.get("ok"):
+        return True
+    return not posted and not [ln for ln in lines or [] if str(ln).strip()] and not _NO_REPLY.sub("", str(reply or "")).strip(" .\n\t")
+
+
 def finish_text(reply: str, r: dict, posted: list, lines: list, job: dict) -> str:
     if not r.get("ok"):
         err = str(r.get("error") or "")
@@ -546,6 +595,15 @@ def run(jid: str) -> dict:
         except Exception as e:  # noqa: BLE001
             log(f"{jid} apply failed: {type(e).__name__}: {str(e)[:120]}")
     posted = posted_cards(jid) + [str(a.get("ref") or "") for a in applied if a.get("kind") == "card"]
+    if job.get("resume") and quiet_pickup(reply, r, posted, lines):
+        # a pick-up with nothing new in the owner's hands (or one that failed) says nothing: the step's own report stands
+        job.update({"status": "done" if r.get("ok") else "failed", "reply": "", "error": str(r.get("error") or ""),
+                    "account": str(r.get("account") or ""), "cards": posted, "applied": applied, "ended": time.time(), "quiet": True})
+        _save(job)
+        log(f"{jid} {job['status']} in {job['seconds']}s (pick-up, nothing new to say) deeds={len(applied)} err={str(r.get('error') or '')[:120]!r}")
+        return job
+    if job.get("resume"):
+        reply = _NO_REPLY.sub("", str(reply or "")).strip()
     out = finish_text(reply, r, posted, lines, job)
     try:
         import reflex
@@ -568,15 +626,35 @@ def run(jid: str) -> dict:
 
 
 # ------------------------------------------------------------------ for the brain
+def _checkbacks(convo: str) -> list:
+    try:
+        import pickup
+        return [f"- I look again by myself at {time.strftime('%H:%M', time.localtime(float(x.get('due') or 0)))}: "
+                f"{str(x.get('what') or '')[:160]} (say so when asked 'are you done?'; never tell them to ask again)"
+                for x in pickup.waiting(convo)]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def block(convo: str, hours: float = 24.0) -> str:
     rows = jobs(hours, convo)
     if not rows:
         return ""
+    quiet = [j for j in rows if j.get("quiet")]
+    rows = [j for j in rows if not j.get("quiet")][-7:] + quiet[-1:]      # one line for the silent looks, never eight
+    rows.sort(key=lambda j: float(j.get("ts") or 0))
+    return _block(rows) +"".join("\n" + ln for ln in _checkbacks(convo))
+
+
+def _block(rows: list) -> str:
     lines = ["DESK WORK (asks you handed to your hands; they did or are doing the work themselves and reply in the thread. "
              "Answer 'is it done?' / 'where is it?' from this record; never redo it, never claim it, never promise it again):"]
     for j in rows[-8:]:
         hm = time.strftime("%H:%M", time.localtime(float(j.get("ts") or 0)))
         st = j.get("status")
+        if j.get("quiet"):
+            lines.append(f"- {hm} {j.get('text', '')[:120]!r} -> I looked again by myself; nothing new was in their hands, so nothing was said")
+            continue
         if st == "running":
             tail = f"running since {hm}" + (f"; so far: {' | '.join(n.get('text', '')[:80] for n in j.get('notes') or [] if not n.get('quiet'))}" if any(not n.get("quiet") for n in j.get("notes") or []) else "")
         elif st == "done":
@@ -606,6 +684,10 @@ def main() -> int:
         return 0 if j.get("status") == "done" else 2
     if a[:1] == ["note"] and len(a) >= 3:
         print(json.dumps(note(a[1], " ".join(a[2:])), ensure_ascii=False))
+        return 0
+    if a[:1] == ["later"] and len(a) >= 4:
+        import pickup
+        print(json.dumps(pickup.later(a[1], a[2], " ".join(a[3:])), ensure_ascii=False))
         return 0
     if a[:1] == ["status"]:
         if "--json" in a:

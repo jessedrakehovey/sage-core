@@ -141,6 +141,23 @@ def main():
             skipped += 1
             continue
         t0 = time.time()
+        if not a.dry_run:
+            # re-arm BEFORE the run (upgrade 5, 2026-11-08): a pass the scheduler kills mid-job leaves `started` newer than
+            # `last`, so the next pass knows this job did not finish and says so instead of counting it as never run
+            unfinished = str(st.get("started") or "") > str(st.get("last") or "")
+            if unfinished:
+                _log(f"{name}: previous run did not finish (started {st.get('started')}, killed or crashed); running again")
+            st["started"] = now.strftime("%Y-%m-%dT%H:%M:%S")
+            st["unfinished"] = int(st.get("unfinished", 0)) + (1 if unfinished else 0)
+            state[name] = st
+            try:
+                STATE.parent.mkdir(parents=True, exist_ok=True)
+                tmp = STATE.with_suffix(".tmp")
+                tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
+                tmp.replace(STATE)
+            except OSError:
+                pass
+        os.environ["SAGE_INITIATOR"] = "schedule"            # every ledger row a spine job writes says the clock set it off
         good, result = run_job(j, a.dry_run)
         ran += 1
         ok += good
@@ -148,7 +165,8 @@ def main():
         if not a.dry_run:
             fails = 0 if good else int(st.get("fails", 0)) + 1
             state[name] = {"last": now.strftime("%Y-%m-%dT%H:%M:%S"), "ok": good, "result": result,
-                           "secs": round(time.time() - t0, 1), "fails": fails}
+                           "secs": round(time.time() - t0, 1), "fails": fails, "started": st.get("started", ""),
+                           "unfinished": int(st.get("unfinished", 0))}
             _log(f"{name}: {'ok' if good else 'FAIL'} ({time.time() - t0:.1f}s) {result}")
             if fails and fails % 3 == 0:
                 _log(f"{name}: {fails} consecutive failures")

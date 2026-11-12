@@ -111,7 +111,7 @@ def recipe(row: dict) -> dict:
                 "also_url": "https://myaccount.google.com/apppasswords",
                 "how": "A console opens on the PC asking for the mailbox's Google app password (typed hidden). Make one at myaccount.google.com/apppasswords first."}
     if ct == "ics":
-        acct = str((row.get("check") or {}).get("account") or "")
+        acct = str((row.get("check") or {}).get("account") or (row.get("check") or {}).get("feed") or "")   # ics rows name it `feed`
         return {"kind": "terminal", "argv": [PY, "assistant/scripts/setup_creds.py", "calendar", acct], "label": "Enter calendar link",
                 "how": "A console opens asking for the calendar's secret iCal address (Google Calendar > Settings > the calendar > Secret address)."}
     if ct == "env":
@@ -132,7 +132,196 @@ def recipe(row: dict) -> dict:
 
 def _label(kind: str) -> str:
     return {"terminal": "Run setup", "env": "Enter token", "window": "Open sign-in window", "signin": "Sign in",
-            "open_url": "Open page", "mcp": "How to reconnect", "text": ""}.get(kind, "Run")
+            "open_url": "Open page", "mcp": "How to reconnect", "text": "", "job": "Run it"}.get(kind, "Run")
+
+
+_SIGNIN_URL = re.compile(r"signin_url=(\S+)")
+
+
+def _browser_up() -> bool:
+    """Is the agent's browser running? Replaceable in tests."""
+    try:
+        sys.path.insert(0, str(ROOT / "doer"))
+        import browser as agent_browser
+        return bool(agent_browser.alive())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _browser_close() -> None:
+    """A job that opened the agent's browser closes it again (the profile is shared with the doer). Replaceable in tests."""
+    try:
+        import browser as agent_browser
+        agent_browser.close_browser()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _login_fill(url: str) -> str:
+    """doer/login_fill.py on the page the job stopped at: SIGNED_IN / ALREADY / NEEDS_CODE / NO_ENTRY / FAILED. Replaceable in tests."""
+    r = subprocess.run([str(VENV_PY), "assistant/doer/login_fill.py", "--url", url], cwd=str(VAULT), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=120, creationflags=NO_WINDOW)
+    lines = [ln for ln in ((r.stdout or "") + "\n" + (r.stderr or "")).strip().splitlines() if ln.strip()]
+    return lines[-1] if lines else "FAILED no output"
+
+
+def _job(rc: dict, row: dict, by: str = "", retry: bool = True) -> dict:
+    """setup kind `job` (2026-11-04): a script the agent runs itself, in its own browser or on the PC, and reports in one
+    line. `%VENV%` in argv = the playwright venv's python. Exit 0 = done, anything else = failed with the last line.
+    Exit 2 = the site (Google, mostly) wants a sign-in: the owner is NEVER sent to the PC (the owner 2026-11-04: Sage is a
+    portal into the PC, everything happens in Chat). The agent signs in itself from its vault (login_fill.py on the
+    page the job stopped at) and runs the job again; a login the vault lacks becomes an Enter login card (the Chat
+    dialog, saved to the vault, then the job runs again by itself); a one-time code is the same card's advice to
+    add the code-generator secret, so codes are automatic from then on."""
+    argv = [str(VENV_PY) if a == "%VENV%" else (PY if a == "python" else str(a)) for a in (rc.get("argv") or [])]
+    if not argv:
+        return {"ok": False, "message": "this job has no command"}
+    if retry:                                     # the outer call: the agent's browser goes back to how it was found
+        was_up = _browser_up()
+        try:
+            return _job(rc, row, by, retry=None)
+        finally:
+            if not was_up and _browser_up():
+                _browser_close()
+    retry = retry is None                         # None = the first inner run (may retry once); False = the retry itself
+    try:
+        r = subprocess.run(argv, cwd=str(VAULT), capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=int(rc.get("timeout_s") or 600), creationflags=NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "state": "failed", "message": f"{row['name']}: it ran past {int(rc.get('timeout_s') or 600)} s and was stopped; tap again to retry."}
+    lines = [ln for ln in ((r.stdout or "") + "\n" + (r.stderr or "")).strip().splitlines() if ln.strip()]
+    last = lines[-1] if lines else ""
+    detail = re.sub(r"^[A-Z_]+(?: step=\S+)? status=\S+\s*", "", last).strip()      # "SHOTS_SETUP status=ok ..." / "CHAT_CONSOLE step=all status=ok ..."
+    if r.returncode == 0:
+        return {"ok": True, "state": "ok", "message": f"{row['name']}: done. {detail}".strip()}
+    if r.returncode == 2:
+        m = _SIGNIN_URL.search(detail)
+        url = m.group(1) if m else ""
+        site = _host(url) or "the site"
+        detail = _SIGNIN_URL.sub("", detail).strip()
+        line = _login_fill(url) if url else "FAILED the job named no sign-in page"
+        if line.startswith(("SIGNED_IN", "ALREADY")) and retry:
+            return _job(rc, row, by, retry=False)          # signed in from the vault: the job again, once
+        if line.startswith("NO_ENTRY"):
+            return {"ok": False, "state": "needs_login", "site": site,
+                    "message": f"{site} wants a sign-in and my vault has no login for it. Tap Enter login: it opens a form on top of chat, "
+                               f"goes straight to my vault, and I run {row['name']} again by myself."}
+        if line.startswith("NEEDS_CODE"):
+            return {"ok": False, "state": "needs_login", "site": site,
+                    "message": f"{site} asked for a one-time code after the password. Tap Enter login and put the code-generator secret in "
+                               f"(the 'can't scan?' text under the QR code in the account's 2-step settings); codes are mine from then on."}
+        why = re.sub(r"^FAILED\s*", "", line)[:160] if line.startswith("FAILED") else line[:160]
+        return {"ok": False, "state": "failed", "site": site,
+                "message": f"{site} wants a sign-in and mine did not go through ({why}). Tap Enter login to give me a fresh one, then I try again."}
+    return {"ok": False, "state": "failed", "message": f"{row['name']}: not done. {detail or last[-200:] or 'no output'}".strip()}
+
+
+def _signin_from_vault(name: str, url: str) -> dict:
+    """A site that wants a sign-in, done by the agent: its own browser (off-screen) at the page, the login from the vault.
+    -> ok / needs_login (with the site, for the Enter login dialog) / failed. Nothing waits on the PC's screen."""
+    site = _host(url) or name
+    was_up = _browser_up()
+    try:
+        sys.path.insert(0, str(ROOT / "doer"))
+        import browser as agent_browser
+        agent_browser.open_browser()
+        agent_browser.navigate(url)
+        time.sleep(4)
+        line = _login_fill(url)
+    except Exception as e:  # noqa: BLE001
+        line = f"FAILED {type(e).__name__}"
+    finally:
+        if not was_up and _browser_up():
+            _browser_close()
+    if line.startswith(("SIGNED_IN", "ALREADY")):
+        return {"ok": True, "state": "ok", "site": site, "message": f"{name}: signed in again from my vault."}
+    if line.startswith("NO_ENTRY"):
+        return {"ok": False, "state": "needs_login", "site": site,
+                "message": f"{name} is signed out and my vault has no login for {site}. Tap Enter login: it opens a form on top of chat, goes straight to my vault, and I sign in myself."}
+    if line.startswith("NEEDS_CODE"):
+        return {"ok": False, "state": "needs_login", "site": site,
+                "message": f"{site} asked for a one-time code after the password. Tap Enter login and add the code-generator secret (the 'can't scan?' text under the QR code in the account's 2-step settings); codes are mine from then on."}
+    why = re.sub(r"^FAILED\s*", "", line)[:160]
+    return {"ok": False, "state": "failed", "site": site, "message": f"{name}: my sign-in did not go through ({why}). Tap Enter login to give me a fresh one and I try again."}
+
+
+def _gap(rid: str, name: str, why: str, by: str) -> None:
+    """A repair the agent cannot yet do from chat is a build for itself (capability.py), never a step for the owner."""
+    try:
+        sys.path.insert(0, str(ROOT / "agent"))
+        import capability
+        d = capability._load()
+        ask = f"Fix the {name} connection from chat without anyone at the computer"
+        g = capability._find(d, by or "owner", ask) or capability.open_gap(d, "capability", ask, why, by or "owner", {}, "setup from chat")
+        if g and g.get("status") not in ("building", "built", "replayed", "capped"):
+            capability.file_build(d, g, by=by or "owner")
+        capability._save(d)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def run_chat(rid: str, by: str = "chat", space: str = "", thread: str = "") -> dict:
+    """The setup button pressed from CHAT (a connection card's "Set it up now", /signin, a job card): the chat-first
+    version of run(). Nothing it does waits on the PC's screen or opens a console there (the owner 2026-11-04: the agent
+    is 100% inside Google Chat, a portal into the PC):
+      a job row            runs (run -> _job: a sign-in on the way is the vault's)
+      a form row           its Chat form is posted where the owner is (chat_forms), or named
+      a sign-in / window   the agent signs in itself from the vault (off-screen); no login -> needs_login for Enter login
+      anything else        a build for the agent (capability gap), and one line saying so
+    -> {"ok", "state": ok | form | needs_login | failed | gap, "message", "site"?}."""
+    reg = next((r for r in _registry() if r.get("id") == rid), None)
+    row = next((r for r in rows() if r["id"] == rid), None)
+    if not reg and not row:
+        return {"ok": False, "state": "failed", "message": "no such connection"}
+    name = str((reg or row).get("name") or rid)
+    rc = recipe(reg) if reg else {"kind": row["kind"], "url": row.get("url", ""), "how": row.get("how", "")}
+    kind = str(rc.get("kind") or "")
+    if kind == "job":
+        return run(rid, by=by)
+    if _chat_form(rid):
+        posted = False
+        if str(space or "").startswith("spaces/"):
+            try:
+                import chat_forms
+                posted = chat_forms.post(rid, space, thread)
+            except Exception:  # noqa: BLE001
+                posted = False
+        res = {"ok": True, "state": "form", "message": (f"{name}: its form is in our chat now. Type it there and it is stored; nothing else to do."
+                                                       if posted else f"{name}: say 'set up {name}' here and its form comes up.")}
+        _record(rid, {"last": "form", "by": by, "result": res["message"][:200]})
+        return res
+    url = str(rc.get("url") or (row or {}).get("url") or "")
+    if kind in ("signin", "window") and url.startswith("http"):
+        res = _signin_from_vault(name, url)
+        _record(rid, {"last": "vault_signin", "by": by, "result": res["message"][:200], "state": res["state"]})
+        return res
+    _gap(rid, name, f"setup kind {kind or 'text'} has no chat path", by)
+    res = {"ok": False, "state": "gap",
+           "message": f"{name}: I can't fix this one from chat yet, so I've put building that on my own list. Nothing for you to do at a computer; I'll say here when it works."}
+    _record(rid, {"last": "gap", "by": by, "result": res["message"][:200], "state": "gap"})
+    return res
+
+
+def run_job_async(rid: str, by: str, done) -> bool:
+    """Run a job row on a thread and hand its result to `done(result)` (a Chat card edit): a job takes minutes, a tap
+    is answered in seconds. -> True when started."""
+    import threading
+    reg = next((r for r in _registry() if r.get("id") == rid), None)
+    if not reg:
+        return False
+
+    def work():
+        try:
+            res = run_chat(rid, by=by)
+        except Exception as e:  # noqa: BLE001
+            res = {"ok": False, "state": "failed", "message": f"{type(e).__name__}: {str(e)[:160]}"}
+        try:
+            done(res)
+        except Exception:  # noqa: BLE001
+            pass
+
+    threading.Thread(target=work, daemon=True, name=f"job-{rid}").start()
+    return True
 
 
 def _host(url: str) -> str:
@@ -140,6 +329,16 @@ def _host(url: str) -> str:
         return urllib.parse.urlparse(url).netloc.lower().replace("www.", "")
     except ValueError:
         return ""
+
+
+def _chat_form(rid: str) -> bool:
+    """A row whose values are typed in a Chat dialog. A job row is not one: its button runs the job (here and in Chat)."""
+    try:
+        import chat_forms
+        s = chat_forms.spec(rid)
+        return bool(s) and s.get("store") != "job"
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def rows() -> list:
@@ -151,6 +350,10 @@ def rows() -> list:
         rid = str(row.get("id") or "")
         s = st.get(rid, {})
         rc = recipe(row)
+        if _chat_form(rid):
+            # typed in through a Google Chat form, never here (chat_forms.py; the owner 2026-11-01: "Make all data entry for
+            # anything go through google chat never mission control"): no console button, no phone page
+            rc = {"kind": "chat", "label": "", "how": "Typed in through Google Chat: ask the agent to set it up and a form opens there."}
         for u in _URL_RE.findall(json.dumps(row)):
             seen_hosts.add(_host(u))
         out.append({"id": rid, "name": row.get("name") or rid, "lane": row.get("lane", ""), "owner": row.get("owner", ""),
@@ -185,12 +388,13 @@ def summary_block(max_rows: int = 40) -> str:
     if not rs:
         return ""
     bad = [r for r in rs if r["state"] in ("dead", "not_configured")]
-    L = [f"CONNECTIONS ({len(rs)} known; owners connect or fix any of them on Mission Control's Setup page, /setup, one button each; "
-         f"you never ask for a password or a code in chat):"]
+    L = [f"CONNECTIONS ({len(rs)} known; anything typed in - keys, tokens, app passwords - comes as a Chat form code posts, never "
+         f"Mission Control; you never ask for a password or a code as a chat message):"]
     for r in rs[:max_rows]:
         L.append(f"- {r['name']} [{r['lane']}]: {r['state']}" + (f" ({r['detail'][:60]})" if r.get("detail") else ""))
     if bad:
-        L.append("Not working right now: " + ", ".join(r["name"] for r in bad[:8]) + ". If an ask needs one of these, say which and point at the Setup page.")
+        L.append("Not working right now: " + ", ".join(r["name"] for r in bad[:8]) + ". If an ask needs one of these, say which and call "
+                 "`blocked` with that connection: its Chat form is posted for them.")
     try:
         import connect                                  # chat setup (2026-10-16): which rows the owner can do right in chat
         hint = connect.chat_hint()
@@ -337,6 +541,8 @@ def run(rid: str, action: str = "", by: str = "") -> dict:
     row = next((r for r in rows() if r["id"] == rid), None)
     if not row:
         return {"ok": False, "message": "no such connection"}
+    if row["kind"] == "chat":
+        return {"ok": True, "message": row["how"]}
     reg = next((r for r in _registry() if r.get("id") == rid), None)
     rc = recipe(reg) if reg else {"kind": row["kind"], "url": row.get("url", ""), "how": row["how"]}
     kind = rc.get("kind")
@@ -361,9 +567,11 @@ def run(rid: str, action: str = "", by: str = "") -> dict:
         res = {"ok": True, "message": f"Opened {_host(rc['url'])} in the PC's browser. {rc.get('how', '')}".strip()}
     elif kind == "mcp":
         res = {"ok": True, "message": rc.get("how", "")}
+    elif kind == "job":
+        res = _job(rc, row, by)
     else:
         res = {"ok": True, "message": rc.get("how") or "Nothing to run for this one."}
-    _record(rid, {"last": kind, "by": by, "result": res.get("message", "")[:200]})
+    _record(rid, {"last": kind, "by": by, "result": res.get("message", "")[:200], **({"state": res["state"]} if res.get("state") else {})})
     return res
 
 

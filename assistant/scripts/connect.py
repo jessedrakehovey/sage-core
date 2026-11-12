@@ -273,8 +273,13 @@ def paste_hint(rid: str) -> str:
 
 def chat_hint() -> str:
     """One line for the agent's CONNECTIONS block: which connections can be set up in chat."""
-    names = [f"{r.get('name', r['id'])} (say: set up {r['id'].split('-')[-1]})" for r in chat_rows()]
-    return ("Chat setup available for: " + "; ".join(names) + ". A one-time setup token they paste is claimed by code and removed from the record; passwords and codes still never.") if names else ""
+    try:
+        import chat_forms
+        names = [f"{s['name']} [connection: {s['rid']}]" for s in chat_forms.rows()]
+    except Exception:  # noqa: BLE001
+        names = [f"{r.get('name', r['id'])} [connection: {r['id']}]" for r in chat_rows()]
+    return ("Chat forms (typed in on top of the chat, never Mission Control) for: " + "; ".join(names)
+            + ". Code posts the form when they ask to set one up, or after your `blocked` naming it.") if names else ""
 
 
 # ------------------------------------------------------------------ the morning brief's Connections line
@@ -291,6 +296,12 @@ def _fix_for(r: dict) -> str:
     say = str(ch.get("say") or "").strip()
     if say:
         return f'say "{say}" here'
+    try:                               # typed in: a form in Chat, never a Mission Control button (2026-11-01)
+        import chat_forms
+        if chat_forms.spec(str(r.get("id") or "")):
+            return "ask me in Chat and its form comes up"
+    except Exception:  # noqa: BLE001
+        pass
     label = ""
     try:
         import setup_actions
@@ -300,7 +311,7 @@ def _fix_for(r: dict) -> str:
         label = str(s.get("page_label") or s.get("label") or "").strip()
     if label:
         who = " (she signs in)" if str(r.get("owner") or "") == "owner6" else ""
-        return f"Setup page: {label}{who}"
+        return "say 'set it up' in chat and its card comes up" + who
     renew = str(r.get("renew") or "").strip()
     return renew[:80] if renew else "no setup step recorded"
 

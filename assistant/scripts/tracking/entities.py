@@ -105,8 +105,11 @@ def money_rows(fus: list, registers: dict, now) -> list:
         if m:
             due = C.parse_any(m.group(1)) or _mdy(m.group(1), now)
         due = due or C.parse_any(f.get("fire_at"))
+        # a bill the forecast found in the card history charges itself (autopay); one from a mail needs paying
         out.append(_row("obligation", f"fu:{f.get('id')}", subj[:70], str(f.get("lane") or "money"), str(f.get("step") or "bill"),
-                        "pay / confirm it is paid", due, now, waiting_kind="vendor", amount=_amount(subj), source="followup"))
+                        "pay / confirm it is paid", due, now, waiting_kind="vendor",
+                        amount=_amount(subj) or _amount((f.get("action") or {}).get("instruction")), source="followup",
+                        autopay=str(f.get("created_by") or "") == "money.forecast"))
     for r in registers.get("money") or []:
         if r.get("done") or str(r.get("kind") or "") in ("quarterly", "tax_season"):
             continue
@@ -116,7 +119,8 @@ def money_rows(fus: list, registers: dict, now) -> list:
         kind = str(r.get("kind") or "bill")
         out.append(_row("obligation", f"reg:{r.get('name')}", f"{r.get('name')} ({kind})", "money", kind,
                         "schedule the payment" if not r.get("scheduled") else f"paid on {r.get('scheduled')}", due, now,
-                        waiting_kind="vendor", amount=r.get("amount"), hard=kind in ("insurance", "registration", "loan"), source="register"))
+                        waiting_kind="vendor", amount=r.get("amount"), hard=kind in ("insurance", "registration", "loan"), source="register",
+                        autopay=bool(r.get("scheduled"))))
     return out
 
 

@@ -39,11 +39,17 @@ class GChat(Channel):
         except Exception:  # noqa: BLE001
             return False
 
-    def post(self, space: str, text: str, thread: str = "") -> str:
-        return self.mod.post(space, text, thread)
+    def post(self, space: str, text: str, thread: str = "", key: str = "") -> str:
+        return self.mod.post(space, text, thread, key)
 
-    def post_body(self, space: str, body: dict, thread: str = "") -> str:
-        return self.mod.post_body(space, body, thread)
+    def post_body(self, space: str, body: dict, thread: str = "", key: str = "") -> str:
+        return self.mod.post_body(space, body, thread, key)
+
+    def adopt_thread(self, space: str, thread: str, text: str = "") -> bool:
+        return self.mod.adopt_thread(space, thread, text)
+
+    def thread_title(self, space: str, subject: str, title: str = "", mark=None) -> bool:
+        return self.mod.thread_title(space, subject, title, mark)
 
     def patch(self, name: str, text: str) -> bool:
         return self.mod.patch(name, text)

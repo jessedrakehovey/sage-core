@@ -9,40 +9,263 @@
       "name": "Editor handoff build",
       "lane": "wedding",
       "what": "package a wedding for the remote editor (editor-handoff skill): 1080p proxies, audio, reference render, READ ME, straight into Dropbox; hours of rendering, best overnight",
-      "cmd": ["{resolve_python}", "editor/handoff.py", "build", "{couple}"],
-      "args": {"couple": "the couple as the Resolve project names them, e.g. Sloane & Bram"},
-      "options": {"editor": ["--editor", "{editor}"]},
-      "aliases": ["handoff", "editor handoff", "handoff build", "package for corwin", "corwin handoff", "build the handoff", "export for corwin"]
+      "cmd": [
+        "{resolve_python}",
+        "editor/handoff.py",
+        "build",
+        "{couple}"
+      ],
+      "args": {
+        "couple": "the couple as the Resolve project names them, e.g. Sloane & Bram"
+      },
+      "options": {
+        "editor": [
+          "--editor",
+          "{editor}"
+        ]
+      },
+      "aliases": [
+        "handoff",
+        "editor handoff",
+        "handoff build",
+        "package for corwin",
+        "corwin handoff",
+        "build the handoff",
+        "export for corwin"
+      ]
     },
     {
       "key": "handoff_return",
       "name": "Editor handoff return",
       "lane": "wedding",
       "what": "bring the editor's returned Resolve project back: every clip online, his timelines added to the live project under his name",
-      "cmd": ["{resolve_python}", "editor/handoff.py", "return", "{couple}", "{drp}"],
-      "args": {"couple": "the couple as the Resolve project names them", "drp": "full path of the .drp he sent back"},
-      "options": {"media": ["--media", "{media}"], "editor": ["--editor", "{editor}"]},
-      "aliases": ["handoff return", "corwin sent the project back", "bring corwin's edit in", "import corwin's drp", "editor return"]
+      "cmd": [
+        "{resolve_python}",
+        "editor/handoff.py",
+        "return",
+        "{couple}",
+        "{drp}"
+      ],
+      "args": {
+        "couple": "the couple as the Resolve project names them",
+        "drp": "full path of the .drp he sent back"
+      },
+      "options": {
+        "media": [
+          "--media",
+          "{media}"
+        ],
+        "editor": [
+          "--editor",
+          "{editor}"
+        ]
+      },
+      "aliases": [
+        "handoff return",
+        "corwin sent the project back",
+        "bring corwin's edit in",
+        "import corwin's drp",
+        "editor return"
+      ]
     },
     {
       "key": "vault_purge_banks",
       "name": "Bank login purge",
       "lane": "money",
       "what": "delete every bank or credit union login from the doer's login vault (Recycle Bin too), keep the ones in `keep`, then say in chat what went, how many are left and where plain copies still sit (paths only); no model, nothing sent",
-      "cmd": ["python", "assistant/doer/vault_purge.py"],
+      "cmd": [
+        "python",
+        "assistant/doer/vault_purge.py"
+      ],
       "args": {},
-      "match": ["bank", "chase", "wells fargo", "wellsfargo", "relay", "relayfi", "citi", "citibank", "bofa", "bank of america", "bankofamerica", "capital one", "capitalone", "credit union", "usbank", "us bank", "simplefin", "american express", "amex", "schwab"],
-      "keep": ["plaid", "venmo", "paypal"],
-      "aliases": ["purge bank logins", "remove bank logins", "delete bank logins", "purge bank passwords", "bank login purge", "remove bank passwords"]
+      "match": [
+        "bank",
+        "chase",
+        "wells fargo",
+        "wellsfargo",
+        "relay",
+        "relayfi",
+        "citi",
+        "citibank",
+        "bofa",
+        "bank of america",
+        "bankofamerica",
+        "capital one",
+        "capitalone",
+        "credit union",
+        "usbank",
+        "us bank",
+        "simplefin",
+        "american express",
+        "amex",
+        "schwab"
+      ],
+      "keep": [
+        "plaid",
+        "venmo",
+        "paypal"
+      ],
+      "aliases": [
+        "purge bank logins",
+        "remove bank logins",
+        "delete bank logins",
+        "purge bank passwords",
+        "bank login purge",
+        "remove bank passwords"
+      ]
     },
     {
       "key": "core_publish",
       "name": "Publish the template update",
       "lane": "personal",
       "what": "push the template checkout (core_sync.json core_root) to its public repository and cut a release, after every privacy gate (audit, people, history) and the template's tests pass again at the tap; nothing is pushed when one fails",
-      "cmd": ["python", "assistant/scripts/core_release.py", "publish"],
+      "cmd": [
+        "python",
+        "assistant/scripts/core_release.py",
+        "publish"
+      ],
       "args": {},
-      "aliases": ["publish sage-core", "publish the template", "release sage-core", "push sage-core", "publish core", "sage-core release"]
+      "aliases": [
+        "publish sage-core",
+        "publish the template",
+        "release sage-core",
+        "push sage-core",
+        "publish core",
+        "sage-core release"
+      ]
+    },
+    {
+      "key": "shoot_day_build",
+      "name": "Shoot-day app build",
+      "lane": "wedding",
+      "what": "build the ONE Shoot Day phone app (every wedding in apps/shoot-day/weddings/ inside; it opens on today's or the next wedding by itself); with deploy=yes publish it too",
+      "cmd": [
+        "python",
+        "apps/shoot-day/build.py"
+      ],
+      "args": {},
+      "options": {
+        "deploy": [
+          "--deploy"
+        ]
+      },
+      "aliases": [
+        "build the shoot day app",
+        "shoot day app",
+        "build the app for the wedding",
+        "rebuild the shoot-day app",
+        "shoot-day build"
+      ]
+    },
+    {
+      "key": "shoot_day_agent",
+      "name": "Shoot-day agent start",
+      "lane": "wedding",
+      "what": "start the day-of agent for one wedding now (alerts + chat inside the shoot-day app); the spine starts it by itself on the wedding day",
+      "cmd": [
+        "python",
+        "apps/shoot-day/shoot_day.py",
+        "start",
+        "{slug}"
+      ],
+      "args": {
+        "slug": "the wedding's file name without .json"
+      },
+      "aliases": [
+        "start the shoot day agent",
+        "shoot day agent",
+        "start the day-of agent",
+        "wedding agent on"
+      ]
+    },
+    {
+      "key": "gear_hold",
+      "name": "ShareGrid gear hold",
+      "lane": "wedding",
+      "what": "put the gear packed for one wedding on hold on ShareGrid (the day before, the day and the day after) - the doer blocks the dates on the owner's listings",
+      "cmd": [
+        "python",
+        "gear/gear.py",
+        "hold",
+        "{slug}",
+        "--queue"
+      ],
+      "args": {
+        "slug": "the wedding's file name without .json"
+      },
+      "aliases": [
+        "sharegrid hold",
+        "block the gear on sharegrid",
+        "hold the gear",
+        "mark gear unavailable",
+        "gear hold"
+      ]
+    },
+    {
+      "key": "gear_batteries",
+      "name": "Batteries charged / used",
+      "lane": "wedding",
+      "what": "record a battery group as charged or used in the gear inventory (gear/batteries.json): groups canon, nikon, npf, v-mount, neewer, smallrig, rode-go, rode-pro, aa",
+      "cmd": [
+        "python",
+        "gear/gear.py",
+        "batteries",
+        "{state}",
+        "{group}"
+      ],
+      "args": {
+        "state": "charged or used",
+        "group": "the battery group id"
+      },
+      "aliases": [
+        "batteries charged",
+        "batteries used",
+        "charged the batteries",
+        "mark batteries charged"
+      ]
+    },
+    {
+      "key": "gear_media",
+      "name": "Memory card state",
+      "lane": "wedding",
+      "what": "record a memory card's state in the gear inventory (gear/media.json): ready, shot, offloaded or verified; `gear/gear.py media` lists the cards and their serials",
+      "cmd": [
+        "python",
+        "gear/gear.py",
+        "media",
+        "set",
+        "{card}",
+        "{state}"
+      ],
+      "args": {
+        "card": "the card's volume serial (gear/gear.py media)",
+        "state": "ready, shot, offloaded or verified"
+      },
+      "aliases": [
+        "card offloaded",
+        "card formatted",
+        "mark the card",
+        "memory card state"
+      ]
+    },
+    {
+      "key": "gear_media_scan",
+      "name": "Memory card scan",
+      "lane": "wedding",
+      "what": "learn every card's state from the card-ingest manifests on the storage drives (which cards were offloaded and verified, which were cleared)",
+      "cmd": [
+        "python",
+        "gear/gear.py",
+        "media",
+        "scan"
+      ],
+      "args": {},
+      "aliases": [
+        "scan the cards",
+        "which cards are offloaded",
+        "media scan",
+        "card status"
+      ]
     }
   ]
 }

@@ -58,7 +58,7 @@ USER_AGENT = "sage-money-lane/1 (read-only)"
 PLAID_VERSION = "2020-09-14"
 ENV_URLS = {"sandbox": "https://sandbox.plaid.com", "production": "https://production.plaid.com"}
 READ_PATHS = frozenset({"/accounts/balance/get", "/transactions/sync"})
-SETUP_PATHS = frozenset({"/link/token/create", "/item/public_token/exchange"})
+SETUP_PATHS = frozenset({"/link/token/create", "/link/token/get", "/item/public_token/exchange"})   # /link/token/get: Hosted Link's result
 ALLOWED_PATHS = READ_PATHS | SETUP_PATHS
 LINK_JS = "https://cdn.plaid.com/link/v2/stable/link-initialize.js"
 
@@ -154,6 +154,13 @@ class Client:
                              e.code, str(err.get("error_type") or "")) from None
 
 
+def redirect_refused(e: PlaidError) -> bool:
+    """Plaid refusing the redirect_uri. Its real wording is "OAuth redirect URI must be configured in the
+    developer dashboard" (a space, not an underscore: 2026-11-01, that miss kept the phone page stuck)."""
+    m = str(e.message or "").lower().replace("_", " ")
+    return "redirect uri" in m
+
+
 def make_client(f: dict | None = None, env: str = "", opener=None) -> Client | None:
     f = f or feed()
     cid, sec = creds(f)
@@ -163,8 +170,12 @@ def make_client(f: dict | None = None, env: str = "", opener=None) -> Client | N
 
 
 # ------------------------------------------------------------------ setup: Link (the owner signs in at Plaid, never here)
-def link_token(client: Client, f: dict, access_token: str = "") -> str:
-    """POST /link/token/create. With access_token: update mode (re-sign-in for an existing item)."""
+def link_token(client: Client, f: dict, access_token: str = "", hosted: bool = False):
+    """POST /link/token/create. With access_token: update mode (re-sign-in for an existing item).
+    hosted=True: Plaid's Hosted Link (2026-11-01, the owner: "all data entry through Google Chat, never Mission
+    Control"): Plaid hosts the whole sign-in at secure.plaid.com, OAuth banks included, so a Chat button opens
+    it and no page of ours is involved; returns (link_token, hosted_link_url) and the result is read back with
+    /link/token/get (hosted_results)."""
     body = {"client_name": str(f.get("client_name") or DEFAULT_FEED["client_name"]), "user": {"client_user_id": "owner"},
             "country_codes": list(f.get("country_codes") or ["US"]), "language": str(f.get("language") or "en")}
     if access_token:
@@ -172,13 +183,43 @@ def link_token(client: Client, f: dict, access_token: str = "") -> str:
     else:
         body["products"] = list(f.get("products") or ["transactions"])
         body["transactions"] = {"days_requested": int(f.get("days_requested") or 730)}
-    if f.get("redirect_uri"):
+    if hosted:
+        body["hosted_link"] = {}
+    elif f.get("redirect_uri"):
         body["redirect_uri"] = str(f["redirect_uri"])
     r = client.post("/link/token/create", body, setup=True)
     tok = str(r.get("link_token") or "")
     if not tok:
         raise PlaidError("NO_LINK_TOKEN", "Plaid returned no link_token")
+    if hosted:
+        url = str(r.get("hosted_link_url") or "")
+        if not url.startswith("https://"):
+            raise PlaidError("NO_HOSTED_LINK", "Plaid returned no hosted_link_url")
+        return tok, url
     return tok
+
+
+def hosted_results(client: Client, link_token_: str) -> dict:
+    """POST /link/token/get -> {"done": bool, "exited": bool, "public": [(public_token, metadata)]}. A session
+    that finished with a linked bank carries its public token(s) in results.item_add_results (newer) or
+    on_success (older); an update-mode session (re-sign-in) finishes with no new public token."""
+    r = client.post("/link/token/get", {"link_token": str(link_token_)}, setup=True)
+    out = {"done": False, "exited": False, "public": []}
+    for sess in r.get("link_sessions") or []:
+        if not isinstance(sess, dict):
+            continue
+        res = sess.get("results") or {}
+        adds = [x for x in (res.get("item_add_results") or []) if isinstance(x, dict) and x.get("public_token")]
+        ok = sess.get("on_success") or {}
+        if not adds and ok.get("public_token"):
+            adds = [{"public_token": ok["public_token"], **(ok.get("metadata") or {})}]
+        for a in adds:
+            out["public"].append((str(a["public_token"]), {"institution": a.get("institution") or {}, "accounts": a.get("accounts") or []}))
+        if sess.get("finished_at") or adds or ok:
+            out["done"] = True
+        if sess.get("on_exit") and not adds:
+            out["exited"] = True
+    return out
 
 
 def exchange(client: Client, public_token: str) -> tuple:
@@ -337,7 +378,7 @@ def setup(update_item: str = "", env: str = "", open_browser: bool = True, opene
         tok = link_token(client, f, access_token=access)
     except PlaidError as e:
         hint = ""
-        if "redirect_uri" in e.message.lower():
+        if redirect_refused(e):
             hint = "  (register the redirect URI in dashboard.plaid.com > Team Settings > API, or clear money.json feeds[plaid].redirect_uri)"
         print(f"LINK_TOKEN_ERROR {e}{hint}")
         _status(error=f"Link could not start: {e.code}", configured=True)

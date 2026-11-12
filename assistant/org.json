@@ -14,5 +14,8 @@
  "phone_nudge_mark": "example-SEND",
  "phone_token_header": "X-example-Token",
  "chat_reader": "owner3@example.invalid",
+ "chat_thread_keys": true,
+ "chat_thread_subjects": [],
+ "_chat_thread_note": "agent/thread_keys.py (the owner 2026-11-04): a Chat post with no thread of its own joins its SUBJECT's thread instead of opening a new one, and the first post under a subject is a one-line header that names the thread. chat_thread_subjects lists the organization's subjects in priority order, e.g. [{\"name\": \"ticket\", \"regex\": \"\\\\b(\\\\d{6}-\\\\d{1,2})\\\\b\", \"days\": 30, \"label\": \"WO {0}\"}, {\"name\": \"unit\", \"regex\": \"\\\\b([A-D]\\\\d{2})\\\\b\", \"days\": 7, \"label\": \"{0}\"}]; none = one thread per agent per day per space. chat_thread_keys false = every post opens its own thread.",
  "semantic_python": "~/.venvs/vault-mem/Scripts/python.exe"
 }

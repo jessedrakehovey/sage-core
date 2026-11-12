@@ -1,0 +1,14 @@
+{
+ "_doc": "Seed D: the owner-chase loop (scripts/tracking/chase.py) as a chain of operators the record is read against before a step fires (agent/preconditions.py explain / applicable). The chase item is the record: its sends / first_sent / last_sent counters read as outreach history, as_of is stamped by the loop each tick. UNKNOWN (a stale or unstamped record) never advances; MOOT (answered, dropped) fires nothing; the plain-words reading rides on the nudge as its advice. Every step stays what it was: a line or a card for the owner, nothing sent to anyone.",
+ "chain": "owner-chase",
+ "initial": "waiting",
+ "terminal_statuses": ["answered", "dropped", "parked"],
+ "operators": [
+  {"id": "first_ask", "precond": [], "effect": "asked_once", "gated": false,
+   "script": "one nudge line (or card) to the owner about the item that waits on them"},
+  {"id": "second_ask", "precond": ["asked_once", "days_since_ask>=1"], "effect": "asked_twice", "gated": false,
+   "script": "the same ask once more, a day or more later, when nothing came back"},
+  {"id": "fold", "precond": ["asked_twice", "days_since_ask>=1"], "effect": "escalated", "gated": false,
+   "script": "no more cards: the item rides the daily folded line until the owner answers or park_days pass"}
+ ]
+}

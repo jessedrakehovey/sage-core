@@ -71,6 +71,9 @@ _FACT_VERB = re.compile(r"\bI (?:still |just |simply |really |also |truly )?(?:c
 # ... but the blocker is the owner's own: not a gap, the chat is their portal (said once)
 _OWNER_ONLY = {
     "protected": re.compile(r"\breset\b.*\bpassword\b|\b(?:pay|payment|transfer|purchase|buy)\b|\bdelete\b|\bfootage\b|"
+                            # the money boundary said in passing ("I can't move money myself") is the rule, not a gap
+                            # (2026-11-09: it turned a full answer into "On it." and a seven-hour build)
+                            r"\bmov(?:e|es|ed|ing) (?:any |the |your |their )?(?:money|funds)\b|\b(?:enter|type) (?:a |the |your )?card (?:number|details)\b|"
                             r"never change|not allowed to|\bprice\b.*\bpromise\b|\bcredential|permission or a secret|protected core", re.I),
     "signin": re.compile(r"\bsign(?:ed)?[- ]?(?:in|out)\b|\blog(?:ged)? ?in\b|\bpassword\b|\bpasscode\b|\bverification code\b|"
                          r"\b2fa\b|two-factor|setup page|\bsign-in\b", re.I),
@@ -316,6 +319,22 @@ LINE_BUILDING = "That piece isn't something I can do yet, so I'm building it now
 # The bridge replaces the turn's "can't" reply with this; a replay that fails again says nothing and is refiled.
 ACK_LINE = "On it."
 LINE_AGAIN = "That still didn't take, so I'm building it a different way; I'll finish this here when it lands."
+
+
+_QUESTION = re.compile(r"\?\s*$|^(?:are|is|was|were|do|does|did|can|could|will|would|should|have|has|how|what|when|where|which|who|why)\b", re.I)
+ANSWER_MIN_CHARS = 160
+
+
+def answers_anyway(ask: str, reply: str) -> bool:
+    """True when the owner asked a QUESTION and the reply, without its "can't" sentences, still says something real.
+    That reply is posted as it is; the gap is still filed and built behind it. Before this the whole reply was
+    replaced by the one-word receipt, so a question about two things got "On it." and its answer seven hours later
+    (2026-11-09 16:53 -> 23:38, after "Are you still working on that?")."""
+    ask = str(ask or "").strip().replace("\u2019", "'")
+    if not any(_QUESTION.search(s.strip()) for s in re.split(r"(?<=[.!?])\s+|\n+", ask) if s.strip()):
+        return False
+    rest = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", str(reply or "")) if s.strip() and not _CANT.search(s)]
+    return len(" ".join(rest)) >= ANSWER_MIN_CHARS
 
 
 def after_turn(person: dict, text: str, reply: str, applied: list, ctx: dict) -> str:

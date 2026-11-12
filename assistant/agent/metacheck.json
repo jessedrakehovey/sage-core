@@ -19,7 +19,7 @@
     },
     "send_customer_text": {
       "stakes": "high",
-      "exec_kinds": ["text_send"],
+      "exec_kinds": ["text_send", "imessage_send", "sms_send"],
       "markers": ["TEXT PREVIEW", "SMS PREVIEW"],
       "audiences": ["customer", "prospect"],
       "unknown_audience": true,

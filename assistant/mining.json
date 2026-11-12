@@ -56,7 +56,23 @@
   "noise": "\\b(verification code|your code is|one-time|otp|unsubscribe|reply stop|flash sale|% off|promo code|liked|loved|laughed at|emphasized|questioned|disliked)\\b|^\\d{4,8}$|wm\\.attn\\.tv|^example-SEND",
   "chat_handled_by_agent": "\\b(remind me|put (?:it|that|this|the \\w+) on (?:my|the|our) calendar|add (?:it|that|this|the \\w+) to (?:my|the|our) calendar|schedule (?:a|the|an)|set up a call)\\b",
   "min_sentence_chars": 8,
-  "flag_line": "^\\W*(?:flags?|recommended|budget|pricing|wants)\\s*:"
+  "flag_line": "^\\W*(?:flags?|recommended|budget|pricing|wants)\\s*:",
+  "bulk": {
+   "_doc": "Mass and marketing texts get no hold card (2026-10-16 political 'Stop=End' text, 2026-10-19 Ragamuffin loyalty promo). opt_out matches from anyone; for a sender who is not a lead / couple / vendor / family / owner: a short code (<= short_code_max_digits) or toll-free number always, promo words or a link only when the sender is not a saved contact.",
+   "enabled": true,
+   "opt_out": "\\bstop\\s*=\\s*(?:end|quit|stop|cancel|opt\\s*out)\\b|\\b(?:reply|text|txt|send)\\s+(?:\"|')?stop\\b|\\bstop\\s+to\\s+(?:end|quit|cancel|stop|opt\\s*-?\\s*out|unsubscribe)\\b|\\bopt\\s*-?\\s*out\\b|\\bmsg\\s*(?:&|and)\\s*data rates\\b",
+   "promo": "\\b(loyalty|rewards?|members?(?:hip)?|deals?|sale|coupon|promo\\w*|discount\\w*|double (?:stars|points)|bonus points|shop now|order now|limited time|exclusive offer|free shipping|bogo)\\b|\\d+\\s*%\\s*off\\b|https?://|\\bwww\\.",
+   "toll_free": [
+    "800",
+    "833",
+    "844",
+    "855",
+    "866",
+    "877",
+    "888"
+   ],
+   "short_code_max_digits": 6
+  }
  },
  "classes": {
   "_doc": "Who the sender is -> which lane the proposal lands in and who gets the card. Owners' own words (chat) go to their own lane.",

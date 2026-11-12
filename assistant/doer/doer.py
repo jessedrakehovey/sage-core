@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -109,6 +110,8 @@ ALLOWED = ",".join([
     "Bash(python assistant/doer/login_fill.py:*)",
     "Bash(python assistant/doer/report.py checkpoint:*)",
     "Bash(python assistant/doer/report.py note:*)",           # the milestone note (notes.py, 2026-10-28)
+    "Bash(python assistant/doer/report.py login:*)",          # the sign-in card: Enter login / I'll sign in myself (2026-11-03)
+    "Bash(python assistant/doer/report.py evidence:*)",       # evidence.json written by code, no path to type (2026-11-10)
     "Bash(python assistant/doer/vault.py has:*)",
     f"mcp__{MCP}__browser_navigate", f"mcp__{MCP}__browser_navigate_back", f"mcp__{MCP}__browser_snapshot",
     f"mcp__{MCP}__browser_click", f"mcp__{MCP}__browser_type", f"mcp__{MCP}__browser_fill_form",
@@ -231,6 +234,17 @@ def set_status(t: dict, phase: str, now: str | None = None) -> None:
         STATUS.write_text(body, encoding="utf-8")
     except OSError as e:
         log(f"status write failed: {type(e).__name__}")
+    _live("touch", str(t.get("id") or ""), " ".join(str(phase).split())[:200])
+
+
+def _live(fn: str, *args):
+    """The live card in chat (livecard.py, 2026-11-03): start / touch / finish, never a reason for a job to fail."""
+    try:
+        import livecard
+        return getattr(livecard, fn)(*args)
+    except Exception as e:  # noqa: BLE001
+        log(f"live card {fn} failed: {type(e).__name__}: {str(e)[:120]}")
+        return None
 
 
 def _phase(mk: str, arg: str) -> str:
@@ -256,6 +270,17 @@ def _asks_code(qid: str) -> bool:
         return bool((((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("ask_code"))
     except Exception:  # noqa: BLE001
         return False
+
+
+def _login_card(qid: str) -> dict:
+    """The exec payload of a sign-in card (report.py login) when `qid` is one, else {}."""
+    try:
+        import cards
+        c = cards._read(cards.LIVE / f"{qid}.json") or next((c for c in cards._live() if c.get("id") == qid), None) or {}
+        p = (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {})
+        return p if p.get("login") else {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 # ------------------------------------------------------------------ the model turn
@@ -301,11 +326,16 @@ def _settings(out_dir: Path) -> Path:
     import click_guard
     click_guard.reset(out_dir)
     py, g, d = Path(sys.executable).as_posix(), (HERE / "click_guard.py").as_posix(), out_dir.as_posix()
+    eg = (HERE / "egress.py").as_posix()
     cfg = {"hooks": {
         "PostToolUse": [{"matcher": f"mcp__{MCP}__browser_(click|evaluate)",
                          "hooks": [{"type": "command", "command": f'"{py}" "{g}" --hook post "{d}"', "timeout": 10}]}],
         "PreToolUse": [{"matcher": f"mcp__{MCP}__.*",
-                        "hooks": [{"type": "command", "command": f'"{py}" "{g}" --hook pre "{d}"', "timeout": 10}]}],
+                        "hooks": [{"type": "command", "command": f'"{py}" "{g}" --hook pre "{d}"', "timeout": 10}]},
+                       # the egress fence (egress.py, upgrade 14): a navigate to a host not on the doer's list is refused
+                       # in allow_list mode; learn mode (the default) only notes the host
+                       {"matcher": f"mcp__{MCP}__browser_navigate",
+                        "hooks": [{"type": "command", "command": f'"{py}" "{eg}" --hook doer', "timeout": 10}]}],
     }}
     f = out_dir / "settings.json"
     f.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
@@ -332,6 +362,10 @@ def plain_error(raw: str) -> str:
         return "it stopped on an error" + (f": {m.group(1)}" if m else "") + "; nothing was changed as far as it reported"
     if "timeout" in s.lower():
         return "it ran past its time limit"
+    # a cut tail of the CLI's result row (stderr + the last 400 chars) has no leading "{": its counters
+    # (num_turns, uuid, killed/refused) are still never said
+    if re.search(r'"(?:num_turns|uuid|session_id|subtype|duration_ms|total_cost_usd|\w*(?:killed|refused)\w*)"\s*:', s):
+        return "it stopped before it finished, without a final line"
     return re.sub(r"\s+", " ", s)[:240] or "it ended without a final line"
 
 
@@ -378,7 +412,7 @@ def carry_on(t: dict, r: dict, out_dir: Path, timeout: int, turn=None, builder=N
     tid = t["id"]
     while n < n_max:
         why = cut_off(r)
-        if not why:
+        if not why or _live("stop_requested", out_dir):                  # the owner's Stop: no further try
             break
         n += 1
         got = notes.last(tid)
@@ -481,9 +515,36 @@ def _run_turn_on(prompt: str, out_dir: Path, resume: str = "", timeout: int = 90
 
 
 # ------------------------------------------------------------------ talking back to the owner
+# A failure line never tells the owner to open a terminal, run claude or type commands (nightly review,
+# 2026-11-02): the owner reads chat on a phone. Such a sentence is dropped and one plain line says it needs the PC.
+_PC_STEP = re.compile(r"\b(?:open|in|into|use|from)\s+(?:a|the|your)\s+(?:new\s+)?terminal\b|\bterminal (?:window|session)|command (?:prompt|line)|\bpowershell\b|\bcmd(?:\.exe)?\b|\bbash\b|"
+                      r"\b(?:run|type|launch|start|open)\b[^.!?]{0,40}\bclaude\b|\bclaude (?:login|setup-token|--)|"
+                      r"\b(?:run|type|paste|enter)\b[^.!?]{0,30}\bcommands?\b|\bpython\s+\S+\.py\b|\bschtasks\b|`[^`]+`", re.I)
+PC_LINE = "That part is mine to sort out from here; nothing for you to do at a computer."
+
+
+def pc_only(text: str) -> str:
+    """The text without any sentence that tells the owner to use a terminal or type commands; if one was
+    dropped, PC_LINE says plainly that it needs the PC. Text without such a step comes back unchanged."""
+    s = str(text or "")
+    try:                                   # the whole chat-first rule (agent/chatfirst.py, 2026-11-04), not only terminal words
+        import chatfirst
+        s = chatfirst.clean(s, PC_LINE)
+    except Exception:  # noqa: BLE001
+        pass
+    if not _PC_STEP.search(s):
+        return s
+    parts = [x for x in re.split(r"(?<=[.!?:])\s+", s.strip()) if x]
+    bad = [bool(_PC_STEP.search(x)) for x in parts] + [True]
+    # a lead-in ("...from your phone:") goes with the step that followed it
+    kept = [x for i, x in enumerate(parts) if not bad[i] and not (x.endswith(":") and bad[i + 1])]
+    return " ".join(kept or [PC_LINE])     # the stock line only when nothing else is left (2026-11-10: it was on every line)
+
+
 def deliver(t: dict, text: str) -> None:
     """Put the result in the requester's chat with Sage (the transcript the chat page shows,
     plus Google Chat when that is where they asked)."""
+    text = pc_only(text)
     p = t.get("payload") or {}
     key = str(p.get("from") or _first_owner())
     try:
@@ -539,7 +600,28 @@ def portal(arg: str) -> str:
 
 _OWNER_ONLY = re.compile(r"password|passcode|login saved|no login|sign in yourself|signed? in on your|verification code|one-time code|"
                          r"\b2fa\b|two-factor|authenticator|your tap|tap (?:approve|the card)|\bpay(?:ment|ing)?\b|card (?:number|details)|"
-                         r"\bcvv\b|identity|id\.me|captcha|your (?:own )?(?:hand|phone)\b|only you can", re.I)
+                         r"\bcvv\b|identity|id\.me|captcha|your (?:own )?(?:hand|phone)\b|only you can|stopped by the owner|sign-in card", re.I)
+STOPPED = "stopped by the owner"
+
+
+# A block that is only a missing sign-in (nightly review, 2026-10-17: such lines named vault.py / browser.py) is said as
+# the chat route to fix it, /signin <site> or the 'save my <site> login' form, never the model's own steps. The Setup
+# page the review asked for is the PC's (chatfirst.py, 2026-11-04), so chat is the place.
+_SIGNED_OUT = re.compile(r"signed[ -]?out|not (?:signed|logged) in|logged out|sign-?in (?:expired|required|needed)|"
+                         r"no login(?: saved)?|login (?:is )?missing|needs? (?:a |the )?(?:login|sign-?in)\b", re.I)
+_HOST = re.compile(r"\b(?:https?://)?((?:[a-z0-9-]+\.)+(?!py\b|json\b|ps1\b|md\b)[a-z]{2,})\b", re.I)
+
+
+def signin_line(arg: str) -> str:
+    """The chat line for a sign-in block, or '' when `arg` is not one."""
+    why = str(arg or "").partition("DO IT YOURSELF:")[0]
+    if not _SIGNED_OUT.search(why):
+        return ""
+    m = _HOST.search(str(arg or ""))
+    host = re.sub(r"^www\.", "", m.group(1).lower()) if m else ""
+    site = host or "the site"
+    return (f"I'm not signed in to {site}. Say '/signin {host or '<site>'}' here and I sign in from my vault; no login saved "
+            f"for it yet? say 'save my {host or '<site>'} login' and the form comes up here.")
 
 
 def _owner_only(arg: str) -> bool:
@@ -601,12 +683,24 @@ def _say(who: str, kind: str, arg: str, t: dict | None = None) -> str:
         return arg
     if kind == "DOER_CHECKPOINT":
         qid, _, step = arg.partition(" ")
+        lg = _login_card(qid)
+        if lg:
+            # the sign-in card (report.py login, 2026-11-03): the login goes into a dialog, never into this chat
+            host = str(lg.get("host") or "the site")
+            if step.startswith(REFUSED_STEP):
+                said = step[len(REFUSED_STEP):].lstrip(": ").rstrip(". ")
+                return (f"{host} did not accept that login{on}" + (f" ({said})" if said else "") + ". The card is back: Enter login "
+                        "takes it again, straight to my vault and not into this chat, and I carry on from where I stopped.")
+            if lg.get("human"):
+                return (f"{host} wants a person at its sign-in{on} (a check only a person can pass). The card has 'I'll sign in myself': "
+                        "Control PC opens my browser from your phone; tap Carry on when you are in.")
+            return (f"I need the {host} login to carry on{on}. Tap Enter login on the card: it goes straight to my vault, not "
+                    "into this chat, and I pick the job up from where I stopped.")
         ho = _handoff(t)
         if ho is not None and ho.get("qid") == qid:
             # the owner's own last step (report.py handoff): "open on your screen" only on code's read-back (2026-10-28)
-            where = ("It is open on your screen now, maximized on your main monitor." if ho.get("on_screen") else
-                     f"I could not confirm the browser is on your screen ({ho.get('detail') or 'no read-back'}); "
-                     "the PC may be locked or asleep.")
+            where = ("It is waiting in my browser; Control PC opens it from your phone." if ho.get("on_screen") else
+                     "It is waiting in my browser (I could not confirm it is in front); Control PC opens it either way.")
             return (f"I got it ready and stopped before the last step, which is yours: {step or arg} {where} "
                     "Tap 'I finished it' on the card when it is done.")
         if _asks_code(qid):
@@ -622,7 +716,7 @@ def _say(who: str, kind: str, arg: str, t: dict | None = None) -> str:
     if kind == "DOER_BLOCKED":
         # only an owner-only step is said (a password, a code, a tap, a payment); any other block files its build
         # by code and stays quiet until the ask comes back and works (run_ticket, 2026-10-30)
-        return f"One step needs you{on}: {portal(arg)}"
+        return f"One step needs you{on}: {signin_line(arg) or portal(arg)}"
     # plain words, never JSON (the owner 2026-10-18): what it was on, and why it stopped, in one line. A job that
     # left milestone notes says how far it got instead of "nothing was changed" (notes.py, 2026-10-28)
     got = {}
@@ -663,13 +757,97 @@ def _handoff(t: dict | None, since: float = 0.0) -> dict | None:
 
 
 def _close_browser(t: dict | None = None, since: float = 0.0) -> None:
-    """Quit the browser after a run, unless it is the sign-in window (that one closes itself) or a hand-off
-    left it on the owner's screen (the cart or the form lives in this session; 2026-10-28)."""
+    """Quit the browser after a run, unless it is the sign-in window (that one closes itself), a hand-off
+    left it on the owner's screen (the cart or the form lives in this session; 2026-10-28), or a page is held open
+    for an owner at a step the agent could not finish (leftopen.py, 2026-11-08): then only this run's own tabs close."""
     if (_handoff(t, since) or {}).get("on_screen"):
         log(f"ticket {(t or {}).get('id')}: hand-off, browser left open on screen")
         return
-    if not _signin_window_open():
-        browser.close_browser()
+    if _signin_window_open():
+        return
+    if browser.held_tabs():
+        try:
+            browser.prune_tabs(keep=0)             # the job's own tabs go; the held page stays, back in front
+            for tab in browser.held_tabs():
+                urllib.request.urlopen(browser.cdp_url() + "/json/activate/" + tab, timeout=5).read()
+                break
+        except Exception:  # noqa: BLE001
+            pass
+        log(f"ticket {(t or {}).get('id')}: a page is held open for an owner, browser left up")
+        return
+    browser.close_browser()
+
+
+# ------------------------------------------------------------------ a step it cannot finish: left open (2026-11-08)
+# The owner: "if sage gets to a step it can't complete in browser it should leave the browser open for the user to do
+# it themself unless the user selects a button to do it later. Have control pc and do later buttons presented in chat."
+def _leftopen():
+    try:
+        import leftopen
+        return leftopen
+    except Exception as e:  # noqa: BLE001
+        log(f"left open unavailable: {type(e).__name__}: {str(e)[:120]}")
+        return None
+
+
+def _signin_site_block(arg: str) -> bool:
+    """The configured site's own sign-in window handles this block (_signin_check), not a held page."""
+    site = str(_SIGNIN.get("site") or "")
+    return bool(site and SIGNIN and re.search(re.escape(site), arg or "", re.I) and re.search(r"sign|log\s?in|session|auth", arg or "", re.I))
+
+
+def _leave_open(r: dict | None, out_dir: Path, login: dict | None = None) -> bool:
+    """True when the run stopped at a step only the owner can take in the browser: the page stays for them."""
+    lo = _leftopen()
+    if not r or not lo or not lo.on() or r.get("marker") != "DOER_BLOCKED":
+        return False
+    arg = str(r.get("arg") or "")
+    if STOPPED in arg.lower() or _live("stop_requested", out_dir) or "connector job" in arg.lower():
+        return False
+    if login and LOGIN_REFUSED.search(arg):         # the sign-in card comes back instead (_relogin)
+        return False
+    return _owner_only(arg) and not _signin_site_block(arg)
+
+
+def same_page_block(tid: str) -> str:
+    """The prompt block for a step that carries on after the owner passed a sign-in check: the page that asked is
+    still open (browser.hold_wait), and it is the only page their tap or code answers."""
+    w = browser.waiting(tid)
+    if not w:
+        return ""
+    return ("\n## THE SAME PAGE IS STILL OPEN\nThe page you stopped on is still open in this browser, exactly as you left "
+            f"it ({w.get('url', '')}). The owner's tap or code answers THAT page and no other.\n"
+            "- First `browser_tabs`: select the tab with that address, then `browser_snapshot`. Do NOT `browser_navigate`, "
+            "reload, go back, or start the sign-in again: each of those sends the owner a NEW prompt and throws their answer away.\n"
+            "- If the page has already moved on (signed in, or the next step), carry on with the job from there.\n"
+            "- If it still waits, wait ON it: `browser_wait_for` up to 60 seconds at a time, a snapshot between, for up to "
+            "5 minutes. Never click 'resend', 'send again' or 'try again' on it.\n"
+            "- Still waiting after that: stop with DOER_BLOCKED, say the page is still open and waiting on their answer, "
+            "and leave the page as it is.\n"
+            "- Once you are in, finish EVERY part of the job in this same session before your last line.\n")
+
+
+def _held_note(tid: str) -> str:
+    """The prompt line for a job that starts while another job's page is held open for an owner."""
+    lo = _leftopen()
+    if not (lo and lo.holding(tid)) and not browser.waiting(except_tid=tid):
+        return ""
+    return ("\n## A TAB IS HELD FOR THE OWNER\nAnother job left a page open in this browser for the owner to finish "
+            "themself. Work only in the new blank tab that is in front (browser_tabs: select it if needed); never navigate, "
+            "click, type in or close the other tab.\n")
+
+
+def _fresh_tab() -> None:
+    """A tab of the job's own in front, when another job's page is held open (the turn must not land on that one)."""
+    if not browser.held_tabs():
+        return
+    try:
+        req = urllib.request.Request(browser.cdp_url() + "/json/new?about:blank", method="PUT")
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            tab = json.loads(resp.read().decode("utf-8", "replace"))
+        urllib.request.urlopen(browser.cdp_url() + "/json/activate/" + str(tab.get("id")), timeout=5).read()
+    except Exception as e:  # noqa: BLE001
+        log(f"fresh tab failed: {type(e).__name__}")
 
 
 def _signin_check(arg: str) -> bool:
@@ -679,7 +857,7 @@ def _signin_check(arg: str) -> bool:
         return False
     from alib import VENV_PY
     py = VENV_PY.with_name("pythonw.exe") if os.name == "nt" else VENV_PY
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
+    flags = 0x08000000 | 0x00000200 if os.name == "nt" else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     try:
         subprocess.Popen([str(py if py.exists() else sys.executable), str(SIGNIN), "--check", "doer"], cwd=str(VAULT),
                          creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -691,10 +869,16 @@ def _signin_check(arg: str) -> bool:
 
 
 # ------------------------------------------------------------------ tasks
-def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
+def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | None = None) -> str:
     """Work one agent_run ticket end to end. Returns the final marker line (or an error).
-    follow_up: a block that resumes the task's own session (a code card answered 'No code came')."""
+    follow_up: a block that resumes the task's own session (a code card answered 'No code came').
+    login: the sign-in card's payload when this run carries on after a login was handed over; a login the site
+    then refuses brings the sign-in card back (_relogin) instead of ending the job."""
     tid = t["id"]
+    if not follow_up and not dry:
+        _live("clear_stopped", tid)                                      # a fresh claim of the job forgets an old Stop
+    if not dry and _leftopen():
+        _leftopen().clear(tid)                                           # the job runs again: its held page is the job's own
     if str((t.get("payload") or {}).get("where") or "").lower() == "computer":     # hands on the PC (computer.py)
         import computer
         return computer.run_ticket(t, dry, follow_up)
@@ -702,6 +886,8 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
     out_dir.mkdir(parents=True, exist_ok=True)
     sid = _session_get(tid) if follow_up else ""
     prompt = follow_up if sid else build_prompt(t, resume_block=standing_block(_standing(t)) + follow_up)
+    if not dry:
+        prompt += _held_note(tid)
     if dry:
         print(prompt)
         return "DRY_RUN_OK"
@@ -709,7 +895,7 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
     if not _budget_ok():
         set_status(t, "not started: today's limit of browser tasks is used up")
         tickets._transition(tid, "staged", "doer", "budget: today's doer runs are used up; retry tomorrow", {"claimed", "new"})
-        deliver(t, f"I have used today's limit of browser tasks, so {job_line(t) or 'this job'} waits. I will pick it up tomorrow, or raise doer.runs_per_day_max.")
+        deliver(t, f"I have used today's limit of browser tasks, so {job_line(t) or 'this job'} waits. I will pick it up tomorrow.")
         return "BUDGET"
     try:
         browser.open_browser()
@@ -718,19 +904,30 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
         set_status(t, f"not started: the browser would not open: {e}")
         deliver(t, f"I could not open my browser for {job_line(t) or 'this job'}: {e}")
         return f"ERROR {e}"
-    set_status(t, "switching to another sign-in method" if follow_up else "working in the browser", "starting")
     started = time.time()
+    _fresh_tab()
+    _live("start", t, "Opening the browser")
+    set_status(t, ("signing in and carrying on" if follow_up.startswith("## SIGNED IN") else "switching to another sign-in method") if follow_up
+               else "working in the browser", "starting")
+    r = None
+    keep = False
     try:
         r = run_turn(prompt, out_dir, resume=sid, timeout=int(CFG.get("turn_timeout_s", 900)))
         if not r.get("ok") and sid and "resume" in (r.get("error") or "").lower():
             r = run_turn(build_prompt(t, resume_block=follow_up), out_dir, timeout=int(CFG.get("turn_timeout_s", 900)))
         r = carry_on(t, r, out_dir, int(CFG.get("turn_timeout_s", 900)))     # a cut-off run goes on from its notes
+        keep = _leave_open(r, out_dir, login)     # a step only the owner can take: the page stays up for them
     finally:
-        _close_browser(t, started)
+        if not keep:
+            _close_browser(t, started)
     _session_set(tid, r.get("session"))
     (out_dir / "result.json").write_text(json.dumps(r, indent=1, ensure_ascii=False), encoding="utf-8")
     who = str((t.get("payload") or {}).get("from") or _first_owner())
     mk, arg = r.get("marker"), r.get("arg", "")
+    if mk == "DOER_BLOCKED" and login and not dry and LOGIN_REFUSED.search(str(arg or "")):
+        again, why = _relogin(t, login, str(arg or ""))
+        if again:                                    # asked again on a fresh card: the job waits there, it has not ended
+            mk, arg = "DOER_CHECKPOINT", f"{again} {REFUSED_STEP}: {why}"
     ev_ok, ev_n = True, 0
     if mk in ("DOER_DONE", "DOER_ANSWER"):
         try:
@@ -743,6 +940,11 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
     elif mk == "DOER_CHECKPOINT":
         qid = arg.split(" ", 1)[0]
         tickets._transition(tid, "staged", "doer", f"card {qid}: checkpoint, waiting for the owner's tap", {"claimed", "new"})
+    elif mk == "DOER_BLOCKED" and (STOPPED in arg.lower() or _live("stop_requested", out_dir)):
+        # the owner tapped Stop on the live card (livecard.py): the job ends where it is, nothing is retried or built
+        arg = STOPPED
+        tickets._transition(tid, "staged", "doer", "stopped by the owner from the live card", {"claimed", "new"})
+        _live("close_followups", tid, str((_live("stop_requested", out_dir) or {}).get("by") or "owner"))
     elif mk == "DOER_BLOCKED" and "connector job" in arg.lower() and not _retried_refusal(t):
         # 2026-10-20: the model refused four jobs as "a connector job" that no connector covered, and nothing
         # re-routed them. The prompt no longer asks for that refusal; one that slips through is queued once more.
@@ -757,6 +959,12 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
     set_status(t, _phase(mk or "", arg))
     _outcome_doer(tid, mk or "", ev_ok, ev_n, t, "browser")
     say = _say(who, mk or "", arg, t)
+    offered = ""
+    if keep:
+        # ONE message in the job's thread, the page left open, Control PC + Do later (leftopen.py, 2026-11-08)
+        offered = _leftopen().offer(t, say, arg) if _leftopen() else ""
+        if not offered:
+            _close_browser(t, started)            # nowhere to offer it: closed and said the old way
     if mk == "DOER_DONE":
         try:
             import computer
@@ -764,8 +972,10 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
         except Exception:  # noqa: BLE001
             pass
         say += _after_standing(t)
-    if mk == "DOER_BLOCKED" and _signin_check(arg):
-        say += " " + str(_SIGNIN.get("say") or "If the site is signed out, a sign-in window will be up on the PC until you sign in.")
+    if mk == "DOER_BLOCKED" and arg == STOPPED:
+        say = f"Stopped{' ' + job_line(t) if job_line(t) else ''}, as you asked. Nothing more was changed."
+    elif mk == "DOER_BLOCKED" and _signin_check(arg):
+        say += " " + str(_SIGNIN.get("say") or "If the site is signed out, I sign back in from my vault; a login I am missing comes to you as a card here.")
     elif mk == "DOER_BLOCKED" and not _owner_only(arg):
         # not the owner's step: the missing piece is built now and the ask comes back by itself; no words in chat
         bk = _gap_for(t, arg)
@@ -783,12 +993,41 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "") -> str:
             learn.after_run(t, r, "browser", started)
     except Exception as e:  # noqa: BLE001
         log(f"learn failed: {type(e).__name__}")
-    if say:
+    if offered:
+        say = offered                              # the left-open message is the job's report; nothing more is said
+    elif say:
         deliver(t, say)
     else:
         _mc_note(f"{job_line(t) or 'a job'}: {mk or 'no result'}: {arg[:300]} (building the missing piece; nothing said in chat)")
+    # the report itself is the message just posted; only a quiet stop (nothing said in chat) leaves its reason on the card
+    _live("finish", tid, mk or "", "" if (say or mk == "DOER_CHECKPOINT") else plain_error(arg), not say)
     log(f"ticket {tid}: {mk or 'NO_MARKER'} {arg[:160]}")
+    _handback(t, mk or "", arg)
     return f"{mk or 'NO_MARKER'}: {arg}"
+
+
+def _handback(t: dict, mk: str, arg: str) -> None:
+    """The step ended: hand the ASK back to the desk (agent/pickup.py), which reads this ending against what the owner
+    asked for and does the next deed (the card with the link in it, the next step, a check-back on an upload). Until
+    2026-11-10 a step's end was the work's end: a link sat in a report for an hour until the owner asked for the text
+    again, and "not uploaded yet" was never looked at twice. A checkpoint (the owner's tap comes next), a job the owner
+    stopped and a job put back in the queue are not endings. Never raises."""
+    try:
+        if mk == "DOER_CHECKPOINT" or str(arg or "") == STOPPED:
+            return
+        now = tickets._load().get(t.get("id")) or {}
+        if now.get("status") in ("new", "claimed"):
+            return                                        # queued once more, or already running again
+        keep_path = list(sys.path)
+        try:
+            sys.path.append(str(ROOT / "agent"))
+            import pickup
+            r = pickup.on_job_end(t, mk, str(arg or ""))
+        finally:
+            sys.path[:] = keep_path                       # agent/ has modules named like scripts/ ones (followups.py)
+        log(f"ticket {t.get('id')}: hand-back {'started ' + str(r.get('job')) if r.get('ok') else 'not started (' + str(r.get('reason')) + ')'}")
+    except Exception as e:  # noqa: BLE001
+        log(f"ticket {t.get('id')}: hand-back failed: {type(e).__name__}: {str(e)[:120]}")
 
 
 def _mc_note(text: str) -> None:
@@ -808,9 +1047,16 @@ def run_approved(payload: dict, dry: bool = False) -> int:
     if not t:
         print("DOER_RESULT=REFUSED unknown ticket")
         return 1
+    if _live("stopped", tid):
+        # the owner stopped this job: its follow-up step closes quietly (exit 0, so drain re-cards nothing)
+        log(f"ticket {tid}: approved step skipped, the owner stopped this job")
+        print("DOER_RESULT=DOER_DONE: nothing done, the owner stopped this job")
+        return 0
     if str((t.get("payload") or {}).get("where") or "").lower() == "computer":     # the computer lane's sha-bound step
         import computer
         return computer.run_approved(payload, dry)
+    if payload.get("login"):
+        return run_login_resume(t, payload, dry)
     step, resume = str(payload.get("step") or ""), str(payload.get("resume") or "")
     code = str(payload.get("code") or "")
     vals = payload.get("values") or {}
@@ -822,6 +1068,7 @@ def run_approved(payload: dict, dry: bool = False) -> int:
                 "(never type it yourself) and carry on.\n" if code else "")
              + "If the site now shows something different from the card (a new total, a changed field), do NOT proceed: "
              "stop with DOER_BLOCKED and say what changed.\n")
+    block += same_page_block(tid)
     sid = _session_get(tid)
     prompt = block if sid else build_prompt(t, resume_block=block)
     if dry:
@@ -832,14 +1079,21 @@ def run_approved(payload: dict, dry: bool = False) -> int:
     except RuntimeError as e:
         print(f"DOER_RESULT=NOT_STARTED browser: {e}")
         return 1
+    t_run = time.time()
+    _live("start", t, f"Doing the approved step: {step[:120]}")
     set_status(t, f"working on the approved step: {step}", "starting")
     out_dir = OUT / tid
+    r = None
+    keep = False
     try:
         r = run_turn(prompt, out_dir, resume=sid, timeout=int(CFG.get("approved_timeout_s", 480)))
         if not r.get("ok") and sid and "resume" in (r.get("error") or "").lower():
             r = run_turn(build_prompt(t, resume_block=block), out_dir, timeout=int(CFG.get("approved_timeout_s", 480)))
+        keep = _leave_open(r, out_dir)            # the approved step hit a step only the owner can take: left open
     finally:
-        _close_browser()
+        browser.release_wait(tid, before=t_run)   # the page it waited on is done with (a NEW wait made this run stays)
+        if not keep:
+            _close_browser()
     _session_set(tid, r.get("session"))
     (out_dir / "approved_result.json").write_text(json.dumps(r, indent=1, ensure_ascii=False), encoding="utf-8")
     mk, arg = r.get("marker"), r.get("arg", "")
@@ -847,12 +1101,125 @@ def run_approved(payload: dict, dry: bool = False) -> int:
     set_status(t, _phase(mk or "", arg or r.get("error", "")))
     if mk == "DOER_DONE":
         tickets._transition(tid, "done", "doer", f"approved step done: {arg}"[:500], tickets.OPEN)
-        deliver(t, _say(who, mk, arg, t))
+        say = _say(who, mk, arg, t)
+        deliver(t, say)
+        _live("finish", tid, mk, say)
+        _handback(t, mk, arg)
         print(f"DOER_RESULT=DOER_DONE: {arg}")
         return 0
-    deliver(t, _say(who, mk or "", arg or r.get("error", ""), t))
+    say = _say(who, mk or "", arg or r.get("error", ""), t)
+    offered = (_leftopen().offer(t, say, arg) if _leftopen() else "") if keep else ""
+    if keep and not offered:
+        _close_browser()
+    if offered:
+        tickets._transition(tid, "staged", "doer", f"left open for the owner: {arg}"[:500], {"claimed", "new", "staged"})
+    else:
+        deliver(t, say)
+    _live("finish", tid, mk or "", say)
+    _handback(t, mk or "", arg or r.get("error", ""))
     print(f"DOER_RESULT={mk or 'NO_MARKER'}: {arg or r.get('error', '')}")
     return 1
+
+
+# ------------------------------------------------------------------ the sign-in card (2026-11-03)
+# A login the vault does not have used to end the job ("no login saved for <host>"). Now report.py login posts ONE card
+# in the job's thread: "Enter login" opens the vault dialog (the fields go to the vault, never into chat) and, saved,
+# answers the card; "I'll sign in myself" puts the browser on the owner's screen (Chrome Remote Desktop shows it from a
+# phone) and a Carry on card follows; "Stop" ends the job. Either approval mints the usual agent_run exec ticket with
+# payload.login, and drain hands it here: the job carries on from its notes, in the same session.
+LOGIN_RESUME = ("## SIGNED IN: CARRY ON\n{how} Go back to {url} (or where the job was), run EXACTLY "
+                "`python assistant/doer/login_fill.py --url <the page url>` once if a sign-in form is still showing (it prints "
+                "SIGNED_IN or ALREADY when the session is good), then carry on with the job from your LAST milestone note. "
+                "Checkpoints, notes and the final line work as usual. If the site still refuses the login, stop with "
+                "`DOER_BLOCKED: {host} still refuses the sign-in: <what the page says>`.\n")
+
+
+def login_block(payload: dict) -> str:
+    host, url = str(payload.get("host") or "the site"), str(payload.get("url") or "the sign-in page")
+    how = (f"The owner signed in to {host} by hand in your browser and tapped Carry on." if payload.get("self") else
+           f"The owner saved the {host} login in the vault.")
+    return LOGIN_RESUME.format(how=how, url=url, host=host)
+
+
+# A login the owner handed over and the site then refused (2026-11-04: a saved login came back "The username or
+# password is incorrect"; the job ended there, with no way to enter it again and a false "unverified" alarm).
+LOGIN_REFUSED = re.compile(r"refuses the sign-in|no login saved|wrong password|login is wrong|(?:password|login|email|username)[^.]{0,40}incorrect", re.I)
+REFUSED_STEP = "the site refused that login"
+
+
+def _relogin(t: dict, login: dict, arg: str) -> tuple:
+    """The sign-in card again, in the job's thread, carrying what the site said -> (card id, what it said) or ('', '')."""
+    try:
+        import report
+        why = re.sub(r"^.*?refuses the sign-in:?\s*", "", " ".join(str(arg or "").split()), flags=re.I).strip() or "the site refused it"
+        line = report.login(t["id"], str(login.get("host") or ""), str(login.get("url") or ""), why[:220])
+        if line.startswith("LOGIN="):
+            return line.split("=", 1)[1].strip(), why[:220]
+        log(f"ticket {t['id']}: the sign-in card did not come back: {line[:160]}")
+    except Exception as e:  # noqa: BLE001
+        log(f"ticket {t.get('id')}: the sign-in card did not come back: {type(e).__name__}: {str(e)[:120]}")
+    return "", ""
+
+
+def run_login_resume(t: dict, payload: dict, dry: bool = False) -> int:
+    """drain -> --approved with payload.login: the job itself carries on (run_ticket with the resume block). The
+    approved step was the sign-in, so anything but a refused login counts as DOER_DONE for the exec ticket; the job's
+    own outcome reaches the owner through run_ticket as always."""
+    tid = t["id"]
+    if not dry:
+        tickets._transition(tid, "claimed", "doer", "login handed over: carrying on with the job", {"staged", "claimed", "new", "done"})
+    line = run_ticket(t, dry, follow_up=login_block(payload), login=payload)
+    refused = line.startswith("DOER_BLOCKED") and LOGIN_REFUSED.search(line)       # refused AND the card could not come back
+    if not dry and line.startswith("DOER_CHECKPOINT") and REFUSED_STEP in line:
+        print("DOER_RESULT=DOER_DONE: the site refused that login; the sign-in card is back in the job's thread")
+        return 0
+    if dry or (not refused and not line.startswith(("ERROR", "BUDGET", "BUSY"))):
+        print(f"DOER_RESULT=DOER_DONE: carried on after the sign-in ({line[:200]})")
+        return 0
+    print(f"DOER_RESULT={line[:300]}")
+    return 1
+
+
+def _login_self_due():
+    """A sign-in card answered "I'll sign in myself" (report.py SELF) and not yet acted on -> (ticket, qid, payload) or None.
+    Found from the CARD (its payload names the job), not from the job's last history line: a job that ended on a refused
+    login, whose card the owner then reopened with Undo, still answers this tap (2026-11-04)."""
+    import cards
+    from report import SELF
+    jobs = tickets._load()
+    for qid, e in (cards._answers_index() or {}).items():
+        if not e or e.get("undone") or str(e.get("option") or "") != SELF or time.time() - float(e.get("epoch") or 0) > 86400:
+            continue
+        p = _login_card(qid)
+        t = jobs.get(str((p or {}).get("ticket") or ""))
+        if not p or not t or t.get("kind") != KIND or t.get("status") not in ("staged", "done"):
+            continue
+        if _live("stopped", t["id"]) or (OUT / t["id"] / f"self_{qid}.json").is_file():   # the owner stopped it, or done once already
+            continue
+        return t, qid, p
+    return None
+
+
+def self_signin(t: dict, qid: str, payload: dict) -> str:
+    """The owner will sign in by hand: the browser goes on their screen at the sign-in page, and a Carry on card
+    follows in the thread (with the Remote Desktop link for a phone). Once per card."""
+    import report
+    tid = t["id"]
+    (OUT / tid).mkdir(parents=True, exist_ok=True)
+    save_json(OUT / tid / f"self_{qid}.json", {"epoch": time.time()})
+    ok, detail = False, ""
+    try:
+        browser.open_browser(show=True)
+        ok, detail = browser.show_on_screen()
+        url = str(payload.get("url") or "")
+        if url:
+            browser.navigate(url)
+    except Exception as e:  # noqa: BLE001
+        detail = f"{type(e).__name__}: {str(e)[:80]}"
+    save_json(OUT / tid / "handoff.json", {"on_screen": bool(ok), "detail": detail, "epoch": time.time(), "qid": qid})
+    r = report.carry_on_card(tid, payload, on_screen=(ok, detail))
+    log(f"ticket {tid}: owner signs in by hand at {payload.get('host')}: on_screen={ok} {detail[:80]} card={r}")
+    return r
 
 
 def _quiet(now=None) -> bool:
@@ -920,6 +1287,8 @@ def _code_fallback_due():
         last = hist[-2] if len(hist) > 1 and hist[-1].get("by") == "cards.sweep" and hist[-1].get("to") == "done" else hist[-1]
         if t.get("kind") != KIND or t.get("status") not in ("staged", "done") or last.get("by") != "doer" or last.get("to") != "staged":
             continue
+        if _live("stopped", t["id"]):                                    # the owner stopped it: nothing carries it on
+            continue
         m = re.match(r"card (\S+): checkpoint", str(last.get("note") or ""))
         e = idx.get(m.group(1)) if m else None
         if not e or e.get("undone") or time.time() - float(e.get("epoch") or 0) < cards.UNDO_S:
@@ -954,6 +1323,25 @@ def tick(dry: bool = False) -> str:
         if due and (dry or tickets._transition(due[0]["id"], "claimed", "doer", f"code card answered '{due[1]}': "
                                                "switching sign-in method", {"staged", "done"})):
             return run_ticket(due[0], dry, follow_up=fallback_block(due[1]))
+        own = _login_self_due()
+        if own and not dry:
+            return "SELF_SIGNIN " + self_signin(*own)
+        if not dry:
+            try:                                    # a sign-in page nobody answered in time: let go of it
+                if browser.expire_waits() and not browser.held_tabs():
+                    browser.close_browser()
+            except Exception as e:  # noqa: BLE001
+                log(f"expire waits failed: {type(e).__name__}: {str(e)[:100]}")
+        lo = _leftopen() if not dry else None
+        if lo:
+            try:
+                did = lo.sweep(quiet=_quiet())      # a Do later that is due comes back with the same two buttons
+            except Exception as e:  # noqa: BLE001
+                did = [f"sweep failed: {type(e).__name__}: {str(e)[:100]}"]
+            for line in did:
+                log("left open: " + line)
+            if any(x.endswith("brought back") for x in did):
+                return "LEFT_OPEN " + "; ".join(did)
         got = tickets.claim(limit=1, by="doer", kind=KIND, where=_claimable_now)
         if not got:
             return "IDLE"
@@ -980,7 +1368,7 @@ def wake() -> str:
         return f"NOT_WOKEN {var} points at a scratch store (a test); nothing runs against it"
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe")
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0
+    flags = 0x08000000 | 0x00000200 if os.name == "nt" else 0   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP; never DETACHED_PROCESS: a venv launcher loses its console and the real python opens a visible one
     subprocess.Popen([str(pyw if pyw.exists() else exe), str(Path(__file__).resolve()), "--tick"], cwd=str(VAULT),
                      creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return "WOKEN"

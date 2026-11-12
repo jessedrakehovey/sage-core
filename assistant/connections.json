@@ -453,6 +453,97 @@
    }
   },
   {
+   "id": "chat-home",
+   "name": "Chat app Home tab and commands",
+   "lane": "system",
+   "mechanism": "assistant/scripts/chat_console.py drives the agent's own browser: a new version of the Apps Script relay, then Chat API -> Configuration (Support App Home, trigger onAppHome, the commands of home_tab.COMMANDS)",
+   "credential": "the owner's Google login in the agent's vault (entered once in a Chat dialog; never typed by hand at the PC)",
+   "check": {
+    "type": "status_file",
+    "path": "data:chat_console_state.json",
+    "ts_field": "configured_at",
+    "max_age_h": 100000,
+    "error_field": "error"
+   },
+   "renew": "tap Set up the Home tab in chat (or: wedding-web venv python assistant/scripts/chat_console.py all); a Google sign-in on the way comes from the vault, or the card's Enter login",
+   "owner": "owner1",
+   "setup": {
+    "kind": "job",
+    "argv": [
+     "%VENV%",
+     "assistant/scripts/chat_console.py",
+     "all"
+    ],
+    "label": "Set up the Home tab",
+    "timeout_s": 480,
+    "watch": true,
+    "how": "I open Apps Script and the Chat API configuration in my own browser and do the clicks: a new relay version, Support App Home, the slash and quick commands. If Google asks for a sign-in on the way, I sign in from my vault; if my vault has no Google login yet, this card offers Enter login (a form on top of chat) and I run it again myself.",
+    "startup": true
+   }
+  },
+  {
+   "id": "shots-drive",
+   "name": "Screenshots shared drive (pictures on the job cards)",
+   "lane": "system",
+   "mechanism": "assistant/scripts/shots.py hosts a job's screen pictures a few minutes in a shared drive the chat service account belongs to; assistant/scripts/shots_setup.py makes that drive and adds the account, in the agent's own browser",
+   "credential": "the owner's Google login in the agent's vault (entered once in a Chat dialog; never typed by hand at the PC); the chat service-account key",
+   "check": {
+    "type": "cmd_match",
+    "argv": [
+     "python",
+     "assistant/scripts/shots.py",
+     "status"
+    ],
+    "live": "\"ok\": true",
+    "missing": "\"ok\": false"
+   },
+   "renew": "tap Set up the screenshots drive in chat (or: wedding-web venv python assistant/scripts/shots_setup.py all); a Google sign-in on the way comes from the vault, or the card's Enter login",
+   "owner": "owner1",
+   "setup": {
+    "kind": "job",
+    "argv": [
+     "%VENV%",
+     "assistant/scripts/shots_setup.py",
+     "all"
+    ],
+    "label": "Set up the screenshots drive",
+    "timeout_s": 420,
+    "watch": true,
+    "how": "I open Google Drive in my own browser, make the shared drive the job cards' pictures live in, and add my service account to it as Content manager. If Google asks for a sign-in on the way, I sign in from my vault; if my vault has no Google login yet, this card offers Enter login (a form on top of chat) and I run it again myself.",
+    "startup": true
+   }
+  },
+  {
+   "id": "remote-desktop",
+   "name": "Control PC (Chrome Remote Desktop)",
+   "lane": "system",
+   "mechanism": "assistant/scripts/remote_desktop.py through the administrator helper (assistant/scripts/elevated.py): installs Google's Remote Desktop host when it is missing, registers this PC, sets the PIN the owner typed in a Chat form",
+   "credential": "the PIN the owner chooses in a Chat form (kept on the PC only as Chrome's own hash); one administrator approval from Windows for the helper, given at install",
+   "check": {
+    "type": "status_file",
+    "path": "data:remote_desktop_state.json",
+    "ts_field": "pin_set_at",
+    "max_age_h": 100000
+   },
+   "renew": "tap Set the Control PC PIN in chat",
+   "owner": "owner1",
+   "setup": {
+    "kind": "job_form",
+    "module": "remote_desktop",
+    "func": "set_pin",
+    "label": "Set the Control PC PIN",
+    "startup": true,
+    "fields": [
+     [
+      "pin",
+      "PIN (6 or more digits)"
+     ]
+    ],
+    "how": "Pick the PIN you will type when you open Control PC. It is typed in a form on top of chat, never posted here, and I set it myself.",
+    "words": "\\b(control pc|remote desktop)\\b|\\bpin\\b.{0,40}\\b(pc|computer|desktop)\\b|\\b(pc|computer|desktop)\\b.{0,40}\\bpin\\b"
+   }
+  },
+  {
    "id": "doer-vault",
    "name": "Doer login vault (agent.kdbx)",
    "lane": "personal",

@@ -281,6 +281,12 @@ check("sage serve and the spine start every job with CREATE_NO_WINDOW (hidden by
 serve_jobs = json.loads((ROOT / "serve.json").read_text(encoding="utf-8-sig"))["jobs"]
 check("every PowerShell job in serve.json runs with -WindowStyle Hidden",
       all("-WindowStyle" in j["cmd"] and "Hidden" in j["cmd"] for j in serve_jobs if j.get("cmd", [""])[0] == "powershell"))
+# never DETACHED_PROCESS for a python child (2026-10-28, ported from the property agent): a venv launcher then has
+# no console and the real python opens a visible one. builder.py is protected core (it starts pythonw, so no window).
+_detached = re.compile(r"^\s*(flags|creationflags)\s*=[^#\n]*(0x0*8\b|DETACHED_PROCESS)", re.M)
+_hits = [str(p.relative_to(VAULT)) for d in ("assistant", "scripts") if (VAULT / d).is_dir() for p in (VAULT / d).rglob("*.py")
+         if "tests" not in p.parts and p.name != "builder.py" and _detached.search(p.read_text(encoding="utf-8", errors="ignore"))]
+check("no background python child starts with DETACHED_PROCESS (CREATE_NO_WINDOW instead)", not _hits, str(_hits))
 
 print()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}", f"({TMP})")

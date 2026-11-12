@@ -119,18 +119,18 @@ check("no page or wizard call touched a non-allow-listed path", all(c[1] in plai
 
 # ------------------------------------------------------------------ the page + routing
 code, html, ct = W.handle("GET", "/setup/plaid")
-check("page served", code == 200 and ct == "text/html" and plaid.LINK_JS in html and "Connect Relay" in html and "/api/setup/plaid" in html)
+check("the old phone page only says it moved to Google Chat: nothing to type", code == 200 and ct == "text/html" and "Google Chat" in html and "<input" not in html and "secret" not in html.lower())
 code, body, ct = W.handle("GET", "/api/setup/plaid/status")
 check("status route", code == 200 and json.loads(body)["step"] == 3)
-check("unknown path -> None", W.handle("GET", "/api/setup/plaid/nope") is None and W.handle("POST", "/setup", {}) is None)
-code, body, ct = W.handle("GET", "/api/setup/plaid/link-token", {"update": "item-relay-1"}, opener=fake)
-check("re-sign-in link token (update mode) carries the access token", json.loads(body)["ok"] and fake.calls[-1][2].get("access_token") == "access-production-SECRET")
+check("unknown path -> None; the old key / link / exchange endpoints are gone (410)", W.handle("POST", "/setup", {}) is None
+      and all(W.handle(m, W.API + x, {})[0] == 410 for m, x in (("POST", "/keys"), ("POST", "/exchange"), ("GET", "/link-token"))))
+r = W.link_token(opener=fake, update_item="item-relay-1")
+check("re-sign-in link token (update mode) carries the access token", r["ok"] and fake.calls[-1][2].get("access_token") == "access-production-SECRET")
 src = (HERE.parent / "scripts" / "mc_server.py").read_text(encoding="utf-8")
 check("mc_server routes /setup/plaid + /api/setup/plaid/*", '"/setup/plaid"' in src and '"/api/setup/plaid/"' in src and "plaid_wizard.handle" in src)
 rows = {r["id"]: r for r in setup_actions.rows()}
-check("Setup page row links to the phone page", rows["bank-plaid"].get("page") == "/setup/plaid" and rows["bank-plaid"].get("page_label"))
-sp = (HERE.parent / "scripts" / "setup_page.py").read_text(encoding="utf-8")
-check("setup page renders the page link", "r.page" in sp and "pagebtn" in sp)
+check("Setup page row: typed in through Google Chat, no phone page, no console button", rows["bank-plaid"]["kind"] == "chat" and not rows["bank-plaid"].get("page") and not rows["bank-plaid"]["label"], rows["bank-plaid"])
+
 
 # ------------------------------------------------------------------ chat entry
 check("'set up plaid' / 'connect relay' are recognised", connect.asked("can you set up plaid for me") == "bank-plaid" and connect.asked("connect Relay") == "bank-plaid"
@@ -148,17 +148,12 @@ st0 = connect.steps("bank-plaid")
 check("no keys: chat steps keep the sign-up + paste steps", "Open Plaid sign-up" in st0 and "paste the client id" in st0 and "already stored" not in st0, st0)
 VAULT.update(saved)
 check("unknown state shows the first-time path", connect._shown({"if": "!keys", "text": "a"}, {}) == "a" and connect._shown({"if": "keys", "text": "b"}, {}) == "")
-check("page offers another bank and hides sign-up once keys are stored", "Connect another bank" in html and 'S.keys ? "none"' in html)
 r = W.exchange("public-production-xyz", {"institution": {"name": "Relay"}}, opener=fake, background=False)
 check("after a link the page says how to add the next bank", "Connect another bank" in r.get("message", ""), r)
 hint = connect.chat_hint()
 check("brain hint names plaid", "plaid" in hint.lower())
 
 # ------------------------------------------------------------------ phone only (2026-10-20: "Your instructions involve using a PC.")
-check("page: Paste button on both key boxes + Keys page link + show secret",
-      html.count("pasteInto(") >= 3 and "clipboard.readText" in html and W.KEYS_PAGE in html and "toggleSecret()" in html)
-check("page: every Plaid link opens in a new tab (the wizard stays put)",
-      all('target="_blank"' in seg.split(">")[0] for seg in html.split("<a ")[1:] if 'href="https://' in seg.split(">")[0]))
 stp = connect.steps("bank-plaid")
 st0p = st0
 check("chat steps: no PC or terminal, direct Keys link, Paste buttons",
@@ -197,7 +192,7 @@ class RedirectFussy(Fake):
         body = json.loads(req.data.decode("utf-8"))
         if urllib.request.urlparse(req.full_url).path == "/link/token/create" and body.get("redirect_uri"):
             self.calls.append((req.get_method(), "/link/token/create", body))
-            err = json.dumps({"error_type": "INVALID_REQUEST", "error_code": "INVALID_FIELD", "error_message": "redirect_uri must be configured in the developer dashboard"}).encode()
+            err = json.dumps({"error_type": "INVALID_REQUEST", "error_code": "INVALID_FIELD", "error_message": "OAuth redirect URI must be configured in the developer dashboard. See https://plaid.com/docs/#oauth-redirect-uris"}).encode()  # Plaid's real words, 2026-11-01
             raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, io.BytesIO(err))
         return super().__call__(req, timeout)
 
@@ -213,13 +208,6 @@ check("keys verified through the fallback: stored, ok, soft redirect warning wit
       r["ok"] and VAULT.get("plaid:secret") and r.get("warn") == "redirect_uri" and r.get("link") == W.API_PAGE and "Relay works without it" in r["message"], r)
 r = W.save_keys("5f1c2e3d4b5a69788796a5b4c3d2e1f0", "a1b2c3d4e5f60718293a4b5c6d7e8f90", opener=fake)
 check("keys verified with the address allowed: plain ok, no warning", r["ok"] and not r.get("warn"), r)
-html = W.page()
-check("page re-opens Link with the SAME token on the OAuth return (localStorage + receivedRedirectUri)",
-      "localStorage.setItem" in html and "savedToken()" in html and "receivedRedirectUri" in html and 'returning()' in html and "oauth_state_id=" in html)
-check("page: phone width (viewport, 375px button rule, no sideways overflow on long text)",
-      "width=device-width" in html and "max-width:420px" in html and "overflow-wrap:anywhere" in html)
-check("page shows the one-time address fix only when the OAuth return is not ready", "S.oauth_ready === false" in html and "Open API page" in html)
-check("page: Google Chat in-app browser hint", "Open in Safari" in html)
 stp, st0p = connect.steps("bank-plaid"), st0
 check("chat steps: phone only - no PC/terminal/console/Team Settings, no 'tailnet only', say the page is the same place as the cards",
       all(w not in (stp + st0p).lower() for w in ("terminal", "python ", "console", "team settings", "tailnet only")) and "same place as your cards" in stp

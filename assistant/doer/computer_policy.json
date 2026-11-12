@@ -1,8 +1,9 @@
 {
- "_doc": "What the doer's computer lane (assistant/doer/computer.py) may run on this PC. Enforced by computer_policy.py as a PreToolUse hook on every Bash / Write / Edit call of the headless turn, so the tier is decided by code, not by the model. Tier A: read-only -> run. Tier B: a write inside write_roots, a copy, a folder, a tool script that passes the scan -> run and report. Tier C: a delete or move outside write_roots, a write outside write_roots, installing software, killing a process, anything that sends over the network, git commit/push -> the hook refuses and the model must post a checkpoint card; the owner's tap re-runs the exact command (sha-bound) once. NEVER: refused outright, no card can unlock it. Paths are matched after ~ and relative paths are resolved; all patterns are case-insensitive regexes over the whole command text.",
+ "_doc": "What the doer's computer lane (assistant/doer/computer.py) may run on this PC. The organization's Wiki is a write root since 2026-11-06 (the owner: 'You don't need my approval to add things to the wiki in the first place'): a note added or appended there is tier B, git keeps the undo; Raw, Memory and Schema stay protected. A pack adds its own roots in config.json -> computer.write_roots. Enforced by computer_policy.py as a PreToolUse hook on every Bash / Write / Edit call of the headless turn, so the tier is decided by code, not by the model. Tier A: read-only -> run. Tier B: a write inside write_roots, a copy, a folder, a tool script that passes the scan -> run and report. Tier C: a delete or move outside write_roots, a write outside write_roots, installing software, killing a process, anything that sends over the network, git commit/push -> the hook refuses and the model must post a checkpoint card; the owner's tap re-runs the exact command (sha-bound) once. NEVER: refused outright, no card can unlock it. Paths are matched after ~ and relative paths are resolved; all patterns are case-insensitive regexes over the whole command text.",
  "write_roots": [
   "assistant/out/doer",
   "assistant/doer/tools",
+  "Wiki",
   "~/AppData/Local/Temp",
   "~/Downloads/Sage",
   "~/Videos/Sage Inbox"

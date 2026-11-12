@@ -140,6 +140,18 @@ def wake(dry: bool, extra: str = "-Comms") -> str:
     return f"WOKE operator_cron.ps1 {extra}"
 
 
+def _since(stamp) -> float:
+    """Seconds since an epoch stamp. A stamp in the FUTURE means the PC clock was moved back (2026-11-03, the
+    sister agent: the clock ran 1 h fast, was corrected, and every wake was refused for an hour because
+    'now - last' was negative); it counts as long ago so wakes still work."""
+    try:
+        last = float(stamp or 0)
+    except (TypeError, ValueError):
+        return float("inf")
+    now = time.time()
+    return float("inf") if last > now + 60 else now - last
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -163,6 +175,13 @@ def main() -> int:
                 log("re-nudged the phone: a text was still waiting to be fetched")
         except Exception as e:  # noqa: BLE001
             log(f"re-nudge check failed: {type(e).__name__}: {str(e)[:120]}")
+        try:   # ...and the owner is told once, where it was approved, with the send-now link (phone_bridge.tell_waiting, 2026-11-04)
+            import phone_bridge
+            told = phone_bridge.tell_waiting()
+            if told:
+                log(f"told the owner: {told} approved text(s) still waiting for the phone")
+        except Exception as e:  # noqa: BLE001
+            log(f"waiting-text check failed: {type(e).__name__}: {str(e)[:120]}")
     probe = load_json(STATE, {"woken": {}, "last_wake": 0}) or {}
     seen = probe.get("woken") or {}
     if not a.dry_run:
@@ -182,7 +201,7 @@ def main() -> int:
         why = "outside the wake window (the half-hour tick still runs)"
     elif operator_running():
         why = "operator already in flight"
-    elif time.time() - float(probe.get("last_wake", 0)) < float(wake_cfg.get("min_gap_min", 3)) * 60:
+    elif _since(probe.get("last_wake")) < float(wake_cfg.get("min_gap_min", 3)) * 60:
         why = "woke less than min_gap_min ago"
     elif burst_settling(wake_cfg, work):
         why = "text burst still settling (a group chat; one run once it goes quiet)"

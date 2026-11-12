@@ -309,7 +309,7 @@ def card_for(e: dict) -> dict | None:
         return {**base, "header": "New rule needs your OK",
                 "question": f"My nightly review wants to add a rule that touches approvals or sending, so it's yours to OK{again}: "
                             f"\"{_short(e['text'], 240)}\". Add it?",
-                "advice": "💡 Add it and I follow it from now on; you can undo it from Mission Control.",
+                "advice": "💡 Add it and I follow it from now on; you can undo it here with /undo.",
                 "options": [{"label": ADD, "description": "I follow it from now on"}, {"label": DROP, "description": "never proposed again"}]}
     if e["kind"] == "retire":
         rule, why = (e["text"].split(" | why: ", 1) + [""])[:2]
@@ -353,6 +353,20 @@ def surface(dry: bool = False) -> list:
             continue
         if dry:
             posted.append(e["key"]); open_n += 1
+            continue
+        if e["kind"] in ("ask", "retire"):
+            # 2026-11-09: a review's question ("Needs your OK ... want me to take care of it?") and a rule retirement are
+            # IDEA LINES under the weekly digest (agent/ideas.py), never cards; the owner acts on one in words. Only a
+            # rule or a patch that touches the protected core (sending, approvals) is still a card.
+            try:
+                import ideas
+                say = f"retire rule {e['title']}" if e["kind"] == "retire" else "do it"
+                ideas.suggest(re.sub(r"\s+Retire it\?$|\s+Want me to take care of it\?$", "", str(card.get("question") or "")), "nightly_review",
+                              key=e["key"], say=say)
+                st[e["key"]] = {"qid": "", "idea": True, "ts": now, "posts": MAX_POSTS}
+                posted.append(e["key"])
+            except Exception as ex:  # noqa: BLE001
+                print(f"pending: idea for {e['key']} not recorded: {ex}", file=sys.stderr)
             continue
         try:
             r = _cards_mod().post([card], "pending", lane=card["lane"])

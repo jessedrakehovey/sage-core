@@ -101,13 +101,14 @@ threading.Thread(target=relay_srv.serve_forever, daemon=True).start()
 threading.Thread(target=mc_srv.serve_forever, daemon=True).start()
 gl = TMP / "gchat.local.json"
 gl.write_text(json.dumps({"relay_webapp_url": f"http://127.0.0.1:{relay_srv.server_address[1]}/exec", "relay_secret": SECRET}), encoding="utf-8")
-env = dict(os.environ, AGENT_GCHAT_CONFIG=str(gl), MC_PORT=str(mc_srv.server_address[1]))
+# SAGE_PORTS: a scratch port ledger, or ports.current() follows the LIVE Mission Control and the fixture events go to it
+env = dict(os.environ, AGENT_GCHAT_CONFIG=str(gl), MC_PORT=str(mc_srv.server_address[1]), SAGE_PORTS=str(TMP / "ports.json"))
 r = subprocess.run([sys.executable, str(ROOT / "scripts" / "relay_poll.py"), "--once"], capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
 out = (r.stdout or "") + (r.stderr or "")
 check("relay_poll --once polls the relay, hands both events to Mission Control and replies for each",
       r.returncode == 0 and "RELAY_POLL polls=1 events=2 replied=2" in out and len(mc_state["seen"]) == 2 and set(relay_state["replies"]) == {"e1", "e2"}, out[-300:] + str(mc_state["seen"])[:200])
 check("every event reaches /gchat/events with the shared secret; only the old one is marked X-Sage-Late",
-      all(s["path"] == "/gchat/events" and s["relay"] == SECRET for s in mc_state["seen"]) and [bool(s["late"]) for s in mc_state["seen"]] == [False, True], str(mc_state["seen"])[:300])
+      all(s["path"] == "/gchat/events" and s["relay"] == SECRET for s in mc_state["seen"]) and [bool(s["late"]) for s in sorted(mc_state["seen"], key=lambda s: s["body"].get("x", 0))] == [False, True], str(mc_state["seen"])[:300])
 check("Mission Control's reply is what goes back to the relay", relay_state["replies"]["e1"] == {"answered": 1} and relay_state["replies"]["e2"] == {"answered": 2})
 r = subprocess.run([sys.executable, str(ROOT / "scripts" / "relay_poll.py"), "--health"], capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
 check("relay_poll --health reads the relay's health", r.returncode == 0 and '"ok": true' in r.stdout, r.stdout)
@@ -188,7 +189,42 @@ check("bridge recognises a contacts attachment by name or type", bridge._is_vcf(
 gs = (ROOT / "agent" / "gchat_relay" / "Code.gs").read_text(encoding="utf-8")
 man = json.loads((ROOT / "agent" / "gchat_relay" / "appsscript.json").read_text(encoding="utf-8"))
 check("Code.gs has pull mode (doGet / doPost / queue), the vault functions, and still push mode", all(s in gs for s in ("function doGet", "function doPost", "function pull_", "function push_", "function vault_add_submit", "popEvents_", "optimistic_")))
-check("a vault submit is never held: dropped from the queue on timeout, in both modes", "fn === 'vault_add_submit' || fn === 'vault_add' || fn === 'card_edit') dequeue_(id)" in gs and "fn !== 'vault_add_submit'" in gs)
+never = gs.split("var NEVER_HELD_ =", 1)[1].split(";", 1)[0]
+check("a vault submit is never held: dropped from the queue on timeout, in both modes",
+      "vault_add_submit: 1" in never and "vault_add: 1" in never and "if (NEVER_HELD_[fn]) dequeue_(id)" in gs and "if (!NEVER_HELD_[fn]) hold_(event)" in gs)
+import re as _re  # noqa: E402
+lease = int(_re.search(r"var LEASE_S = (\d+);", gs).group(1))
+wait_ms = int(_re.search(r"var WAIT_MS = (\d+);", gs).group(1))
+sys.path.insert(0, str(ROOT / "scripts"))
+import relay_poll  # noqa: E402
+check("the relay never answers Chat with an error of its own: no throwing lock, and the handler catches everything (2026-11-04)",
+      "waitLock(" not in gs and "function lock_(ms)" in gs and "tryLock(ms)" in gs
+      and "catch (e)" in gs.split("function relay_(event) {", 1)[1].split("\n}\n", 1)[0] and "optimistic_(event" in gs.split("function relay_(event) {", 1)[1].split("\n}\n", 1)[0])
+calls = []
+
+
+def slow_then_fast(url, timeout=8):
+    calls.append(time.time())
+    if len(calls) == 1:
+        time.sleep(4.0)                       # the first request hangs
+        return {"events": [{"id": "late1"}]}
+    return {"events": []}
+
+
+real_get = relay_poll._get
+relay_poll._get = slow_then_fast
+late_seen = []
+t0 = time.time()
+got = relay_poll._poll_get("http://x/exec?op=poll", 8.0, late=late_seen.extend)
+took = time.time() - t0
+time.sleep(1.8)                               # the hung request answers after all
+relay_poll._get = real_get
+check("a poll that hangs gets a second one beside it: answered in about HEDGE_AFTER_S, not the whole wait (2026-11-04)",
+      got == {"events": []} and len(calls) == 2 and took < relay_poll.HEDGE_AFTER_S + 1.5, f"took {took:.1f}s calls {len(calls)}")
+check("the slow request's late answer is not thrown away: its events are handed on", late_seen == [{"id": "late1"}], repr(late_seen))
+check("the timings fit inside Chat's wait: a dropped poll plus a lost lease still beat the relay's own deadline (2026-11-04)",
+      relay_poll.POLL_TIMEOUT_S + lease + 1 <= wait_ms / 1000 and relay_poll.LATE_AFTER_S < wait_ms / 1000 and relay_poll.RUN_S >= 55,
+      f"poll {relay_poll.POLL_TIMEOUT_S} lease {lease} wait {wait_ms}")
 check("the manifest deploys as a web app too and names no host", man.get("webapp", {}).get("access") == "ANYONE_ANONYMOUS" and "urlFetchWhitelist" not in man)
 
 print()

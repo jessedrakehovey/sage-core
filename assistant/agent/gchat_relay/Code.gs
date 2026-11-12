@@ -23,7 +23,9 @@
  * mode ENDPOINT (https://<host>/gchat/events). Deploy twice: as an Add-on (the Chat connection) and as a
  * Web app (the poller's URL; "execute as me", "anyone"). Nothing here decides anything; it is a pipe.
  */
-var TAPS_ = { card_answer: 1, card_undo: 1, card_edit_submit: 1, vault_add_submit: 1, vault_add: 1 };
+var TAPS_ = { card_answer: 1, card_undo: 1, card_edit_submit: 1, vault_add_submit: 1, vault_add: 1, home_action: 1, form_submit: 1, form_action: 1 };
+// never held for later: a dialog or a Home tab nobody is looking at any more (a late reply has no one to reach)
+var NEVER_HELD_ = { vault_add_submit: 1, vault_add: 1, card_edit: 1, onAppHome: 1, home_action: 1, onAppCommand: 1, form_open: 1 };
 var HOLD_PREFIX_ = 'held_';
 var WAIT_MS = 22000;          // how long the Chat handler waits for the PC's reply (Chat allows ~30 s)
 var POLL_STEP_MS = 400;
@@ -64,7 +66,25 @@ function slim_(event) {
       attachment: mm.attachment } };
   }
   if (chat.addedToSpacePayload) out.chat.addedToSpacePayload = chat.addedToSpacePayload;
+  if (chat.appCommandPayload) {
+    // a registered slash or quick command (2026-11-04): its id, and the message it rode in on
+    var cp = chat.appCommandPayload, cm = cp.message || {};
+    out.chat.appCommandPayload = { appCommandMetadata: cp.appCommandMetadata || {}, space: cp.space, message: {
+      name: cm.name, text: String(cm.text || '').slice(0, 2000), argumentText: String(cm.argumentText || '').slice(0, 2000),
+      sender: cm.sender, space: cm.space, thread: cm.thread, createTime: cm.createTime } };
+  }
+  if (chat.eventTime) out.chat.eventTime = chat.eventTime;
   return out;
+}
+
+/** The Home tab's card while the PC is slow (2026-11-04): a line, and a chip that asks again. */
+function homeWaiting_(update) {
+  var card = { sections: [{ widgets: [
+    { textParagraph: { text: 'My computer is slow to answer. Tap Desk again in a moment.' } },
+    { chipList: { chips: [{ label: 'Desk', onClick: { action: { function: 'home_action',
+      parameters: [{ key: 'do', value: 'desk' }, { key: 'ctx', value: 'home' }] } } }] } } ] }] };
+  var nav = update ? { updateCard: card } : { pushCard: card };
+  return { action: { navigations: [nav] } };
 }
 
 /** The reply Chat gets when the PC did not answer in time: the choice is shown as taken; the PC finishes later. */
@@ -86,6 +106,19 @@ function optimistic_(event, fn) {
   }
   if (fn === 'card_edit_submit') return closeDialog_('Got it. The agent will send this the moment its computer picks it up.');
   if (fn === 'card_undo') return say_('Got the Undo. The agent will apply it the moment its computer picks it up.');
+  if (fn === 'onAppHome') return homeWaiting_(false);
+  if (fn === 'home_action') return homeWaiting_(true);
+  if (fn === 'onAppCommand') return say_('My computer is slow to answer; try that again in a moment.');
+  if (fn === 'form_action') {
+    // a setup button (a job the agent runs, 2026-11-04): the tap is taken; the PC redraws this card when it picks it up
+    return { hostAppDataAction: { chatDataAction: { updateMessageAction: { message: { cardsV2: [{
+      cardId: 'job-' + String(((event.commonEventObject || {}).parameters || {}).rid || 'setup'),
+      card: { header: { title: 'Got it', subtitle: 'working' }, sections: [{ widgets: [{ textParagraph: { text:
+        'My computer is picking this up. This card updates itself when it is done; if it has not changed in a few minutes, tap again.' } }] }] },
+    }] } } } } };
+  }
+  if (fn === 'form_open') return say_('The agent\'s computer is busy. Tap the button again in a minute.');
+  if (fn === 'form_submit') return closeDialog_('Got it. The card says when it is stored; if it does not change in a few minutes, enter it again.');
   return {};                                     // a message: answered when the PC reads it
 }
 
@@ -122,7 +155,7 @@ function push_(event) {
     }
   }
   console.error('relay: Mission Control unreachable (' + last + ')');
-  if (fn !== 'vault_add_submit' && fn !== 'card_edit' && fn !== 'vault_add') hold_(event);   // a password is never held
+  if (!NEVER_HELD_[fn]) hold_(event);           // a password, a dialog or a Home tab is never held
   return optimistic_(event, fn);
 }
 
@@ -179,50 +212,80 @@ function queueIds_() {
 }
 function setQueueIds_(ids) { cache_().put(QUEUE_KEY, JSON.stringify(ids), EVENT_TTL_S); }
 
+/** The queue's lock. waitLock THROWS when another run holds it too long, and that error reached the owner as
+ *  "Unable to process request" while the tap still went through later (2026-11-04). tryLock never throws: a run that
+ *  cannot get the lock in time goes on without it (a rare lost update beats a certain error). -> the lock, or null. */
+function lock_(ms) {
+  try {
+    var lock = LockService.getScriptLock();
+    return lock.tryLock(ms) ? lock : null;
+  } catch (e) { console.error('lock: ' + e); return null; }
+}
+function unlock_(lock) { try { if (lock) lock.releaseLock(); } catch (e) { console.error('unlock: ' + e); } }
+
 function enqueue_(event, fn) {
   var id = 'e' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
   var ttl = fn === 'vault_add_submit' ? SECRET_TTL_S : EVENT_TTL_S;
-  var lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  var lock = lock_(8000);
   try {
     cache_().put('ev_' + id, JSON.stringify({ id: id, at: Date.now(), fn: fn, event: slim_(event) }), ttl);
     var ids = queueIds_();
     ids.push(id);
     setQueueIds_(ids);
   } finally {
-    lock.releaseLock();
+    unlock_(lock);
   }
   return id;
 }
 
 function dequeue_(id) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  var lock = lock_(4000);
   try {
-    cache_().remove('ev_' + id);
+    cache_().remove('ev_' + id);      // gone even if the id list is not rewritten: the poll skips an id with no event
     setQueueIds_(queueIds_().filter(function (x) { return x !== id; }));
+  } catch (e) {
+    console.error('dequeue: ' + e);
   } finally {
-    lock.releaseLock();
+    unlock_(lock);
   }
 }
 
-/** The PC's poll: up to `max` queued events, oldest first, removed from the queue as they are handed over. */
+var LEASE_S = 12;             // a handed-over event stays queued until the PC acks it; past this it is handed over again
+                              // (40 until 2026-11-04: a poll whose ANSWER was lost kept the tap from the next poll past Chat's wait)
+
+/** The PC's poll: up to `max` queued events, oldest first. LEASED, not removed (2026-11-04): a poll whose answer never
+ *  reached the PC (its read timed out while Apps Script was slow) used to lose the tap for good - the owner saw
+ *  "Unable to process request" and nothing ever ran. Now the PC acks each event (op=ack) once Mission Control took it;
+ *  an un-acked event is handed over again after LEASE_S. The PC skips an id it already handled. */
 function popEvents_(max) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  var lock = lock_(3000);
+  if (!lock) return [];                        // busy: the PC asks again in a moment
   try {
-    var ids = queueIds_();
-    var take = ids.slice(0, max), rest = ids.slice(max);
-    var out = [];
-    for (var i = 0; i < take.length; i++) {
-      var raw = cache_().get('ev_' + take[i]);
-      if (raw) { out.push(JSON.parse(raw)); cache_().remove('ev_' + take[i]); }
+    var ids = queueIds_(), out = [], keep = [], now = Date.now();
+    for (var i = 0; i < ids.length; i++) {
+      var raw = cache_().get('ev_' + ids[i]);
+      if (!raw) continue;                                   // expired: gone for good
+      keep.push(ids[i]);
+      if (out.length >= max) continue;
+      var leased = Number(cache_().get('lease_' + ids[i]) || 0);
+      if (leased && now - leased < LEASE_S * 1000) continue;
+      cache_().put('lease_' + ids[i], String(now), LEASE_S + 5);
+      out.push(JSON.parse(raw));
     }
-    setQueueIds_(rest);
+    setQueueIds_(keep);
     return out;
   } finally {
-    lock.releaseLock();
+    unlock_(lock);
   }
+}
+
+/** The PC took these events: drop them from the queue. */
+function ackEvents_(ids) {
+  var n = 0;
+  for (var i = 0; i < (ids || []).length; i++) {
+    try { dequeue_(String(ids[i])); cache_().remove('lease_' + ids[i]); n++; } catch (e) { console.error('ack: ' + e); }
+  }
+  return n;
 }
 
 function pull_(event) {
@@ -238,12 +301,19 @@ function pull_(event) {
       try { return JSON.parse(r); } catch (e) { return {}; }
     }
   }
-  if (fn === 'vault_add_submit' || fn === 'vault_add' || fn === 'card_edit') dequeue_(id);   // never held: a password, or a dialog nobody can answer late
+  if (NEVER_HELD_[fn]) dequeue_(id);             // never held: a password, a dialog or a Home tab nobody can answer late
   return optimistic_(event, fn);                 // the rest stays queued; the poller delivers it as X-Sage-Late
 }
 
+/** Every Chat event comes through here. Whatever goes wrong inside the relay, Chat gets a real answer (the same one
+ *  as when the PC is slow), never the runtime's "Unable to process request" (2026-11-04). */
 function relay_(event) {
-  return mode_() === 'push' ? push_(event) : pull_(event);
+  try {
+    return mode_() === 'push' ? push_(event) : pull_(event);
+  } catch (e) {
+    console.error('relay: ' + ((event && event.relayFunction) || 'message') + ': ' + e);
+    try { return optimistic_(event, (event && event.relayFunction) || ''); } catch (e2) { return {}; }
+  }
 }
 
 /** Web app: the PC side. GET ?secret=..&op=health|poll ; POST {secret, op:"reply", id, body}. */
@@ -263,6 +333,7 @@ function doPost(e) {
     cache_().put('reply_' + body.id, JSON.stringify(body.body || {}), 60);
     return json_({ ok: true });
   }
+  if (body.op === 'ack') return json_({ ok: true, acked: ackEvents_(body.ids || []) });
   if (body.op === 'poll') return json_({ ok: true, events: popEvents_(Number(body.max) || 10), t: Date.now() });
   return json_({ error: 'unknown op' });
 }
@@ -276,7 +347,10 @@ function json_(obj) {
 function onMessage(event)          { return relay_(event); }
 function onAddedToSpace(event)     { return relay_(event); }
 function onRemovedFromSpace(event) { return relay_(event); }
-function onAppCommand(event)       { return relay_(event); }
+function onAppCommand(event)       { event.relayFunction = 'onAppCommand'; return relay_(event); }
+// the Home tab (2026-11-04): Chat API -> Configuration -> Support App Home, trigger function onAppHome
+function onAppHome(event)          { event.relayFunction = 'onAppHome'; return relay_(event); }
+function home_action(event)        { event.relayFunction = 'home_action'; return relay_(event); }
 
 // Button taps and dialogs: the add-on runtime calls the function named in the button's onClick action, so
 // these names must match chat_push.py's buttons.
@@ -286,6 +360,13 @@ function card_edit(event)        { event.relayFunction = 'card_edit'; return rel
 function card_edit_submit(event) { event.relayFunction = 'card_edit_submit'; return relay_(event); }
 function vault_add(event)        { event.relayFunction = 'vault_add'; return relay_(event); }
 function vault_add_submit(event) { event.relayFunction = 'vault_add_submit'; return relay_(event); }
+// the data-entry forms and the setup buttons (scripts/chat_forms.py, 2026-11-01 / 2026-11-04): a connection's card opens
+// a dialog (form_open), its submit stores the values (form_submit), a job button runs the job (form_action). The add-on
+// runtime dispatches a tap to the function NAMED in the button, so a name missing here fails before anything reaches
+// the PC ("Unable to process request", the owner 2026-11-04).
+function form_open(event)        { event.relayFunction = 'form_open'; return relay_(event); }
+function form_submit(event)      { event.relayFunction = 'form_submit'; return relay_(event); }
+function form_action(event)      { event.relayFunction = 'form_action'; return relay_(event); }
 
 /** Push mode only: run once by hand in the editor to prove Apps Script can reach the endpoint. */
 function pingTest() {

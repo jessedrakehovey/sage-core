@@ -79,6 +79,8 @@ THREAD_KEEP = 60            # messages kept per contact (context for drafting)
 OUTBOX_MAX_AGE_H = 3        # an approved text not fetched within this long is not sent late
 HANDED_STALE_MIN = 30       # fetched by the phone but never acked
 HANDED_STALE_NOACK_MIN = 240  # ...on a phone whose Shortcut has NEVER acked (every text looks unconfirmed there; 2026-10-23)
+FETCH_WAIT_S = 40           # a fetch that arrives inside a text's undo window is held this long at most, then answered (config phone.fetch_wait_s; 0 = off)
+WAITING_TELL_MIN = 3       # approved, queued, and the phone has not fetched it this long: the owner is told once, with the send-now link (config phone.waiting_tell_min; 0 = off)
 HANDED_GIVEUP_H = 72        # older than this, a handed text is not chased any more (Teo's Oct 18 text was still being raised Oct 23)
 TEXT_MAX = 4000
 
@@ -214,8 +216,66 @@ def _own_nudge(handle: str, text: str) -> bool:
     return any(handle.lower().endswith("@" + d) for d in domains)
 
 
-def inbound(sender, text, name="", received="", account=DEFAULT_ACCOUNT):
-    """One incoming text from a phone -> thread log + ONE ticket (deduped on content)."""
+GROUP_MAX = 12                # members kept on a group record (names looked up for each)
+
+
+def group_send_ok(account: str) -> bool:
+    """Can this phone's send Shortcut text INTO a group chat (Send Message with every member as a recipient)?
+    Off until config phone.group_send_accounts names the account: the Shortcut so far reads one `to` only
+    (2026-10-08: a reply to the camping group went to one member alone)."""
+    try:
+        from alib import config
+        return account in [str(a) for a in ((config().get("phone") or {}).get("group_send_accounts") or [])]
+    except BaseException:  # noqa: BLE001  (config() sys.exits on a broken file)
+        return False
+
+
+def _handles(raw) -> list:
+    """A participant list from the phone (a list, or one string split on commas / semicolons / new lines) -> valid handles."""
+    if isinstance(raw, str):
+        raw = re.split(r"[,;\n]+", raw)
+    out = []
+    for h in raw or []:
+        h = norm_handle(h)
+        if valid_handle(h) and h not in out:
+            out.append(h)
+    return out
+
+
+def group_info(handle, text="", account=DEFAULT_ACCOUNT, participants=None, chat_id="", chat_name="", name="") -> dict:
+    """Did this text come in a group chat? The phone's own participants / chat id when it sends them, else the
+    group whois.py reads from the threads (tapbacks quoting another member). {} for a one-on-one text.
+    -> {members, names, chat_id, chat_name, source, can_send, note}; `note` is the line the reply card must carry."""
+    members = _handles(participants)
+    source = "phone" if (members or chat_id) else ""
+    if not source:
+        try:
+            import whois
+            g = whois.resolve(handle, text or None).get("group") or {}
+            members = _handles(g.get("members") or [])
+            source = "guessed" if members else ""
+        except Exception:  # noqa: BLE001
+            members = []
+    if handle and (members or chat_id) and handle not in members:
+        members.insert(0, handle)
+    if not chat_id and len(members) < 2:
+        return {}
+    members = members[:GROUP_MAX]
+    names = [((name if h == handle else "") or _who_name(h) or h) for h in members]
+    who = name or _who_name(handle) or handle
+    others = [n for h, n in zip(members, names) if h != handle]
+    label = chat_name or ("the group chat with " + ", ".join(others) if others else "a group chat")
+    # a guessed member list could leave someone out (and so open a NEW group), so only the phone's own list sends
+    can = group_send_ok(account) and source == "phone"
+    note = (f"This came in {label}; the reply goes into that group." if can else
+            f"This came in {label}. The phone can't text into a group chat yet, so this reply goes to {who} alone, not the group.")
+    return {"members": members, "names": names, "chat_id": str(chat_id or "")[:200], "chat_name": str(chat_name or "")[:80],
+            "source": source, "can_send": can, "note": note}
+
+
+def inbound(sender, text, name="", received="", account=DEFAULT_ACCOUNT, participants=None, chat_id="", chat_name=""):
+    """One incoming text from a phone -> thread log + ONE ticket (deduped on content). A text that came in a group
+    chat carries payload.group (group_info): who is in it, and whether the reply can go back into it."""
     handle, text = norm_handle(sender), str(text or "").strip()
     if not handle or not text:
         return {"ok": False, "reason": "from and text are required"}
@@ -245,12 +305,18 @@ def inbound(sender, text, name="", received="", account=DEFAULT_ACCOUNT):
         shown = who["label"]                   # "probably Marisa (+1 ...)" says how sure the name is
     elif name:
         shown = name
+    try:
+        group = group_info(handle, text, account, participants, chat_id, chat_name, name)
+    except Exception:  # noqa: BLE001
+        group = {}
     item = {"source": "imessage", "source_id": sid, "lane": lane, "kind": "imessage_in",
-            "title": f"Text from {shown}: {text[:90]}", "summary": text[:600],
+            "title": f"Text from {shown}{' in a group chat' if group else ''}: {text[:90]}", "summary": text[:600],
             "payload": {"from": handle, "name": name[:80], "text": text[:TEXT_MAX],
                         "received": received, "account": account,
                         # who they are, with the reason, so the drafter and Sage never have to guess (whois.py)
                         **({"who": who} if who else {}),
+                        # the group chat it came in, and whether the reply can go back into it (group_info)
+                        **({"group": group} if group else {}),
                         # the conversation so far (both directions), so the drafter has context without a lookup
                         "thread": [{"ts": m.get("ts", "")[:16], "dir": m.get("dir", ""), "text": str(m.get("text", ""))[:240]}
                                    for m in thread(handle, 8)["messages"][:-1]]}}
@@ -273,6 +339,11 @@ def queue_outbound(payload: dict, ticket_id: str) -> tuple[bool, str]:
     to, body = norm_handle(payload.get("to")), str(payload.get("body") or "")
     if not valid_handle(to) or not body.strip():
         return False, "PERMANENT: imessage_send needs a valid phone/email `to` and a body"
+    acct = str(payload.get("account") or DEFAULT_ACCOUNT)
+    group, chat_id = _handles(payload.get("group")), str(payload.get("chat_id") or "")
+    if (group or chat_id) and not group_send_ok(acct):
+        # never quietly one-on-one: exec_store refuses this at mint, so this is the last belt
+        return False, "PERMANENT: this phone's Shortcut can't text into a group chat (config phone.group_send_accounts)"
     with QueueLock("phone_bridge") as ok:
         if not ok:
             return False, "outbox busy"
@@ -280,9 +351,12 @@ def queue_outbound(payload: dict, ticket_id: str) -> tuple[bool, str]:
         if any(i.get("ticket") == ticket_id for i in box["items"]):
             return True, f"PHONE_QUEUED (already) {ticket_id}"
         oid = "m-" + secrets.token_hex(6)
-        acct = str(payload.get("account") or DEFAULT_ACCOUNT)
         box["items"].append({"id": oid, "ticket": ticket_id, "to": to, "body": body, "status": "ready", "account": acct,
-                             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "ts_handed": "", "ts_sent": ""})
+                             "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "ts_handed": "", "ts_sent": "",
+                             # an owner approved it on a card: quiet hours do not hold it (exec_store.quiet_exempt)
+                             **({"any_hour": True} if _any_hour(ticket_id) else {}),
+                             # a group reply: the Shortcut sends to every recipient, which iMessage threads into that group
+                             **({"recipients": group or [to], "chat_id": chat_id} if (group or chat_id) else {})})
         save_json(OUTBOX, box)
         n_ready = sum(1 for i in box["items"] if i.get("status") == "ready")
     try:   # wake the phone so its Shortcut drains the outbox now (phone_nudge.py); never fatal
@@ -290,7 +364,7 @@ def queue_outbound(payload: dict, ticket_id: str) -> tuple[bool, str]:
         phone_nudge.fire(n_ready)
     except Exception:  # noqa: BLE001
         pass
-    return True, f"PHONE_QUEUED {oid} -> ...{to[-4:]}"
+    return True, f"PHONE_QUEUED {oid} -> ...{to[-4:]}{f' (group of {len(group)})' if group else ''}"
 
 
 def _quiet() -> bool:
@@ -299,20 +373,172 @@ def _quiet() -> bool:
     return h >= es.QUIET_START or h < es.QUIET_END
 
 
+def _any_hour(ticket_id: str) -> bool:
+    """Was this text approved by an owner on a card? Then it goes at any hour. Never raises; unknown = no."""
+    try:
+        import exec_store as es
+        return es.quiet_exempt(es.fold().get(ticket_id) or {})
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def held_by_quiet(item: dict | None) -> bool:
+    """Quiet hours hold this outbox item right now (a text that goes by itself; never one an owner approved)."""
+    return _quiet() and not (item or {}).get("any_hour")
+
+
+def _say(item: dict, line: str, fallback: bool = False) -> bool:
+    """One line about a queued text where its owner sees it: under the card they tapped (drain.report_line).
+    With `fallback`, a text that had no card (a standing text) is said as a plain line on that phone's lane
+    instead. Never raises; a line that could not be said never holds a text back."""
+    try:
+        import exec_store as es
+        import drain
+        t = es.fold().get(str(item.get("ticket") or ""))
+        if t and drain.report_line(t, line):
+            return True
+        if not fallback:
+            return False
+        import chat_push
+        lane = ACCOUNTS.get(str(item.get("account") or DEFAULT_ACCOUNT), ACCOUNTS[DEFAULT_ACCOUNT]).get("lane", "")
+        return bool(chat_push.push_say(line, lane))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _waiting_min() -> float:
+    try:
+        from alib import config
+        return float((config().get("phone") or {}).get("waiting_tell_min", WAITING_TELL_MIN))
+    except Exception:  # noqa: BLE001
+        return float(WAITING_TELL_MIN)
+
+
+def _run_url() -> str:
+    try:
+        import chat_push
+        return str(chat_push.MC_URL).rstrip("/") + "/phone/run"
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def tell_waiting(now: float | None = None) -> int:
+    """Every minute from the comms probe: an approved text the phone has NOT fetched WAITING_TELL_MIN after it was
+    queued is said once, where it was approved, with the one-tap link that makes the phone send it (2026-11-04: six
+    wake-up texts never reached the phone, the text sat 54 minutes, and the owner had been told it was sent).
+    In quiet hours only for a text an owner approved (the rest wait for morning). -> lines said."""
+    mins = _waiting_min()
+    if mins <= 0:
+        return 0
+    now = now or time.time()
+    due = []
+    with QueueLock("phone_bridge") as ok:
+        if not ok:
+            return 0
+        box = load_json(OUTBOX, {"items": []})
+        for i in box["items"]:
+            if i.get("status") != "ready" or i.get("told_waiting") or held_by_quiet(i):
+                continue
+            try:
+                age = (now - time.mktime(time.strptime(i["ts"], "%Y-%m-%dT%H:%M:%S"))) / 60
+            except (KeyError, ValueError):
+                continue
+            if age >= mins:
+                i["told_waiting"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now))
+                due.append((dict(i), int(age)))
+        if due:
+            save_json(OUTBOX, box)
+    url = _run_url()
+    for i, age in due:
+        _say(i, f"Text to {i['to']} is still waiting for the phone after {age} min; send it now from the phone: {url}", fallback=True)
+    return len(due)
+
+
+def state_words(ticket_id: str, items=None) -> str:
+    """Where an approved text really is, in words a reply can use: queued / picked up / confirmed / not sent.
+    '' when the outbox has no record of it."""
+    items = load_json(OUTBOX, {"items": []})["items"] if items is None else items
+    it = next((i for i in items if i.get("ticket") == ticket_id), None)
+    if not it:
+        return ""
+    st = str(it.get("status") or "")
+
+    def hm(ts):
+        try:
+            return time.strftime("%I:%M %p", time.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S")).lstrip("0")
+        except ValueError:
+            return ""
+    if st == "ready":
+        return "STILL QUEUED: the phone has not picked it up, so it has NOT been sent yet"
+    if st == "handed":
+        return f"picked up by the phone at {hm(it.get('ts_handed'))}; NOT confirmed sent (the phone never acks), so never say it was texted"
+    if st == "sent":
+        return "confirmed: they replied" if it.get("confirmed_by") == "reply" else f"confirmed sent at {hm(it.get('ts_sent'))}"
+    if st == "expired":
+        return "NOT SENT: it waited too long for the phone and was dropped"
+    if st == "recalled":
+        return "NOT SENT: it was pulled back before the phone took it"
+    return st
+
+
+def _fetch_wait_s() -> float:
+    try:
+        from alib import config
+        return float((config().get("phone") or {}).get("fetch_wait_s", FETCH_WAIT_S))
+    except Exception:  # noqa: BLE001
+        return float(FETCH_WAIT_S)
+
+
+def wait_for_release(account: str = DEFAULT_ACCOUNT, max_s: float | None = None, sleep=time.sleep, now=None) -> float:
+    """The phone asked for work while a text for it is approved but still inside its undo window: hold the answer
+    until the window has passed, so the fetch carries the text. Without the carrier's wake-up text (2026-11-04) the
+    phone asks when its owner leaves the chat app, which is seconds after the tap on Send; an instant "nothing yet"
+    would leave the text for the next fetch. Waits only for a card-approved text for THIS phone that is due now, never
+    in quiet hours, never longer than `max_s` (FETCH_WAIT_S; config phone.fetch_wait_s, 0 = off). -> seconds waited."""
+    cap = _fetch_wait_s() if max_s is None else float(max_s)
+    if cap <= 0:
+        return 0.0
+    try:
+        import drain
+        import exec_store as es
+        floor = float(drain.UNDO_FLOOR_S) + 1
+        t0 = (now or time.time)()
+        need = 0.0
+        for t in es.pending(str(es.KIND_LANES.get("imessage_send") or "phone")):
+            if t.get("kind") != "imessage_send" or not es.due(t) or not str(t.get("approval_ref", "")).startswith("card:"):
+                continue
+            if str((t.get("payload") or {}).get("account") or DEFAULT_ACCOUNT) != account:
+                continue
+            try:
+                age = t0 - time.mktime(time.strptime(str(t.get("ts")), "%Y-%m-%dT%H:%M:%S"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= age < floor:
+                need = max(need, floor - age)
+        need = min(need, cap)
+        if need > 0:
+            sleep(need)
+        return need
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 def fetch_outbox(account: str = DEFAULT_ACCOUNT) -> list:
     """ONE phone asks for work: only the items approved for that account (an item with no
     account is owner's, from before 2026-10-05). Every ready item is handed over exactly once. Nothing is
     handed over during quiet hours: drain holds new tickets then, but a text that was already
-    in the outbox could still be fetched (and sent) by a late-night Shortcut run."""
-    if _quiet():
-        return []
+    in the outbox could still be fetched (and sent) by a late-night Shortcut run. The one thing that does go
+    then is a text an owner approved on a card (item.any_hour): their tap is the say on timing."""
+    quiet = _quiet()
     with QueueLock("phone_bridge") as ok:
         if not ok:
             return []
         box = load_json(OUTBOX, {"items": []})
-        out, late, now = [], [], time.strftime("%Y-%m-%dT%H:%M:%S")
+        out, late, took, now = [], [], [], time.strftime("%Y-%m-%dT%H:%M:%S")
         for i in box["items"]:
             if i["status"] != "ready" or str(i.get("account") or DEFAULT_ACCOUNT) != account:
+                continue
+            if quiet and not i.get("any_hour"):
                 continue
             try:
                 age_h = (time.time() - time.mktime(time.strptime(i["ts"], "%Y-%m-%dT%H:%M:%S"))) / 3600
@@ -325,9 +551,20 @@ def fetch_outbox(account: str = DEFAULT_ACCOUNT) -> list:
                 late.append(i)
                 continue
             i["status"], i["ts_handed"] = "handed", now
-            out.append({"id": i["id"], "to": i["to"], "body": i["body"]})
+            out.append({"id": i["id"], "to": i["to"], "body": i["body"],
+                        **({"recipients": i["recipients"], "chat_id": i.get("chat_id", "")} if i.get("recipients") else {})})
+            took.append(dict(i))
         if out or late:
             save_json(OUTBOX, box)
+    for i in took:                             # outside the lock: the owner hears "texted" now, when it is true
+        when = time.strftime("%I:%M %p").lstrip("0")
+        _say(i, f"Text to {'the group chat' if i.get('recipients') else i['to']} handed to the phone at {when}; the phone's Shortcut sends it.")
+    if took:
+        try:
+            import phone_nudge
+            phone_nudge.woke()
+        except Exception:  # noqa: BLE001
+            pass
     if late:                                   # outside the lock: add_many takes the same lock
         items = [{"source": "phone_outbox", "source_id": i["id"], "lane": ACCOUNTS.get(str(i.get("account") or DEFAULT_ACCOUNT), ACCOUNTS[DEFAULT_ACCOUNT])["lane"], "kind": "exec_exception",
                   "title": f"Approved text to ...{i['to'][-4:]} was NOT sent (waited over {OUTBOX_MAX_AGE_H} h)",

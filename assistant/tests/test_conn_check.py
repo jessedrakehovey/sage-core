@@ -156,7 +156,7 @@ _posted.clear()
 sentinels._conn_card({"id": "bank-simplefin", "name": "Bank feed (SimpleFIN Bridge, read-only)",
                       "renew": "python assistant/scripts/setup_creds.py money simplefin", "detail": "HTTP 403 - python assistant/scripts/setup_creds.py money simplefin"})
 sc = json.dumps(_posted)
-check("simplefin card: points to the Bank feed button on Setup", "/setup" in sc and "Bank feed button" in sc, sc)
+check("simplefin card: says to ask for the bank feed form in chat (never the Setup page)", "set up the bank feed" in sc and "/setup" not in sc and "Mission Control" not in sc, sc)
 check("simplefin card: no command, no terminal", "python" not in sc and "setup_creds" not in sc and "terminal" not in sc.lower(), sc)
 check("simplefin card: still says what broke", "HTTP 403" in sc, sc)
 

@@ -295,6 +295,33 @@ def buttons_on() -> bool:
         return True
 
 
+def _chat_first(text) -> str:
+    """A card's own words (never the exact draft that goes out) without a sentence that sends the owner to the computer."""
+    try:
+        _agent_path()
+        import chatfirst
+        return chatfirst.clean(str(text or ""), "")
+    except Exception:  # noqa: BLE001
+        return str(text or "")
+
+
+def _outbound_kind(kind: str) -> bool:
+    try:
+        import exec_store as _es
+        return str(kind or "") in _es.OUTBOUND_KINDS
+    except Exception:  # noqa: BLE001
+        return str(kind or "") in ("email_send", "imessage_send")
+
+
+def _remote_desktop() -> str:
+    """Chrome Remote Desktop, the owner's live view of the PC from a phone (config doer.remote_desktop_url)."""
+    try:
+        from alib import config
+        return str((config().get("doer") or {}).get("remote_desktop_url") or "https://remotedesktop.google.com/access")
+    except Exception:  # noqa: BLE001
+        return "https://remotedesktop.google.com/access"
+
+
 def _button(label: str, fn: str, params: dict, interaction: str = "", filled: bool = False) -> dict:
     """One Chat button. `filled` paints it in the brand green (Chat renders a coloured button as
     filled, the rest as outlined), so the recommended choice reads at a glance instead of carrying
@@ -354,6 +381,8 @@ def edit_dialog(card: dict, q_index: int = 0, text: str | None = None, error: st
     q = (card.get("questions") or [{}])[q_index]
     qid = str(card.get("id") or "")
     ex = q.get("exec") or {}
+    if ex.get("kind") == "agent_run" and (ex.get("payload") or {}).get("ask_code"):
+        return code_dialog(card, q_index, error=error)
     key, draft = exec_text(q)
     text = draft if text is None else text
     p = ex.get("payload") or {}
@@ -374,7 +403,47 @@ def edit_dialog(card: dict, q_index: int = 0, text: str | None = None, error: st
                                                     {"qid": qid, "q": str(q_index)})]}}]}]}
 
 
-def vault_dialog(site: str = "", error: str = "", username: str = "") -> dict:
+def later_dialog(card: dict, q_index: int = 0, tz_offset_min: int | None = None, error: str = "") -> dict:
+    """The dialog behind "Send later" on an outbound card (2026-11-04): a date-time picker and one button. Its submit is
+    card_edit_submit with mode=later; gchat_events turns the picked time into cards.answer(send_at=...), the same
+    not_before an owner's "send it at 8am" in words would mint."""
+    qid = str(card.get("id") or "")
+    q = (card.get("questions") or [{}])[q_index]
+    ex = q.get("exec") or {}
+    if tz_offset_min is None:
+        tz_offset_min = -time.timezone // 60 + (60 if time.localtime().tm_isdst > 0 else 0)
+    nxt = (int(time.time()) // 3600 + 1) * 3600          # the next full hour, local
+    top = []
+    if error:
+        top.append({"textParagraph": {"text": f'<font color="#B3261E"><b>{html.escape(error[:300])}</b></font>'}})
+    top.append({"textParagraph": {"text": "Pick when it should go out. It is approved now and held until then; Undo on the card works until it has gone."}})
+    return {"header": {"title": "Send later", "subtitle": _names(str(q.get("header") or ""))[:200]},
+            "sections": [{"widgets": top + [
+                {"dateTimePicker": {"name": "when", "label": "Send at", "type": "DATE_AND_TIME", "valueMsEpoch": str(nxt * 1000),
+                                    "timezoneOffsetDate": int(tz_offset_min)}},
+                {"buttonList": {"buttons": [_button(str(ex.get("approve_label") or "Send") + " then", "card_edit_submit",
+                                                    {"qid": qid, "q": str(q_index), "mode": "later"}, filled=True)]}}]}]}
+
+
+def code_dialog(card: dict, q_index: int = 0, error: str = "") -> dict:
+    """The dialog behind "Enter code" on a code card (a sign-in's one-time code, 2026-11-03): one field, one button.
+    Its submit is card_edit_submit; gchat_events hands the digits to cards.answer(text=...) so they are minted into the
+    sha-bound step exactly as the note box on Mission Control does. The code never lands in the conversation."""
+    qid = str(card.get("id") or "")
+    q = (card.get("questions") or [{}])[q_index]
+    host = str(((q.get("exec") or {}).get("payload") or {}).get("host") or "").strip()
+    top = []
+    if error:
+        top.append({"textParagraph": {"text": f'<font color="#B3261E"><b>{html.escape(error[:300])}</b></font>'}})
+    top.append({"textParagraph": {"text": "The code the site just sent you (text, email or your authenticator). "
+                                          "It goes straight into the sign-in, not into this chat."}})
+    return {"header": {"title": "Verification code", "subtitle": (host or str(q.get("header") or ""))[:200]},
+            "sections": [{"widgets": top + [
+                {"textInput": {"name": "body", "label": "Code", "type": "SINGLE_LINE", "value": ""}},
+                {"buttonList": {"buttons": [_button("Sign in", "card_edit_submit", {"qid": qid, "q": str(q_index)}, filled=True)]}}]}]}
+
+
+def vault_dialog(site: str = "", error: str = "", username: str = "", qid: str = "", rid: str = "") -> dict:
     """The dialog behind "Enter login" (vault_chat.card): site, username, password, an optional code-generator
     secret, one Save button. What is typed here goes to the app as formInputs, never into the conversation;
     gchat_events.click (vault_add_submit) hands it to doer/vault.py add-stdin and closes the dialog."""
@@ -382,14 +451,20 @@ def vault_dialog(site: str = "", error: str = "", username: str = "") -> dict:
     if error:
         top.append({"textParagraph": {"text": f'<font color="#B3261E"><b>{html.escape(error[:300])}</b></font>'}})
     top.append({"textParagraph": {"text": "Typed here, saved in the vault on my computer, never posted in chat. "
-                                          "The site needs its web address (stripe.com, app.hubspot.com)."}})
+                                          "The site needs its web address (stripe.com, app.hubspot.com)."
+                                          + (" Saved, I carry on with the job from where I stopped." if qid or rid else "")}})
+    params = {"site": (site or "")[:200]}
+    if qid:
+        params["qid"] = qid                      # the sign-in card this login answers (report.py login, 2026-11-03)
+    if rid:
+        params["rid"] = rid                      # the setup job that stopped at this site's sign-in: it runs again once saved
     return {"header": {"title": "Login for the vault", "subtitle": (site or "which site, and the username and password")[:200]},
             "sections": [{"widgets": top + [
                 {"textInput": {"name": "site", "label": "Site (web address)", "type": "SINGLE_LINE", "value": (site or "")[:200]}},
                 {"textInput": {"name": "username", "label": "Username or email", "type": "SINGLE_LINE", "value": (username or "")[:200]}},
                 {"textInput": {"name": "password", "label": "Password", "type": "SINGLE_LINE", "value": ""}},
                 {"textInput": {"name": "totp", "label": "Code-generator secret (optional; the 'can't scan?' text under the QR code)", "type": "SINGLE_LINE", "value": ""}},
-                {"buttonList": {"buttons": [_button("Save in the vault", "vault_add_submit", {"site": (site or "")[:200]}, filled=True)]}}]}]}
+                {"buttonList": {"buttons": [_button("Save in the vault" + (" and carry on" if qid or rid else ""), "vault_add_submit", params, filled=True)]}}]}]}
 
 
 def card_body(card: dict, state: str = "open", answered: dict | None = None) -> dict:
@@ -419,6 +494,7 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
     if not preview and exec_text(q)[1]:
         preview = exec_text(q)[1]
     ask, to = _names(ask), _names(to)         # the ask names people; the draft below stays exactly as it goes out
+    ask = _chat_first(ask)                    # no card sends an owner to the computer (agent/chatfirst.py, 2026-11-04)
     # Three labelled sections, always in this order (the owner 2026-10-17 evening: "I want to know exactly
     # where the draft is, where the details are, and what the approval is about, all clearly stated in
     # separate sections"): THE DECISION (what a tap does), DRAFT (the exact text that goes out, when
@@ -451,10 +527,14 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
                          "widgets": [{"textParagraph": {"text": _para(preview, QUESTION_MAX)}}]})
     if q.get("advice"):
         # ruling 8 (2026-10-15): the one-line recommendation on every card, example's advice.py shape
-        sections.append({"widgets": [{"textParagraph": {"text": _para(q.get("advice"), 300)}}]})
+        sections.append({"widgets": [{"textParagraph": {"text": _para(_chat_first(q.get("advice")), 300)}}]})
+    if q.get("caution") or (q.get("reason") and str(q.get("reason")).startswith("your rule")):
+        # the policy's own lines (scripts/policy.py): the caution, and the owner's rule that made it ask (never the default reason)
+        bits = [x for x in (str(q.get("caution") or ""), (f"Asking because of {q['reason']}" if str(q.get("reason") or "").startswith("your rule") else "")) if x]
+        sections.append({"widgets": [{"decoratedText": {"topLabel": "Before you tap", "text": _para(" ".join(bits), 240), "wrapText": True}}]})
     if q.get("details"):
         sections.append({"header": "Details", "collapsible": True, "uncollapsibleWidgetsCount": 0,
-                         "widgets": [{"textParagraph": {"text": _para(q.get("details"), DETAILS_MAX)}}]})
+                         "widgets": [{"textParagraph": {"text": _para(_chat_first(q.get("details")), DETAILS_MAX)}}]})
     for r in (q.get("rulings") or [])[:1]:
         sections.append({"widgets": [{"decoratedText": {"topLabel": "Standing ruling", "text": _para(r.get("ruling"), 300), "wrapText": True}}]})
     if state in ("open", "undone"):
@@ -470,11 +550,33 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
             rec = [0]                                   # an approve card: the first button is the approve
         btns = [_button(o["label"], "card_answer", {"qid": qid, "option": o["label"], "q": "0"}, filled=(i in rec))
                 for i, o in enumerate(opts)]
+        p_ = ex.get("payload") or {}
+        appr = str(ex.get("approve_label") or "Approve").strip()
+        if kind == "agent_run" and p_.get("login") and not p_.get("self"):
+            # the sign-in card (doer/report.py login, 2026-11-03): its approve is the vault DIALOG, so the login is typed
+            # on top of chat and never in it; saved, the dialog's submit answers this card and the job carries on
+            btns = [_button(appr, "vault_add", {"site": str(p_.get("host") or ""), "qid": qid, "q": "0"}, interaction="OPEN_DIALOG", filled=True)
+                    if str(o["label"]).strip() == appr else _button(o["label"], "card_answer", {"qid": qid, "option": o["label"], "q": "0"})
+                    for o in opts]
+            btns.append({"text": "Control PC", "onClick": {"openLink": {"url": _remote_desktop()}}})
+        elif kind == "agent_run" and p_.get("login") and p_.get("self"):
+            btns.append({"text": "Control PC", "onClick": {"openLink": {"url": _remote_desktop()}}})
+        elif kind == "agent_run" and p_.get("ask_code"):
+            # a code card: the code is typed in a DIALOG (code_dialog) instead of a bare Approve that has no code to mint
+            btns = [_button("Enter code", "card_edit", {"qid": qid, "q": "0"}, interaction="OPEN_DIALOG", filled=True)] + \
+                   [b for o, b in zip(opts, btns) if str(o["label"]).strip() != appr]
         if (btns or blanks) and exec_text(q)[1]:
             # the text an approve would send can be rewritten first: the tap opens a dialog
             edit = _button("Edit & send", "card_edit", {"qid": qid, "q": "0"},
                            interaction="OPEN_DIALOG", filled=bool(blanks))
             btns = ([edit] + btns[:6]) if blanks else (btns[:6] + [edit])
+        if btns and not blanks and ex and _outbound_kind(kind) and not ex.get("send_at"):
+            # an outbound send can be approved for a later time: a date-time picker (later_dialog, 2026-11-04)
+            btns.append(_button("Send later", "card_edit", {"qid": qid, "q": "0", "mode": "later"}, interaction="OPEN_DIALOG"))
+        if btns and not blanks and "always" in (q.get("grants") or []) and rec:
+            # grant types (scripts/policy.py, 2026-11-08): the tap can STAND. Only on a card the policy allows it for
+            # (never a send, money or a login); the recommended choice is what the standing yes answers with later
+            btns.append(_button("Always", "card_answer", {"qid": qid, "option": opts[rec[0]]["label"], "q": "0", "grant": "always"}))
         if btns and not buttons_on():
             # no public endpoint for taps (a new organization before Funnel / a relay): the choices are words,
             # answered in the card's own thread (the owner's-words-are-the-tap path, 2026-10-24)
@@ -507,7 +609,9 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
             # an https link (Chat allows no custom schemes) that Mission Control bounces to the
             # shortcuts:// URL; Safari then launches "example-org Send Texts" on the phone. Nothing
             # sends unless the drain already put this approved text in that phone's outbox.
-            btns.append({"text": "Send now from phone", "onClick": {"openLink": {"url": f"{MC_URL}/phone/run"}}})
+            # ?t= lets the page say why a tap would send nothing for THIS text (quiet hours, already picked up)
+            from urllib.parse import quote
+            btns.append({"text": "Send now from phone", "onClick": {"openLink": {"url": f"{MC_URL}/phone/run?t={quote(str(a['ticket']))}"}}})
         if btns:
             widgets.append({"buttonList": {"buttons": btns}})
         sections.append({"widgets": widgets})
@@ -1099,11 +1203,12 @@ def goes_out_line(kind: str, hour: int | None = None) -> str:
     try:
         import exec_store as _es
         h = time.localtime().tm_hour if hour is None else int(hour)
-        quiet_now = h >= _es.QUIET_START or h < _es.QUIET_END
+        holds = not _es.quiet_exempt({"approval_ref": "card:"})    # a tap on a card is an owner's approval (2026-11-11)
+        quiet_now = (h >= _es.QUIET_START or h < _es.QUIET_END) and holds
         end = f"{_es.QUIET_END}:00 AM"
         outbound = k in _es.OUTBOUND_KINDS
     except Exception:  # noqa: BLE001
-        quiet_now, end, outbound = False, "7:00 AM", k in ("imessage_send", "email_send")
+        quiet_now, end, outbound, holds = False, "7:00 AM", k in ("imessage_send", "email_send"), False
     if outbound and quiet_now:
         # the owner 2026-10-24, 10:50 PM: tapped Send, pressed the phone button twice, nothing moved, no word why.
         # The hold stays (his call); the card now says so the moment he taps.
@@ -1111,7 +1216,9 @@ def goes_out_line(kind: str, hour: int | None = None) -> str:
         return f"Held until {end} (quiet hours, 9 pm to 7 am): it goes {what} then. Undo works until it has gone."
     if k == "imessage_send":
         return f"Goes to your phone in about {UNDO_S + 6} s. Undo works until then."
-    hold = " (held overnight, 9 pm to 7 am)" if outbound else ""
+    if k == "agent_run":                            # drain.kick: this lane is drained right after the undo window (2026-11-04)
+        return f"Starts in about {UNDO_S + 10} s. Undo works until then."
+    hold = " (held overnight, 9 pm to 7 am)" if outbound and holds else ""
     return f"Runs at the next pass, within 10 minutes{hold}. Undo works until it has run."
 
 
@@ -1162,6 +1269,14 @@ def push_say(text: str, lane: str = "", thread: str = "") -> int:
     t = str(text or "").strip()
     if not t or not enabled():
         return 0
+    batch = None
+    if not thread:
+        try:
+            _agent_path()
+            import voice as batch
+            batch = batch if batch.is_build_ack(t) else None
+        except Exception:  # noqa: BLE001
+            batch = None
     t = _voice(t, "say")                      # a person's words or nothing (voice.py, 2026-10-27)
     if not t:
         return 0
@@ -1177,9 +1292,17 @@ def push_say(text: str, lane: str = "", thread: str = "") -> int:
         shown = g.to_gchat(t[:3800]) if hasattr(g, "to_gchat") else t[:3800]
         for key, space in targets(lane, "card"):
             try:
+                prev = batch.batch_message(space) if batch else ""
+                if prev and g.patch(prev, shown):
+                    # build taps in a row share one line, edited to name them all (2026-10-19)
+                    batch.batch_remember(space, prev)
+                    n += 1
+                    continue
                 if not _fresh(thread or space, t):
                     continue                  # the same words to the same place within the hour
                 msg = g.post(space, shown, thread or "")
+                if msg and batch:
+                    batch.batch_remember(space, msg)
                 if msg:
                     n += 1
                     if core is not None:

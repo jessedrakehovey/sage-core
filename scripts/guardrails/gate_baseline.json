@@ -83,7 +83,7 @@
     "mcp__gmail__send_email",
     "mcp__playwright__browser_click"
    ],
-   "allowed_count": 7
+   "allowed_count": 4
   },
   "doer": {
    "path": "assistant/doer/doer.py",
@@ -137,6 +137,23 @@
     "mcp__playwright__browser_click"
    ],
    "allowed_count": 5
+  },
+  "agent-desk": {
+   "path": "assistant/agent/desk.py",
+   "type": "py",
+   "denied": [
+    "Agent",
+    "Task",
+    "mcp__gmail__batch_delete_emails",
+    "mcp__gmail__delete_email",
+    "mcp__gmail__send_email",
+    "mcp__playwright__browser_click",
+    "mcp__playwright__browser_file_upload",
+    "mcp__playwright__browser_fill_form",
+    "mcp__playwright__browser_press_key",
+    "mcp__playwright__browser_type"
+   ],
+   "allowed_count": 0
   }
  }
 }

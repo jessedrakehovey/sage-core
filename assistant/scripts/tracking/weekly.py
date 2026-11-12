@@ -83,6 +83,22 @@ def readback_text(now=None) -> str:
         q2 = []
     if q2:
         lines.append("Worth scheduling this week (important, not urgent): " + " ".join(q2))
+    try:                                   # Seed E read-back: do the stalled closes carry a why
+        import chase
+        rep = chase.cause_coverage()
+        if int(rep.get("closed") or rep.get("n_closed") or 0) > 0:
+            lines.append("Why things stalled: " + chase.causes.coverage_words(rep))
+    except Exception:  # noqa: BLE001
+        pass
+    try:                                   # Seed C read-back: the high-stakes cards and what the verifier found
+        import metacheck_bind
+        import metacheck as MC
+        held = [r for r in MC.read_rows(metacheck_bind.LEDGER) if r.get("held") and C.age_days(str(r.get("held_at") or "")[:16], now) <= days]
+        if held:
+            mc = [ln for ln in metacheck_bind.calibration_lines(days) if ln.strip()]
+            lines.append("High-stakes cards: " + " ".join(mc)[:400])
+    except Exception:  # noqa: BLE001
+        pass
     return "\n".join(lines)
 
 

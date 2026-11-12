@@ -37,7 +37,7 @@ GRACE_S = 90                 # the reset minute itself can still refuse; wait a 
 MAX_ATTEMPTS = 3
 UNKNOWN_WAIT_S = 30 * 60     # a limit message with no reset time: try again in half an hour
 
-_LIMIT = re.compile(r"(session|usage|rate) limit|hit your limit|limit reached|too many requests", re.I)
+_LIMIT = re.compile(r"(session|usage|rate|weekly|daily|hourly|monthly|opus|sonnet) limit|hit your (?:\w+ )?limit|limit reached|too many requests", re.I)
 _RESET = re.compile(r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m", re.I)
 
 

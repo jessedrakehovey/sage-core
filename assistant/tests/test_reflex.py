@@ -11,6 +11,7 @@ of the 2026-10-26 failures from the live stores' shapes:
   - "the card is below" with the card refused is rewritten by code; the same failure twice never reopens a card;
   - sentinel findings are memoised inside one sweep; a job in the reflex's hand is not carded;
   - the app added to a new space: list invalidated, watermark set, one greeting.
+  - a PC clock an hour fast (2026-11-01): Google's time stamps the tokens and the watermarks; the owner hears it once.
    python assistant/tests/test_reflex.py
 """
 import os as _os, tempfile as _tf
@@ -46,6 +47,8 @@ import held  # noqa: E402
 import reflex  # noqa: E402
 import builder  # noqa: E402
 import commitments  # noqa: E402
+import clock  # noqa: E402
+clock._measure = lambda: 0.0          # no network: the PC clock is right unless a check says otherwise
 import cards  # noqa: E402
 import outcomes  # noqa: E402
 import sentinels  # noqa: E402
@@ -324,7 +327,10 @@ builder_mod.collect = lambda state=None: []
 # ------------------------------------------------------------------ 6. the reply, and the same failure twice
 reply = "Done, owner1. The text to Odette and Linden is on the card below, waiting for your tap. It quotes no prices."
 out = reflex.fix_reply(reply, [{"kind": "task", "what": "x"}], ["The card didn't post (DRAFT_LINT: ...); I've handed the draft on instead."])
-ok("card below" not in out and "comes here in a few minutes" in out and "quotes no prices" in out, f"'the card is below' with the card refused is replaced by the truth: {out}")
+ok("card below" not in out and "comes here in a few minutes" not in out and "quotes no prices" in out,
+   f"'the card is below' with the card refused is dropped; the refusal's own line (appended by the bridge) says what happened, once: {out}")
+out = reflex.fix_reply(reply, [{"kind": "task", "what": "x"}], ["The calendar didn't answer in time."])
+ok("card below" not in out and "comes here in a few minutes" in out, f"a refusal that says nothing about the card still gets the truth by code: {out}")
 ok(reflex.fix_reply(reply, [{"kind": "card", "what": "x"}], ["x"]) == reply, "with a card really posted the reply stands")
 ok(reflex.fix_reply(reply, [], []) == reply, "with nothing refused the reply stands")
 q = {"header": "Email to support", "lane": "personal", "question": "Email eTags support", "options": [{"label": "Send"}, {"label": "Skip"}],
@@ -479,5 +485,49 @@ finally:
     core.profile = real_profile
     core.save(account.LIMITS, {})
     core.save(held.STORE, {})
+
+# ---- a fast PC clock (2026-11-01: never left daylight time; every Google sign-in refused, a message skipped)
+import datetime as _dt  # noqa: E402
+from google.auth import _helpers as _gh  # noqa: E402
+real_measure, real_utc = clock._measure, _gh.utcnow
+try:
+    clock._measure = lambda: -3600.0
+    clock._MEM.update(offset=None, ts=0.0)
+    ok(abs(clock.now() - (time.time() - 3600)) < 2, "now() is Google's time, not the PC's")
+    clock._INSTALLED["v"] = False
+    clock.install()
+    true_utc = _dt.datetime.fromtimestamp(time.time() - 3600, _dt.timezone.utc).replace(tzinfo=None)
+    ok(abs((_gh.utcnow() - true_utc).total_seconds()) < 2, "google-auth stamps tokens with the corrected time")
+    f = reflex.d_clock()
+    ok(len(f) == 1 and f[0]["kind"] == "clock_skew" and "60 minutes fast" in f[0]["what"], f"the skew is a finding: {f}")
+    ok("clock is off" in reflex._need_line(f[0]) and "Settings" not in reflex._need_line(f[0]), "the owner hears it is being worked around, never a Windows setting to go change")
+    ok(reflex.fix_clock(f[0], {}, False)["final"], "no fix by code beyond compensating: straight to the owner")
+    clock._measure = lambda: None
+    clock._MEM.update(offset=None, ts=0.0)
+    ok(clock.offset() == -3600.0, "offline: the last good measurement is kept")
+    clock._measure = lambda: 2.0
+    clock._MEM.update(offset=None, ts=0.0)
+    ok(clock.offset() == 0.0 and reflex.d_clock() == [], "a couple of seconds is noise, not a finding")
+    # the owner FIXES the clock (15:16): the cached -1 h must not ride on a now-right clock
+    clock._measure = lambda: -3600.0
+    clock._MEM.update(offset=None, ts=0.0)
+    ok(clock.offset() == -3600.0, "an hour fast, measured")
+    clock._measure = lambda: 0.0
+    clock._MEM["ts"] -= 3600                          # the wall clock went back an hour; monotonic did not
+    ok(clock.offset() == 0.0, "a clock set back is seen at once and the correction re-measured to zero")
+    clock._measure = lambda: None
+    clock._MEM.update(offset=-3600.0)
+    clock._MEM["ts"] -= 3600
+    ok(clock.offset() == 0.0, "set back while Google is unreachable: trust the PC, never the stale correction")
+    clock._measure = lambda: -3600.0
+    clock.reset()
+    ok(clock.offset() == -3600.0, "reset (a 401) re-measures on the next call")
+    import bridge  # noqa: E402
+    ok(bridge.clock_jumped(1000.0, 50.0, 1000.0 - 3600 + 600, 650.0), "the bridge sees the clock set back an hour")
+    ok(not bridge.clock_jumped(1000.0, 50.0, 1600.5, 650.0), "ordinary time passing is not a jump")
+finally:
+    clock._measure, _gh.utcnow = real_measure, real_utc
+    clock._INSTALLED["v"] = False
+    clock._MEM.update(offset=None, ts=0.0)
 
 print(f"ALL {N} OK")

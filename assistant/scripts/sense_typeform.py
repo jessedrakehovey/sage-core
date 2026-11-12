@@ -105,8 +105,8 @@ def pacific(iso: str) -> str:
 
 def availability(d: str | None) -> tuple[str, str | None]:
     """(line for the brief, flag or None). Is that wedding date already booked? Read-only, from
-    the CRM snapshot (booked-category stages, test projects and locally cancelled ones
-    excluded). The old Apps Script 'failed open'; this never says a date is free when it could
+    the CRM snapshot (booked-category stages, test projects, locally cancelled ones and unsigned
+    leads excluded). The old Apps Script 'failed open'; this never says a date is free when it could
     not look: an unreadable or stale snapshot is itself a flag."""
     if not d:
         return "no wedding date given", None
@@ -117,8 +117,13 @@ def availability(d: str | None) -> tuple[str, str | None]:
         booked_stage = {s["stage_id"] for s in snap["stages"] if s.get("category") == "booked" and s.get("name") != "Completed"}
         state = load_json(VAULT / "scripts" / "projects" / "project_state.json", {}).get("projects", {})
         cancelled = {crm.project_id(v) for v in state.values() if isinstance(v, dict) and v.get("stage") == "cancelled" and crm.project_id(v)}
-        undated = sum(1 for p in snap["projects"] if not p.get("date") and p.get("stage_id") in booked_stage)
-        hits = [p.get("name", "?") for p in snap["projects"]
+        confirmed = {crm.project_id(v) for v in state.values() if isinstance(v, dict) and v.get("confirmed_by") and crm.project_id(v)}
+        # an unsigned lead holds no date: a booked-group column (e.g. one named for a sent questionnaire) also
+        # holds leads, so the CRM's own lead status decides, unless an owner confirmed the booking (2026-11-02)
+        signed = [p for p in snap["projects"] if p.get("status") not in ("lead", "lead_sent")
+                  or str(p.get("project_id") or p.get("id")) in confirmed or str(p.get("id")) in confirmed]
+        undated = sum(1 for p in signed if not p.get("date") and p.get("stage_id") in booked_stage)
+        hits = [p.get("name", "?") for p in signed
                 if p.get("date") == d and p.get("stage_id") in booked_stage
                 and str(p.get("project_id") or p.get("id")) not in cancelled and str(p.get("id")) not in cancelled
                 and not re.match(r"\s*(zz[\s_-]*test|test automation)", str(p.get("name") or ""), re.I)]

@@ -185,6 +185,13 @@ try {
         $stat    = (& git -C $vault diff --stat "$before..$after") -join "`n"
         Log "CHANGED:`n$commits`n$stat"
         Notify-MissionControl ("Dreaming {0} changed this folder:`n{1}`n`n{2}`n`nRevert any of it: git -C `"{3}`" revert <hash>" -f (Get-Date -Format 'yyyy-MM-dd'), $commits, $stat, $vault)
+        # Seed F post-patch step (scripts/evals/triggers.py): when tonight's commits touched a prompt, a rules file,
+        # the chase code or a packet, run the zero-LLM packet check and then the regression suite live (a few turns,
+        # each in a throwaway lane; verdicts in scripts/evals/eval_ledger.jsonl). Non-fatal, never from a session.
+        try {
+            $tr = Invoke-Py @((Join-Path $vault 'scripts\evals\triggers.py'), 'range', "$before..$after", '--live')
+            if ($tr -and $tr.Trim()) { Log "EVALS:`n$($tr.Trim())" }
+        } catch { Log "evals trigger error (non-fatal): $_" }
     }
 
     # SKILL.md size guard: dreaming auto-patches SKILLs, and every line is re-injected into

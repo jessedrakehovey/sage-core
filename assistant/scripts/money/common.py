@@ -45,15 +45,42 @@ DEFAULTS = {
     "accounts": {"kinds": [], "overrides": {}},
     "relay": {"splits_pct": {}},
     "categorize": {"unknowns_day": "fri", "unknowns_after": "15:00", "unknowns_max_rows": 12, "min_abs_amount": 1.0,
-                   "transfer_window_days": 3, "learn_to": "assistant/learnings/money.md"},
+                   "transfer_window_days": 3, "learn_to": "assistant/learnings/money.md",
+                   "weekly_card": True, "bulk_card": True, "bulk_max_rows": 30, "bulk_min_merchants": 8, "bulk_min_count": 3, "bulk_latch_days": 14},
     "forecast": {"horizon_days": 35, "min_occurrences": 3,
                  "periods": {"weekly": [7, 2], "monthly": [30, 5], "quarterly": [91, 8], "yearly": [365, 20]},
                  "price_jump_pct": 0.1, "price_jump_min": 2.0, "low_balance_days": 7, "warn_latch_days": 7,
-                 "post_hours": ["08:00", "20:30"]},
+                 "post_hours": ["08:00", "20:30"],
+                 # merchant classes (2026-11-01): only a `bill` is recurring or can raise a price-rise card
+                 "amount_cv_max": 0.4,
+                 "bill_buckets": ["biz:software", "biz:music", "biz:insurance", "biz:phone", "personal:rent",
+                                  "personal:utilities", "personal:subscriptions"],
+                 "variable_buckets": {"stores": ["personal:groceries", "personal:shopping", "personal:car", "personal:health",
+                                                 "biz:gear", "biz:office"],
+                                      "restaurants": ["personal:dining", "biz:meals"]},
+                 "variable_match": {
+                     "stores": r"costco|trader jo|amazon|amzn|walmart|wal-mart|\btarget\b|safeway|ralphs|\bvons\b|albertsons|"
+                               r"whole foods|sprouts|smart & final|grocer|\bmarket\b|supermarket|\bcvs\b|walgreens|rite aid|"
+                               r"home depot|lowe'?s|ikea|best buy|dollar ?tree|marshalls|tj ?maxx|7-eleven|\bfuel\b|chevron|"
+                               r"\barco\b|\bshell\b",
+                     "restaurants": r"restaurant|\bcaf[eé]\b|coffee|starbucks|pizza|taco|burger|\bgrill\b|kitchen|bakery|"
+                                    r"donut|doordash|uber ?eats|grubhub|postmates|mcdonald|chipotle|in-n-out|subway|panera|"
+                                    r"\bbar\b|brewing|diner|sushi"},
+                 "subscription_match": r"prime|membership|subscri|\bplus\b",
+                 "transfer_match": r"\btransfer\b|\bxfer\b|crcardpmt|credit crd|credit card pa?y|payment to .{0,24}card|"
+                                   r"card ending in|roundup|withdrawal to self|apple cash|add to balance"},
     "quarterly": {"method": "annualize", "remind_days_before": 10, "due": [], "set_aside_pct_floor": 0.25,
                   "set_aside_pct_cap": 0.40, "other_income_annual": 0, "prior_year_total_tax": None, "filing_status": "single"},
     "tax_tables": {"year": 2026, "federal": {}, "california": {}},
     "monthly": {"day": 1, "after": "08:00", "to": "owner1", "top_n": 3},
+    # the envelope budget (budget.py) and the weekly reconciliation (reconcile.py), 2026-11-02
+    "budget": {"start_month": "", "sides": ["personal", "business"],
+               "vault_match": r"profit|owner pay|giving|\btax|saving|emergency|\bfund\b|vault|reserve|sinking",
+               "off_match": r"invest|brokerage|self-directed|401|\bira\b|crypto|\bloan\b|mortgage",
+               "fund_day": 1, "fund_after": "08:30", "post_hours": ["08:00", "20:30"],
+               "targets": {}, "target_months": 3, "carry_overspend": False, "fund_card": True},
+    "reconcile": {"card": True, "day": "sun", "after": "18:00", "tolerance": 1.0, "stale_days": 3, "dup_window_days": 3,
+                  "pending_max_days": 10, "max_rows": 8, "age_sample": 10, "age_lookback_days": 365},
 }
 
 DOW = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -197,6 +224,19 @@ def merchant_key(desc: str) -> str:
     s = _NOISE.sub(" ", s)
     words = [w for w in s.split() if len(w) > 1]
     return " ".join(words[:3]).strip()
+
+
+def is_transfer(desc: str, c: dict | None = None) -> bool:
+    """A move between the owners' own accounts by its bank line (a card payment, a round-up, an online
+    transfer): never spending or income. A fee on a transfer is still spending."""
+    c = c or cfg()
+    s = str(desc or "").lower()
+    if re.search(r"\bfees?\b", s):
+        return False
+    try:
+        return bool(re.search(str(c["forecast"].get("transfer_match") or "$^"), s))
+    except re.error:
+        return False
 
 
 def txn_id(account_id: str, posted: str, amount, desc: str) -> str:

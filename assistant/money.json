@@ -39,7 +39,17 @@
    {"match": "checking|chequing", "kind": "personal", "side": "personal"}
   ],
   "overrides": {
-   "_doc": "account id -> kind/side when the name is ambiguous. Filled from the weekly unknowns answers or by hand."
+   "_doc": "account id -> kind/side when the name is ambiguous, and `budget`: the account's role in the envelope budget (spending | card | vault | off; budget.py). Filled from the weekly unknowns answers or by hand. 2026-11-02: the personal vaults (their own envelope each), the ads bucket (ads are paid from it, so it is the envelope), the older business checking.",
+   "MeJ4KpwYZPUbeMKk3Vdrcwd1BqpwjZU5N6BQY": {"kind": "savings", "side": "personal", "budget": "vault", "name": "Emergency Fund"},
+   "77K84XnAmRHY84LpROaMsw4oe7YwqLUD9g4Om": {"kind": "savings", "side": "personal", "budget": "vault", "name": "SoFi Savings"},
+   "EebyLpAgN0UJn9zDwq38U6bkoAn6ZQHJA4ZwR": {"kind": "savings", "side": "personal", "budget": "vault", "name": "Charity"},
+   "ReJZdXPEjbUJNOwrv017U6RnrJq6bMH4kaK8m": {"kind": "savings", "side": "personal", "budget": "vault", "name": "Car maintenance"},
+   "QeJ80p1V5BUkEwXjADn1uQe0Nx4QDYHzKVwkx": {"kind": "savings", "side": "personal", "budget": "vault", "name": "Travel"},
+   "9VA5eXz0wJcM7q1gzbxysX7MA5qX6BFkMnPaA": {"kind": "savings", "side": "personal", "budget": "vault", "name": "New Car"},
+   "VeQEDpvVOMUoNRbJpy36SvKgbxjv1NfXpvzQe": {"kind": "savings", "side": "personal", "budget": "vault", "name": "Investment"},
+   "OeOxApLVQBUq9bVvRK6BT7nywmg70MhVAjZMy": {"kind": "savings", "side": "personal", "budget": "vault", "name": "📚Education"},
+   "6AvnJxLQ1QudYdNbPBMOS0O3db4r7aIyjV1zD": {"kind": "operating", "side": "business", "budget": "vault", "name": "example-org - Advertising"},
+   "yBxAEAQDn5HvgwdXkARztLjEBjN58zfpRbDab": {"kind": "operating", "side": "business", "budget": "spending", "name": "BUS COMPLETE CHK"}
   }
  },
  "relay": {
@@ -47,6 +57,8 @@
   "splits_pct": {"tax": null, "savings": null, "operating": null}
  },
  "categorize": {
+  "bulk_card": false,
+  "weekly_card": false,
   "unknowns_day": "fri",
   "unknowns_after": "15:00",
   "unknowns_max_rows": 12,
@@ -103,5 +115,30 @@
   "after": "08:00",
   "to": "owner1",
   "top_n": 3
+ },
+ "budget": {
+  "fund_card": false,
+  "_doc": "The envelope budget (scripts/money/budget.py, 2026-11-02): give every dollar a job. One budget per side. targets: envelope -> monthly amount (a 'target groceries 600' typed on a card wins; neither set = the median of the last target_months months of activity). fund_day/after: the monthly 'fund the envelopes' card, one per side. vault_match / off_match: name patterns for accounts that are their own envelope / outside the budget (accounts.overrides[id].budget wins). carry_overspend false: an overspent envelope starts next month at 0, the shortfall already left the cash.",
+  "start_month": "2026-11",
+  "sides": ["personal", "business"],
+  "fund_day": 1,
+  "fund_after": "08:30",
+  "post_hours": ["08:00", "20:30"],
+  "targets": {},
+  "target_months": 3,
+  "carry_overspend": false
+ },
+ "reconcile": {
+  "card": false,
+  "_doc": "The weekly reconciliation card (scripts/money/reconcile.py, 2026-11-02): day/after once per ISO week, held for the Monday digest. tolerance: dollars between the bank's balance and the ledger's expectation since the last baseline; stale_days before a balance is the feed's problem; dup_window_days / pending_max_days shape the suspects it names; age_sample outflows go into the age of money.",
+  "day": "sun",
+  "after": "18:00",
+  "tolerance": 1.0,
+  "stale_days": 3,
+  "dup_window_days": 3,
+  "pending_max_days": 10,
+  "max_rows": 8,
+  "age_sample": 10,
+  "age_lookback_days": 365
  }
 }
