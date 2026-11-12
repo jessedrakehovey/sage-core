@@ -530,4 +530,49 @@ finally:
     clock._INSTALLED["v"] = False
     clock._MEM.update(offset=None, ts=0.0)
 
+# ---- a stalled ticket's "Waiting Nd" card (card q52050f15f98a, 2026-11-11): the reflex hands it to Sage from the card
+# itself, so the finding clears by the next pass instead of an hour of nothing and a build request
+import tickets  # noqa: E402
+tickets.add_many([{"source": "phone", "source_id": "corwin-sat", "lane": "personal", "kind": "inbound_text",
+                   "title": "Text from Corwin: Hey owner1 do you know where we need to be on Saturday, I think my family is going to come",
+                   "summary": "Hey owner1 do you know where we need to be on Saturday, I think my family is going to come"}], "test")
+tid = next(t["id"] for t in jload(Path(os.environ["ASSISTANT_DATA"]) / "tickets.json", {}).values() if t.get("source_id") == "corwin-sat")
+wq = {"header": "Waiting 5d: Text from Corwin: Hey owner1 do you know where we", "lane": "personal", "subject": f"staged:{tid}",
+      "question": "This has waited 5 days with nothing since: Text from Corwin: Hey owner1 do you know where we need to be on Saturday, I think my family is going to come.",
+      "options": [{"label": "Hand it to Sage (Recommended)"}, {"label": "Close it"}],
+      "clears_when": {"sentinel": f"staged:{tid}"}, "sentinel_key": f"staged:{tid}", "sentinel_act": {"close": [tid]}}
+rw = cards.post([wq], "sentinels", lane="personal")
+ok(rw.get("delivery") == "mc", f"the Waiting card is a system card: {rw}")
+wkey = f"card:{rw['qid']}"
+ok(wkey in {f["key"] for f in reflex.d_system_cards()}, "the reflex sees the Corwin Waiting card")
+_fb = reflex._file_build
+FILED = []
+reflex._file_build = lambda f, title, body: FILED.append(title) or "Wiki/Personal/x.md"
+reflex.tick(only=("card",))
+ok(cards._read(cards.LIVE / f"{rw['qid']}.json").get("status") == "answered", "step 0 taps 'Hand it to Sage' on the card itself")
+ok(wkey not in {f["key"] for f in reflex.d_system_cards()}, "...so the finding is gone")
+reflex.tick(only=("card",), now=time.time() + 3700)
+reflex._file_build = _fb
+ok(reflex._load()["findings"].get(wkey, {}).get("fixed") and not FILED, f"the next pass marks it fixed; no build request: {FILED}")
+_u, cards.UNDO_S = cards.UNDO_S, 0          # past the undo window
+cards.sweep()
+cards.UNDO_S = _u
+st = [t for t in jload(Path(os.environ["ASSISTANT_DATA"]) / "tickets.json", {}).values()
+      if t.get("kind") == "stuck_work" and t.get("source_id") == f"staged:{tid}"]
+ok(st and "Corwin" in st[0].get("summary", ""), "the tap became an operator ticket carrying Corwin's text")
+
+# the live card was escalated (a build filed) before the tap existed: the next pass still taps it, once
+rw2 = cards.post([dict(wq, sentinel_key="staged:tOLD", subject="staged:tOLD", clears_when={"sentinel": "staged:tOLD"},
+                       header="Waiting 6d: Text from Corwin: Saturday", sentinel_act={"close": ["tOLD"]})], "sentinels", lane="personal")
+wkey2 = f"card:{rw2['qid']}"
+d = reflex._load()
+f2 = next(f for f in reflex.d_system_cards() if f["key"] == wkey2)
+d["findings"][wkey2] = {**f2, "first": time.time() - 7200, "last_seen": time.time(), "step": 1, "escalated": time.time() - 60, "fixed": None,
+                        "fixes": [{"ts": time.time() - 3700, "what": "filed the build request: Wiki/Personal/x.md", "ok": True, "final": True}]}
+reflex._save(d)
+reflex.tick(only=("card",))
+ok(cards._read(cards.LIVE / f"{rw2['qid']}.json").get("status") == "answered", "an escalated Waiting card is still handed to Sage on the next pass")
+reflex.tick(only=("card",))
+ok(reflex._load()["findings"][wkey2].get("fixed"), "...and its finding clears by itself")
+
 print(f"ALL {N} OK")

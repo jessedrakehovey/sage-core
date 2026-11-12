@@ -104,5 +104,41 @@ check("find exit 0 on a match", rc == 0 and "RULING" in out, out[-200:])
 rc, out = cli("find", "electrical")
 check("find exit 4 with no match", rc == 4 and "NO_RULING" in out, out[-200:])
 
+# ---------------------------------------------------------------- ONE RULE STORE: Sage's rules + lane lessons
+rules = [{"id": "r7", "rule": "Never re-send the finishing touches file once the couple opened it", "why": "owner1 said so",
+          "added": "2026-10-20 09:00", "active": True},
+         {"id": "r8", "rule": "Retired: always text the florist about centerpieces", "added": "2026-10-01", "active": False},
+         {"id": "r9", "rule": "Keep replies short and warm", "added": "2026-10-02", "active": True}]
+rules += [{"id": "h%d" % n, "rule": "House rule %d about mission control pages" % n, "added": "2026-10-03", "active": True}
+          for n in range(4)]
+(TMP / "rules.json").write_text(json.dumps({"rules": rules}), encoding="utf-8")
+(TMP / "learn").mkdir()
+(TMP / "learn" / "wedding.md").write_text(
+    "# wedding lane learnings\n\n## Lessons\n"
+    "- 2026-10-07 — [raw edit on 'Text reply'] owner1 changed the draft to: drone footage soon (q697c0f6ab1c1)\n"
+    "- 2026-10-09 — Mention the drone footage only when the package includes it (qabc123def456)\n", encoding="utf-8")
+rulings.AGENT_RULES = TMP / "rules.json"
+rulings.LEARN_DIR = TMP / "learn"
+os.environ["AGENT_RULES_FILE"] = str(TMP / "rules.json")
+os.environ["ASSISTANT_LEARNINGS"] = str(TMP / "learn")
+
+strong, words = rulings.rule_terms("Never re-send the finishing touches file once the couple opened it")
+check("rule_terms: two consecutive specific words form a phrase", "finishing touches" in strong, strong)
+check("rule_terms: stopwords never form a phrase", not any(p.startswith("never") or p.endswith(" the") for p in strong), strong)
+aid = lambda text, **k: [h["id"] for h in rulings.find_agent_rules(text, **k)]  # noqa: E731
+check("an active Sage rule matches on its phrase", aid("Send the Finishing Touches file to Kim and Ray?") == ["sage r7"],
+      rulings.find_agent_rules("Send the Finishing Touches file to Kim and Ray?"))
+check("a retired Sage rule never matches", not aid("text the florist about centerpieces"))
+check("a lone specific word does not match", not aid("which file should I attach?"))
+check("a house noun in 4+ rules never matches alone", not aid("open the mission control pages"))
+check("a lane lesson matches, raw edits are skipped", aid("Should the email mention drone footage?") == ["wedding L2"])
+check("a lane lesson stays in its lane", not aid("Should the email mention drone footage?", lane="personal"))
+h = rulings.find_agent_rules("Send the finishing touches file?")[0]
+check("an agent hit carries source, date and why", h["source"] == "sage" and h["date"] == "2026-10-20" and h["why"] == "owner1 said so", h)
+rc, out = cli("find", "Send the finishing touches file?")
+check("CLI find also searches Sage's rules", rc == 0 and "RULE sage r7" in out, out[-300:])
+rc, out = cli("find", "Send the finishing touches file?", "--no-agents")
+check("CLI --no-agents searches rulings.json only", rc == 4 and "NO_RULING" in out, out[-300:])
+
 print(f"\n{len(FAILS)} failures" if FAILS else "\nALL OK")
 sys.exit(1 if FAILS else 0)

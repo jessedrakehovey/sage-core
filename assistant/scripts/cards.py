@@ -77,6 +77,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import crm  # noqa: E402
 import exec_store as es  # noqa: E402
+import policy  # noqa: E402
 import rulings  # noqa: E402
 
 try:
@@ -136,9 +137,11 @@ _URGENT_DEFAULT_PREFIXES = ("New lead", "Text not confirmed", "Text unconfirmed"
 # spine job failing. Whatever its poster said, it is NEVER urgent and never in the weekly digest: delivery "mc",
 # open on Mission Control and in the agent's transcript, worked by the reflex (reflex.d_system_cards), which says
 # one plain line in Chat only when an owner has to act. The owner's own decisions (a send, a reply, a build that
-# needs his OK, a stalled ask "Waiting Nd", a lead's next step) are not system cards.
+# needs his OK, a lead's next step) are not system cards. A stalled ticket's "Waiting Nd" card IS one since 2026-11-09:
+# the owner's Monday digest held 96 cards and about thirty were these ("Hand it to Sage / Close it" about a ticket the
+# system itself had let sit); the reflex presses "Hand it to Sage" on Mission Control and the owner never sees them.
 _SYSTEM_HDR = re.compile(r"^(?:Not confirmed|Did this text go|Did not go|An action failed|Approved item not run|A nightly self-test"
-                         r"|Spine job |Day Spine|Dreaming did not run|Mission Control|Task .{0,40} failed|Sage \(the household agent\))"
+                         r"|Spine job |Day Spine|Dreaming did not run|Mission Control|Task .{0,40} failed|Sage \(the household agent\)|Waiting \d+d:)"
                          r"|(?:sensor quiet| down| paused| failing| stopped)$", re.I)
 
 
@@ -146,7 +149,7 @@ def is_system(q) -> bool:
     if not isinstance(q, dict):
         return False
     hdr = str(q.get("header") or "").strip()
-    if hdr.lower().startswith("waiting ") or q.get("hold_text") or q.get("lead_text"):
+    if q.get("hold_text") or q.get("lead_text"):
         return False
     if q.get("outcome_id") or q.get("setup_rid") or q.get("breaker_lane") or q.get("sentinel_key"):
         return True
@@ -488,6 +491,16 @@ def _live_conversation(q, hours: float = 24.0) -> bool:
     return False
 
 
+# the duplicate-send guards lift only for exec.resend true AND this literal marker in the question (2026-11-09);
+# an ordinary sentence with the word "resend" in it changes nothing
+RESEND_MARK = "[RESEND]"
+
+
+def _resend_ok(q) -> bool:
+    ex = q.get("exec") or {}
+    return isinstance(ex, dict) and ex.get("resend") is True and RESEND_MARK in str(q.get("question") or "")
+
+
 def _sanitize_exec(q):
     ex = q.get("exec")
     if not ex:
@@ -624,6 +637,13 @@ def _sanitize_exec(q):
         return None, (f"EDIT_LABEL: {edity[0]!r} - no button may say Edit; the edit box is added to every exec card "
                       "automatically. Name the approve Send / Approve, and say in `advice` to tap Edit & send.")
     clean = {"kind": kind, "payload": payload, "approve_label": approve_label}
+    if ex.get("resend") is True:
+        # a second message to the same person needs BOTH the flag and the literal marker the approver reads
+        # (improve-loop audit 2, 2026-10-01: "they asked us to resend the timeline" used to lift the guards)
+        if RESEND_MARK not in str(q.get("question") or ""):
+            return None, (f"EXEC_RESEND: exec.resend needs the literal {RESEND_MARK} marker in the card question; "
+                          "the approver must read that this is a second message")
+        clean["resend"] = True
     if ex.get("send_at"):
         clean["send_at"] = ex["send_at"]          # normalized above; the tap mints the ticket with it as not_before
     return clean, None
@@ -753,7 +773,22 @@ def say(owner, lane, text, thread=""):
     return {"said": True, "chat": int(n), "note_ts": row["ts"]}
 
 
-def post(questions, owner, expires_s=DEFAULT_EXPIRES_S, lane="", thread="", replaces="", space="", asked=False):
+def card_origin(owner="", thread="", asked=False, origin="") -> str:
+    """Where a card came from (policy.ORIGINS): `chat` when an owner asked for it (asked / a thread), else what the
+    poster said, else the process-wide ASSISTANT_CARD_ORIGIN (routines.tick and the spine set it), else `operator`.
+    A chat card never expires; a routine card delivered at once dies in 30 min (policy.expires_for)."""
+    if asked or thread:
+        return "chat"
+    o = str(origin or os.environ.get("ASSISTANT_CARD_ORIGIN") or "").strip().lower()
+    if o in policy.ORIGINS:
+        return o
+    low = str(owner or "").lower()
+    if low.startswith(("routine", "spine", "digest", "sweep", "drain", "outcomes", "graduation", "sentinel", "reflex", "dream")):
+        return "system"
+    return "operator"
+
+
+def post(questions, owner, expires_s=DEFAULT_EXPIRES_S, lane="", thread="", replaces="", space="", asked=False, origin=""):
     """`thread`: a Google Chat thread name; the card's Chat message is posted there (a revision
     asked for in a card's thread lands in that thread, 2026-10-08). `replaces`: the open card this
     one revises (actions.revise_card): the duplicate-subject guards skip it.
@@ -762,8 +797,9 @@ def post(questions, owner, expires_s=DEFAULT_EXPIRES_S, lane="", thread="", repl
     (2026-10-21): it is urgent wherever it was asked, and the chase guards (a third card to one
     recipient in a day, the same subject already open, the entity rules) SUPERSEDE the older open card
     instead of refusing, because the owner is waiting on this one. The send path, drain and the tap are
-    unchanged: every send still needs the tap."""
-    r = _post(questions, owner, expires_s, lane, thread, replaces, space=space, asked=asked)
+    unchanged: every send still needs the tap. `origin` (policy.ORIGINS, 2026-11-08): who raised the card; it sets
+    the expiry of a card delivered at once and is stamped on the card for the ledger."""
+    r = _post(questions, owner, expires_s, lane, thread, replaces, space=space, asked=asked, origin=origin)
     if not r.get("posted"):
         es.ledger("card_refused", owner=str(owner or ""), reason=str(r.get("reason") or "")[:200],
                   header=str(((questions or [{}])[0] if isinstance(questions, list) and questions else {}).get("header") or "")[:80])
@@ -772,7 +808,8 @@ def post(questions, owner, expires_s=DEFAULT_EXPIRES_S, lane="", thread="", repl
     return r
 
 
-def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=False):
+def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=False, origin=""):
+    origin = card_origin(owner, thread, asked, origin)
     if asked and isinstance(questions, list) and questions and isinstance(questions[0], dict):
         # an owner-asked card: the older open card on the same subject / to the same recipient is what the
         # owner is replacing, so find it and supersede it rather than refuse (Corwin's proposal, 2026-10-21:
@@ -889,11 +926,15 @@ def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=F
         if ex:
             q["exec"] = ex
         q.setdefault("lane", lane or "personal")
+        # ONE policy (policy.py, 2026-11-08): the lines every card carries by code - why it asks, the caution, the rule an
+        # "always" would make, the grant scopes its tap may carry - and its origin. The model never writes these.
+        policy.annotate(q, lane, origin)
     qid = "q" + uuid.uuid4().hex[:12]
     if int(expires_s) == DEFAULT_EXPIRES_S:
         expires_s = EXEC_EXPIRES_S if any(execs) else DECISION_EXPIRES_S
+        expires_s = policy.expires_for(origin, any(execs), expires_s)    # a chat card waits; a routine card dies in 30 min
     card = {"id": qid, "ts": now, "owner": str(owner or ""), "status": "open",
-            "wait_s": float(expires_s), "questions": questions}
+            "wait_s": float(expires_s), "origin": origin, "questions": questions}
     try:
         # Seed C (metacheck_bind.py, 2026-11-03): a high-stakes card (a message to a client, a record write, a payment) gets
         # its key facts re-read against the records before it is written; the verifier's plain line is appended to the
@@ -931,7 +972,24 @@ def _post(questions, owner, expires_s, lane, thread, replaces, space="", asked=F
     _write(ARCHIVE / f"{qid}.json", card)
     _write(LIVE / f"{qid}.json", card)
     es.ledger("card_post", qid=qid, owner=str(owner or ""), n=len(questions),
-              execs=[e["kind"] for e in execs if e], delivery=card["delivery"])
+              execs=[e["kind"] for e in execs if e], delivery=card["delivery"], origin=origin)
+    # a standing yes (a grant from an earlier tap, or a graduated class) answers the card here, by code: it is archived
+    # and harvested like any other, signed "policy:<grant>", so the operator carries the decision out as if tapped
+    verdict = policy.decide(questions[0], lane, origin, task=str(thread or ""))
+    if verdict.get("verdict") == "allow" and verdict.get("option"):
+        r = _answer_locked(qid, verdict["option"], by=f"policy:{verdict.get('grant') or verdict.get('source')}")
+        if r.get("ok"):
+            es.ledger("card_auto", qid=qid, option=verdict["option"], source=verdict.get("source"), grant=verdict.get("grant", ""),
+                      why=str(verdict.get("why") or "")[:120])
+            try:
+                sys.path.insert(0, str(HERE.parent / "agent"))
+                import worklog
+                worklog.add(f"answered '{questions[0].get('header') or qid}' with {verdict['option']} under {verdict.get('why')}",
+                            lane=str(questions[0].get("lane") or lane or ""), ref=qid, by="policy", kind="auto")
+            except Exception:  # noqa: BLE001
+                pass
+            advice.append(f"ANSWERED BY POLICY ({verdict.get('why')}): {verdict['option']!r}; no tap needed. Carry it out.")
+            return {"posted": True, "qid": qid, "advice": advice, "chat": [], "delivery": "auto", "auto": True, "option": verdict["option"]}
     if hold:
         try:                                        # the same one-live-text-per-number rule push_card applies
             import text_gate
@@ -1011,10 +1069,22 @@ def _drain_phone_after_undo():
         pass
 
 
-def answer(qid, option, text="", revised="", q_index=0, by="owner1", send_at=""):
+def _first_owner() -> str:
+    """The pack's first owner key (people.json), the default tapper; never a name in the engine."""
+    try:
+        sys.path.insert(0, str(HERE.parent / "agent"))
+        import core
+        return core.first_owner()
+    except Exception:  # noqa: BLE001
+        return "owner"
+
+
+def answer(qid, option, text="", revised="", q_index=0, by="", send_at="", grant="", until=""):
     """One answer at a time per card, across threads and processes: Mission Control is a
     threading server, so two taps arriving together could both read the card as 'open' and
-    both mint a ticket. The marker file is the mutex; _answer_locked does the work."""
+    both mint a ticket. The marker file is the mutex; _answer_locked does the work.
+    `grant` (policy.SCOPES, 2026-11-08): once (default) | this_task | until (with `until`) | always - the tap
+    stands for later cards with the same key; never for a forever-gated kind."""
     mark = ROOT / "locks" / f"{re.sub(r'[^A-Za-z0-9]', '', str(qid))[:40]}.answering"
     try:
         mark.parent.mkdir(parents=True, exist_ok=True)
@@ -1024,8 +1094,9 @@ def answer(qid, option, text="", revised="", q_index=0, by="owner1", send_at="")
             pass
     except OSError:
         return {"ok": False, "reason": "this card is being answered right now - reload the page"}
+    by = by or _first_owner()
     try:
-        return _answer_locked(qid, option, text, revised, q_index, by, send_at)
+        return _answer_locked(qid, option, text, revised, q_index, by, send_at, grant=grant, until=until)
     finally:
         try:
             mark.unlink()
@@ -1033,7 +1104,7 @@ def answer(qid, option, text="", revised="", q_index=0, by="owner1", send_at="")
             pass
 
 
-def _answer_locked(qid, option, text="", revised="", q_index=0, by="owner1", send_at=""):
+def _answer_locked(qid, option, text="", revised="", q_index=0, by="", send_at="", grant="", until=""):
     """the owner's tap. If the tapped option is the exec approve_label, mint the ticket here
     (zero-LLM) with the exact approved payload; `revised` replaces the message text
     (the pencil on the card) and is what gets minted."""
@@ -1079,23 +1150,36 @@ def _answer_locked(qid, option, text="", revised="", q_index=0, by="owner1", sen
                     "reason": (f"not sent - the message still has a blank to fill: {left[0][:60]}. "
                                "Tap Edit & send, replace every [ ... ] with your words, then Send.")}
         try:
-            resend_ok = bool(re.search(r"\bresend\b", str(q.get("question") or ""), re.I))
+            resend_ok = _resend_ok(q)
             minted = es.enqueue(ex["kind"], payload, es.APPROVER, f"card:{qid}", resend_ok=resend_ok,
                                 not_before=str(ex.get("send_at") or ""))
             entry["ticket"] = minted["id"]
         except (PermissionError, ValueError) as e:
             entry["mint_error"] = str(e)
+    granted = None
+    if grant and str(grant).lower() != "once" and not entry.get("mint_error"):
+        # the tap stands (policy.grant): refused for a forever-gated kind or a no; a refusal never blocks the answer
+        granted = policy.grant(q, str(q.get("lane") or ""), grant, by, option=option, until=until,
+                               task=str(card.get("chat_thread") or ""), qid=qid)
+        entry["grant"] = granted.get("id") if granted.get("ok") else ""
+        if not granted.get("ok"):
+            entry["grant_refused"] = str(granted.get("reason") or "")[:160]
     _append(ANSWERS, entry)
     card["status"] = "answered"
     _write(LIVE / f"{qid}.json", card)
-    es.ledger("card_answer", qid=qid, option=option, ticket=entry.get("ticket", ""), by=by)
+    es.ledger("card_answer", qid=qid, option=option, ticket=entry.get("ticket", ""), by=by,
+              grant=str(entry.get("grant") or ""), origin=str(card.get("origin") or ""))
     if entry.get("ticket") and ex.get("kind") == "imessage_send":
         _drain_phone_after_undo()                 # a text waits 30 s, not the spine's next 10-min tick
     if not str(by).startswith("gchat:"):            # a Chat tap edits its own message in the bridge
         _push("mark_answered", card, {"option": option, "by": by, "ticket": entry.get("ticket"),
                                       "mint_error": entry.get("mint_error")})
-    return {"ok": True, "qid": qid, "option": option, "ticket": entry.get("ticket"),
-            "mint_error": entry.get("mint_error"), "undo_until": time.strftime("%H:%M:%S", time.localtime(time.time() + UNDO_S))}
+    out = {"ok": True, "qid": qid, "option": option, "ticket": entry.get("ticket"),
+           "mint_error": entry.get("mint_error"), "undo_until": time.strftime("%H:%M:%S", time.localtime(time.time() + UNDO_S))}
+    if granted is not None:
+        out["grant"] = granted.get("id", "") if granted.get("ok") else ""
+        out["grant_reason"] = str(granted.get("reason") or granted.get("until") or granted.get("scope") or "")
+    return out
 
 
 def _took_back_ticket(e):
@@ -1271,13 +1355,17 @@ def harvest(owner=""):
         if now - float(e.get("epoch") or 0) < UNDO_S:
             continue                              # still inside the undo window
         q = (c.get("questions") or [{}])[int(e.get("q") or 0)]
-        out.append({"qid": c["id"], "header": q.get("header", ""), "lane": q.get("lane", ""),
-                    "age_min": round((now - float(c.get("ts") or 0)) / 60, 1),
-                    "answer": e.get("option"), "text": e.get("text", ""), "revised": e.get("revised", False),
-                    "exec": bool(q.get("exec")), "n_options": len(q.get("options") or []),
-                    "revised_text": e.get("revised_text", ""), "draft_text": _draft_text(q),
-                    "ticket": e.get("ticket"), "mint_error": e.get("mint_error"), "question": q.get("question", "")[:400],
-                    "round": int(c.get("round") or 0)})
+        row = {"qid": c["id"], "header": q.get("header", ""), "lane": q.get("lane", ""),
+               "age_min": round((now - float(c.get("ts") or 0)) / 60, 1),
+               "answer": e.get("option"), "text": e.get("text", ""), "revised": e.get("revised", False),
+               "exec": bool(q.get("exec")), "n_options": len(q.get("options") or []),
+               "revised_text": e.get("revised_text", ""), "draft_text": _draft_text(q),
+               "ticket": e.get("ticket"), "mint_error": e.get("mint_error"), "question": q.get("question", "")[:400],
+               "round": int(c.get("round") or 0), "by": str(e.get("by") or ""), "origin": str(c.get("origin") or ""),
+               "grant": str(e.get("grant") or "")}
+        if _NO_ACTION_OPT.match(_label({"label": e.get("option")})) or policy._is_no(str(e.get("option") or "")):
+            row["instruction"] = policy.NO_RETRY_LINE     # a decline is final, in one fixed line the model cannot reword
+        out.append(row)
         _retire(c, "consumed")
     return out
 
@@ -1334,7 +1422,10 @@ def expire():
         else:
             dead = now - float(c.get("ts") or 0) > float(c.get("wait_s") or DEFAULT_EXPIRES_S)
         if dead:
+            if c.get("origin") == "routine":
+                c["no_retry"] = True                  # the routine hears policy.NO_RETRY_LINE, never "post it again"
             _retire(c, "expired")
+            es.ledger("card_expired", qid=c["id"], origin=str(c.get("origin") or ""), delivery=str(c.get("delivery") or "now"))
             n += 1
     return n
 
@@ -1372,8 +1463,10 @@ def reopen(qid, why, by="drain", resend=False):
     orig = str(q.get("question_orig") or q.get("question") or "")
     q["question_orig"] = orig
     q["retry_note"] = (f"Not confirmed done last time ({str(why or 'no result')[:160]}). "
-                       + ("Tap again to RESEND it." if resend else "Tap again to retry."))   # RESEND lifts the same-text guard at mint
+                       + (f"{RESEND_MARK} Tap again to RESEND it." if resend else "Tap again to retry."))
     q["question"] = q["retry_note"] + "\n" + orig
+    if resend and isinstance(q.get("exec"), dict):
+        q["exec"]["resend"] = True          # flag + marker together lift the same-text guard at mint (_resend_ok)
     now = time.time()
     if card.get("chat"):
         # the old message must not keep saying "goes out in about 35 s" above the card that comes back (2026-10-21)
@@ -1463,6 +1556,8 @@ def sweep():
             continue                                  # a machinery finding: the button ran the job / sensor / task
         if _act_on_graduation(h):
             continue                                  # "make it automatic?": the owner's tap flips the gate
+        if _act_on_rule_retire(h):
+            continue                                  # "make room for a new rule": the tap retires one and adds the new
         # A tap on a DECISION card (2+ options, no exec) is an instruction: "start prep", "not
         # booked", "wait a week". Nothing else reads answers.jsonl, so without a ticket the
         # decision was recorded and then never acted on. A single-option ack ("Noted") and a
@@ -1475,9 +1570,12 @@ def sweep():
         need = bool(h.get("text")) or bool(h.get("mint_error")) or bool(h.get("revised_text")) or decision or skipped
         if not need:
             continue
+        standing = str(h.get("by") or "").startswith("policy:")
         items.append({"source": "card", "source_id": h["qid"] if not h.get("round") else f"{h['qid']}#{h['round']}", "lane": h.get("lane") or "personal",
-                      "kind": "card_answer", "title": f"owner1 answered '{h['answer']}' on: {h['header'] or h['qid']}",
-                      "summary": (f"He chose '{h['answer']}' on a decision card: carry out what that option means (or close this if it means no action). " if decision else "") +
+                      "kind": "card_answer", "title": (f"Standing yes answered '{h['answer']}' on: " if standing else f"owner1 answered '{h['answer']}' on: ") + f"{h['header'] or h['qid']}",
+                      "summary": (("A standing grant from an earlier tap answered this by code. " if standing else "") +
+                                  f"He chose '{h['answer']}' on a decision card: carry out what that option means (or close this if it means no action). " if decision else "") +
+                                 (h["instruction"] + " " if h.get("instruction") else "") +
                                  (f"He typed: {h['text'][:300]}" if h.get("text") else "") +
                                  (f" | he EDITED the draft (ticket {h.get('ticket')} carries his version); distill the lesson with learn.py" if h.get("revised_text") else "") +
                                  (" | he SKIPPED this draft: decide whether this kind of message should not have been drafted (or the wording was off) and record ONE lesson with learn.py; no card back" if skipped else "") +
@@ -1739,6 +1837,34 @@ def sentinel_card(f: dict, options: list, lane: str = "personal") -> dict:
     return post([q], "sentinels", lane=lane)
 
 
+SETTLE_FIRST = ("SETTLE FIRST. This item sat for days and is often already handled, past or moot. Before anything else, "
+                "read what happened since (the conversation, sent mail and texts, the couple or project page, the calendar). "
+                "Already handled, its day has passed, or nothing is owed: close it (tickets.py done) and say NOTHING to the "
+                "owners. Only when it still truly needs an owner: ONE line naming the decision and what you recommend. "
+                "Never 'tell me to go ahead or say drop', never re-ask an ask the owner already answered or that is past.")
+
+
+def hand_off_staged(key: str, q: dict, act: dict, by: str = "owner") -> tuple:
+    """'Hand it to Sage' on a 'Waiting Nd' card (2026-11-12): the stalled tickets are CLOSED here, at the hand-off, and
+    the one operator ticket owns them from now on. Until today they stayed staged, so the staleness check found them
+    again a few days later, the reflex pressed Hand it again, and Sage re-opened long-finished items and asked the
+    owner about them once more (three items re-asked 11/11 and 11/12 after Sage itself had called them settled).
+    -> (summary, payload) for the operator ticket, which carries the settle-first rule."""
+    ids = [str(i) for i in ((act or {}).get("close") or [key.split(":", 1)[1]]) if str(i)]
+    closed = []
+    try:
+        import tickets
+        for tid in ids:
+            if tickets._transition(tid, "done", "sentinels", f"handed to Sage from its Waiting card by {by}; "
+                                   "the settle-first operator ticket owns it now", {"staged", "new"}):
+                closed.append(tid)
+    except Exception as e:  # noqa: BLE001   the hand-off still happens; the operator closes them itself
+        es.ledger("card_sentinel_error", key=key, error=f"close on hand-off: {type(e).__name__}: {str(e)[:120]}")
+    summary = (SETTLE_FIRST + " | The item: " + str(q.get("question") or ""))[:900]
+    return summary, {"items": [{"key": key, "text": str(q.get("question") or "")}], "settle_first": True,
+                     "original_tickets": ids, "closed_on_handoff": closed}
+
+
 def _act_on_sentinel(h) -> bool:
     """The sentinel card's buttons, done by code: run the spine job / sensor / scheduled task now, run the drain,
     cancel a stranded ticket, hand an exception to Sage, or leave it (latched 5 days). True when no operator
@@ -1762,9 +1888,11 @@ def _act_on_sentinel(h) -> bool:
             say("cards.sweep", lane, sentinels.act_cancel(str(act["ticket"]), by=str(h.get("by") or "owner")))
         elif ans.startswith("hand it"):
             import tickets
+            summary, payload = str(q.get("question") or "")[:600], {"items": [{"key": key, "text": str(q.get("question") or "")}]}
+            if key.startswith("staged:"):
+                summary, payload = hand_off_staged(key, q, act, by=str(h.get("by") or "owner"))
             tickets.add_many([{"source": "sentinel-card", "source_id": key, "lane": lane, "kind": "stuck_work",
-                               "title": str(q.get("header") or "stuck item"), "summary": str(q.get("question") or "")[:600],
-                               "payload": {"items": [{"key": key, "text": str(q.get("question") or "")}]}}], "cards.sweep")
+                               "title": str(q.get("header") or "stuck item"), "summary": summary, "payload": payload}], "cards.sweep")
             say("cards.sweep", lane, "Handing that to Sage to work through; it comes back here with what was done.")
         else:
             r = sentinels.act(act, by=str(h.get("by") or "owner"))
@@ -1792,6 +1920,35 @@ def _act_on_graduation(h) -> bool:
         es.ledger("card_graduation_error", qid=h["qid"], kind=kind, error=f"{type(e).__name__}: {str(e)[:120]}")
         return False
     es.ledger("card_graduation_answer", qid=h["qid"], kind=kind, option=str(h.get("answer") or "")[:60])
+    return True
+
+
+def _act_on_rule_retire(h) -> bool:
+    """The rule-cap card (core._offer_retire_card, upgrade 8): "Retire rN" retires that rule and adds the new one on the
+    owner's tap; "Keep them all" drops the new rule. True when handled."""
+    c = _read(DONE / f"{h['qid']}.json")
+    q = (c.get("questions") or [{}])[0] if isinstance(c, dict) else {}
+    rr = q.get("rule_retire") if isinstance(q.get("rule_retire"), dict) else None
+    if not rr:
+        return False
+    ans = str(h.get("answer") or "")
+    by = str(h.get("by") or "owner1")
+    try:
+        sys.path.insert(0, str(HERE.parent / "agent"))
+        import core
+        m = re.match(r"\s*Retire\s+(r\d+)", ans, re.I)
+        if m and m.group(1) in (rr.get("candidates") or []):
+            core.rule_retire(m.group(1), why=f"retired on the owner's tap to make room ({h['qid']})", by=by)
+            r = core.rule_add(str(rr.get("new_rule") or ""), why=str(rr.get("why") or ""), by=str(rr.get("by") or by))
+            say("cards.sweep", str(q.get("lane") or "personal"),
+                f"Done: {m.group(1)} is retired and the new rule is in" + (f" ({r.get('id')})." if r.get("id") else "."))
+            es.ledger("card_rule_retire", qid=h["qid"], retired=m.group(1), added=str(r.get("id") or ""), by=by)
+        else:
+            say("cards.sweep", str(q.get("lane") or "personal"), "Okay, the rules stay as they are; the new one is dropped.")
+            es.ledger("card_rule_retire", qid=h["qid"], retired="", added="", by=by)
+    except Exception as e:  # noqa: BLE001
+        es.ledger("card_rule_retire_error", qid=h["qid"], error=f"{type(e).__name__}: {str(e)[:120]}")
+        return False
     return True
 
 
@@ -1968,6 +2125,10 @@ def close_answered():
                 # it had its weekly digests and was not decided: dropped, never re-asked (the owner 2026-10-20)
                 if tickets._transition(t["id"], "done", "cards.sweep", f"card {m.group(1)} had its weekly digests unanswered: dropped", {"staged"}):
                     n += 1
+            elif isinstance(c, dict) and c.get("status") == "expired" and c.get("no_retry"):
+                # a routine's card that ran out its 30 minutes: declined, in the one fixed line (policy.NO_RETRY_LINE)
+                if tickets._transition(t["id"], "dismissed", "cards.sweep", f"card {m.group(1)} expired: {policy.NO_RETRY_LINE}"[:300], {"staged"}):
+                    n += 1
             elif isinstance(c, dict) and c.get("status") == "expired" and not again:
                 # the card timed out unanswered, so the decision is no longer on the owner's phone.
                 # Hand the ticket back ONCE to re-post it if it is still true.
@@ -2043,6 +2204,8 @@ def main():
     p = sub.add_parser("pending"); p.add_argument("--owner", default=""); p.add_argument("--json", action="store_true")
     p = sub.add_parser("answer"); p.add_argument("qid"); p.add_argument("--option", required=True)
     p.add_argument("--text", default=""); p.add_argument("--revised-file", default=""); p.add_argument("--q", type=int, default=0)
+    p.add_argument("--grant", default="", choices=["", "once", "this_task", "until", "always"], help="the tap stands for later cards with the same key")
+    p.add_argument("--until", default="", help="with --grant until: YYYY-MM-DD, '3 days' or '2 weeks'")
     p = sub.add_parser("undo"); p.add_argument("qid")
     p = sub.add_parser("reopen", help="a consumed card whose action was not confirmed done comes back as the same card")
     p.add_argument("qid"); p.add_argument("--why", required=True); p.add_argument("--by", default="owner1")
@@ -2077,7 +2240,7 @@ def main():
         return 0
     if a.cmd == "answer":
         revised = Path(a.revised_file).read_text(encoding="utf-8-sig") if a.revised_file else ""
-        print(json.dumps(answer(a.qid, a.option, a.text, revised, a.q), ensure_ascii=False)); return 0
+        print(json.dumps(answer(a.qid, a.option, a.text, revised, a.q, grant=a.grant, until=a.until), ensure_ascii=False)); return 0
     if a.cmd == "undo":
         print(json.dumps(undo(a.qid), ensure_ascii=False)); return 0
     if a.cmd == "reopen":

@@ -78,5 +78,51 @@ check("a ticket staged on its card is still 'with the owner'", commitments.outco
 commitments._ticket = lambda tid: {"id": tid, "status": "done", "history": [{"note": "sent; Corwin refused the lower rate"}]}
 check("a done task whose note only mentions someone refusing is still kept", commitments.outcome(it3)[0] == "kept")
 
+# Build request 2026-10-24: unkept-outcome lines never ask the owner to repeat; a task waiting on one fact names it
+for kind, v in (("build", "slipped"), ("do", "slipped"), ("task", "slipped"), ("task", "failed")):
+    ln = commitments.line_for(dict(it, kind=kind, reports=0), v, "still new")
+    check(f"{kind} {v}: no 'say so once more' / 'ask me again'",
+          ln and not any(w in ln.lower() for w in ("once more", "ask me again", "say the word")), ln)
+blocked = commitments.line_for(dict(it, reports=0), "failed", "the card was blocked: DRAFT_LINT")
+check("a blocked card line does not ask again either", "ask me again" not in blocked.lower(), blocked)
+WAIT = "spaces/AAQAtest/threads/teo"
+(core.DATA / "transcript.jsonl").write_text(json.dumps({"ts": "2026-10-23 23:40", "who": "Sage", "thread": WAIT,
+    "text": "I'll send it once I have it. Need from you: the questionnaire file and the touch point link."}) + "\n", encoding="utf-8")
+commitments._ticket = lambda tid: {"id": tid, "status": "new", "history": []}
+it4 = dict(it, thread=WAIT, what="Teo and Wren: send the questionnaire")
+verdict, detail = commitments.outcome(it4, datetime(2026, 10, 24, 7, 0))
+line = commitments.line_for(it4, verdict, detail)
+check("a task waiting on a fact says that one fact", verdict == "slipped" and "questionnaire file and the touch point link" in line
+      and "never came back" not in line and "ask me again" not in line.lower(), (verdict, line))
+
+# ...and a build that only asks to turn a standing job off is closed quietly when its switch is already off
+sw_root = TMP / "swroot"
+(sw_root / "scripts" / "yt_scout").mkdir(parents=True, exist_ok=True)
+cfg = sw_root / "scripts" / "yt_scout" / "config.json"
+cfg.write_text('{"enabled": false}', encoding="utf-8")
+reg = TMP / "switches.json"
+reg.write_text(json.dumps({"jobs": [{"key": "youtube-scout", "name": "YouTube Scout", "config": "scripts/yt_scout/config.json",
+                                     "field": "enabled", "aliases": ["youtube scout", "nightly youtube"]}]}), encoding="utf-8")
+import switches  # noqa: E402
+switches.REGISTRY, switches.ROOT = reg, sw_root
+import builder  # noqa: E402
+KEY = "Wiki/Personal/Build request Turn off the nightly YouTube scout.md"
+core.save(builder.STATE, {KEY: {"status": "failed", "attempts": 1}})
+bit = {"id": "p-9", "kind": "build", "what": "Build request Turn off the nightly YouTube scout", "ref": KEY, "convo": "dm:owner1",
+       "thread": "", "created": datetime.now().strftime(commitments.FMT), "due": "2026-10-24T08:00", "status": "open", "reports": 0}
+said = []
+commitments._save({"items": [bit]})
+commitments.check(lambda c, th, txt: said.append(txt), now=datetime(2026, 10, 24, 8, 7))
+check("switch already off: no 'Still not built' line", said == [], said)
+row = commitments._load()["items"][0]
+check("...the promise is closed as kept", row.get("status") == "kept", row)
+check("...and the build request is dropped so the builder never takes it up",
+      core.load(builder.STATE, {}).get(KEY, {}).get("status") == "dropped", core.load(builder.STATE, {}))
+cfg.write_text('{"enabled": true}', encoding="utf-8")
+core.save(builder.STATE, {KEY: {"status": ""}})
+check("switch still on: the build is not handled", commitments.outcome(dict(bit))[0] == "slipped")
+check("a longer ask that only mentions the job is not a switch ask",
+      not commitments._switch_handled(dict(bit, what="Turn off youtube scout ideas cards in the digest")))
+
 print("\nALL PASS" if not FAILS else f"\nFAILED: {FAILS}")
 sys.exit(1 if FAILS else 0)

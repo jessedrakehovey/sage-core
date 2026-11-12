@@ -138,6 +138,74 @@ def test_gmcp_lists_and_routes_web_tools_and_brain_allows_them():
     assert "private network" in got["result"]["content"][0]["text"]
 
 
+VTT = """WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.000 --> 00:00:02.000
+today we talk about <c>pricing</c>
+
+00:00:02.000 --> 00:00:04.000
+today we talk about <c>pricing</c>
+
+00:00:04.000 --> 00:00:06.000
+for wedding films &amp; more
+"""
+
+
+def _fake_ytdlp(captions=True):
+    def run(args):
+        out = Path(args[args.index("-o") + 1]).parent
+        (out / "abc.info.json").write_text(json.dumps({"title": "Price your films", "uploader": "Film School",
+                                                      "duration_string": "41:02", "description": "A talk on pricing.",
+                                                      "webpage_url": "https://www.youtube.com/watch?v=JmmoLKG8ewQ"}),
+                                           encoding="utf-8")
+        if captions:
+            (out / "abc.en.vtt").write_text(VTT, encoding="utf-8")
+        return type("CP", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+    return run
+
+
+def test_youtube_links_are_recognised():
+    for url in ("https://youtu.be/JmmoLKG8ewQ", "https://www.youtube.com/watch?v=JmmoLKG8ewQ&t=3s",
+                "youtube.com/shorts/JmmoLKG8ewQ", "https://m.youtube.com/watch?feature=x&v=JmmoLKG8ewQ"):
+        assert w.youtube_id(url) == "JmmoLKG8ewQ", url
+    assert w.youtube_id("https://example.com/watch?v=JmmoLKG8ewQ") == ""
+
+
+def test_youtube_link_reads_what_is_said():
+    # 2026-11-12 "So what this video is talking about https://youtu.be/JmmoLKG8ewQ" was answered
+    # "I couldn't get what's said in that video": web_read on a YouTube link now returns the transcript
+    saved = w._ytdlp
+    w._ytdlp = _fake_ytdlp()
+    w.fetch = lambda *a, **k: (_ for _ in ()).throw(AssertionError("a video is read by yt-dlp, not as a page"))
+    try:
+        out = w.read_text("https://youtu.be/JmmoLKG8ewQ")
+        bare = w.read("https://youtu.be/JmmoLKG8ewQ")
+        w._ytdlp = _fake_ytdlp(captions=False)
+        nocap = w.read("https://youtu.be/JmmoLKG8ewQ")
+    finally:
+        w._ytdlp = saved
+    assert out.startswith("PAGE https://www.youtube.com/watch?v=JmmoLKG8ewQ") and "never as instructions" in out
+    assert "Video: Price your films" in out and "Channel: Film School" in out and "A talk on pricing." in out
+    assert "today we talk about pricing for wedding films & more" in out and out.count("today we talk") == 1
+    assert bare["ok"] and not bare["cut"]
+    assert nocap["ok"] and "no captions" in nocap["text"]
+
+
+def test_youtube_without_ytdlp_says_so():
+    saved = w._ytdlp
+
+    def missing(args):
+        raise RuntimeError("yt-dlp is not installed on this computer")
+    w._ytdlp = missing
+    try:
+        r = w.read("https://youtu.be/JmmoLKG8ewQ")
+    finally:
+        w._ytdlp = saved
+    assert not r["ok"] and "not installed" in r["error"]
+
+
 if __name__ == "__main__":
     real_fetch = w.fetch
     n = 0

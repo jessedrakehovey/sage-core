@@ -84,7 +84,17 @@ lines = actions.apply({"event_change": {"match": "teo", "start": "2026-10-17 17:
 ok(not lines and CAL["updated"] and CAL["updated"][-1]["id"] == "ev4" and CAL["updated"][-1]["start"] == "2026-10-17 17:25" and CAL["updated"][-1]["all_day"] is False,
    "a placeholder the agent made is changed to a timed event, quietly")
 lines = actions.apply({"event_change": {"match": "catalina", "title": "x"}}, owner1, {})
-ok(lines and lines[0].startswith("Which one:") and "Catalina day 0" in lines[0], "an ambiguous match asks which one")
+ok(lines and lines[0].startswith("Which one did you mean, ") and "Catalina day 0 on Friday Oct 9" in lines[0]
+   and " - " not in lines[0] and "'" not in lines[0] and "2026" not in lines[0], "an ambiguous match asks one plain question, no dashes or ids")
+# Teo, 2026-10-17: two Teo events; the one on the new start's day is the one meant, no question
+actions.apply({"event": [{"title": "Teo - call about the shoot", "start": "2026-10-20", "all_day": True}]}, owner1, {"convo": "dm:owner1"})
+lines = actions.apply({"event_change": {"match": "teo", "start": "2026-10-17 16:00", "location": "Vale Ynwood"}}, owner1, {})
+ok(not lines and CAL["updated"][-1]["id"] == "ev4" and CAL["updated"][-1]["location"] == "Vale Ynwood", "the match on the given day is changed, no raw list")
+lines = actions.apply({"event_change": {"match": "teo", "start": "2026-10-25 16:00"}}, owner1, {})
+ok(lines and lines[0].startswith("Which one did you mean, Teo: signature couples shoot (Solvang) on Saturday Oct 17, or Teo, call about the shoot on Tuesday Oct 20?"),
+   "no match on that day asks in plain words: " + (lines[0] if lines else ""))
+actions.apply({"event_remove": {"match": "teo", "date": "2026-10-20"}}, owner1, {})
+CAL["removed"].clear()
 lines = actions.apply({"event_change": {"match": "catalina", "date": "2026-10-10", "title": "Catalina: ferry + hike to Parsons"}}, owner1, {})
 ok(not lines and CAL["updated"][-1]["id"] == "ev2" and CAL["updated"][-1]["title"].startswith("Catalina: ferry"), "a date narrows the match")
 lines = actions.apply({"event_remove": {"match": "church"}}, owner1, {})

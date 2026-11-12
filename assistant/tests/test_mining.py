@@ -124,6 +124,25 @@ check("a dateless line with no time never borrows the date one line up",
 check("a dateless line WITH a time still borrows the day before (Dinner at 5)",
       len(mining.mine(M("Are you two coming Sunday? Dinner at 5."), ctx)) == 1)
 
+# mass / marketing texts are never a hold (2026-10-16 political text, 2026-10-19 Ragamuffin loyalty promo)
+pol = "A lot of Californians will start filling out their ballots this weekend. Join us Saturday 10/17 at the rally."
+check("control: the ballot text without its opt-out line would be mined",
+      mining.mine(M(pol, "+15550948894", "", "personal"), ctx))
+check("a political mass text with 'Stop=End' makes no hold",
+      mining.mine(M(pol + " Stop=End", "+15550948894", "", "personal"), ctx) == [])
+check("'Reply STOP to opt out' is a broadcast even from a known sender",
+      mining.broadcast(M("Dinner Sunday at 5. Reply STOP to opt out"), "family", mining.cfg()) != "")
+rag = M("Double Stars on all drinks today and tomorrow for all loyalty members!!", "+15550427742", "Ragamuffin Coffee Roasters", "personal")
+check("the Ragamuffin promo from a toll-free number is a broadcast", mining.broadcast(rag, "unknown", mining.cfg()) != "")
+check("a toll-free promo with a plan word makes no hold",
+      mining.mine(M("Loyalty members: come by tomorrow at 8am for double stars", "+15550427742", "Ragamuffin", "personal"), ctx) == [])
+check("a short-code sender makes no hold", mining.mine(M("See you Saturday at 10am at the tour", "72345", "", "personal"), ctx) == [])
+check("promo words from an unsaved number make no hold",
+      mining.mine(M("Rewards night for members tomorrow at 6, come by! https://x.co/a", "+18055550111", "", "personal"), ctx) == [])
+check("a saved contact's plan with a promo word still gets its hold",
+      mining.mine(M("Rewards night for members tomorrow at 6, come by!", "+18055550111", "Kate", "personal"), ctx))
+check("family saying 'deal' still gets its hold", mining.mine(M("Deal, dinner Sunday at 5 then"), ctx))
+
 # money senders
 mm = M("Action required: verify your account by Oct 22 or access will be suspended", "pb69982@example.invalid", "Chase", "money",
        source="ticket", subject="Action required on your account", channel="email")
@@ -219,6 +238,11 @@ r2 = mining.tick(now=NOW, dry=False, days=3)
 check("the same date is never carded twice (an open card for the key counts as known)", r2["posted"] == [] and r2["skipped"] == 1, r2)
 r3 = mining.tick(now=NOW, dry=False)
 check("without --days the seen ledger alone keeps it out", r3["fresh"] == 0 and r3["posted"] == [], r3)
+# one incoming text gives at most one hold card (2026-10-16: one text, two 'hold for 10/17' cards)
+save_json(TMP / "phone_threads.json", {"+18055550142": {"name": "Mom", "messages": [
+    {"ts": NOW.strftime("%Y-%m-%dT%H:%M:%S"), "dir": "in", "text": "Brunch Tuesday at 10. Lunch Wednesday at noon too.", "ref": ""}]}})
+r4 = mining.tick(now=NOW, dry=True, days=3)
+check("two dates in one text -> two findings but one hold card", r4["findings"] == 2 and len(r4["posted"]) == 1, r4)
 # an open reply card to the same person covers the ask (2026-10-17: the mechanic's "today" text)
 live = C.DATA / "cards" / "live"
 live.mkdir(parents=True, exist_ok=True)
@@ -270,6 +294,27 @@ check("switch off: back to wedding only", ids == ["f"], ids)
 text_gate.exception_cfg = lambda: dict(PE, include_family=False)
 ids = [k["source_id"] for k in text_gate.keep([T("+18055550142", "Dinner Sunday at 5", "a"), T("+18055550001", "dinner Sunday at 5", "c")])]
 check("include_family off: a friend's plan comes through, family's does not", ids == ["c"], ids)
+
+# dream 2026-10-16: Casey Juniper and the groomsmen group chat (+1 555-073-5373) still made reply cards.
+# A group whose known members are friends / family is personal for every member; include_family is off.
+import types  # noqa: E402
+_G = {"members": ["+15550735373", "+18055550142", "+18055550199"]}
+_B = {"members": ["+18055550188", "+18055550142", "+15550578657"]}
+_KIND = {"5550735373": "unknown", "8055550199": "friend", "8055550188": "unknown", "5550578657": "lead"}
+_idx = types.SimpleNamespace(_groups={**{m: _G for m in _G["members"]}, **{m: _B for m in _B["members"]}},
+                             resolve=lambda h: {"kind": _KIND.get(text_gate._key(h), "unknown")})
+sys.modules["whois"] = types.SimpleNamespace(index=lambda: _idx)
+grp = text_gate.personal_groups({"8055550142"})
+check("a group text whose known members are friends / family is personal for every member",
+      {"5550735373", "8055550142", "8055550199"} <= grp, grp)
+check("a group with a lead in it stays wedding work", "8055550188" not in grp and "5550578657" not in grp, grp)
+del sys.modules["whois"]
+text_gate.household_numbers = lambda: {"8055550142", "5550380038"} | grp
+ids = [k["source_id"] for k in text_gate.keep([T("+15550735373", "Suit fitting Saturday at 10, venmo me $40", "g"),
+                                               T("+18055550142", "Dinner Sunday at 5", "j")])]
+check("include_family off: Jon and the groomsmen chat are logged with no reply card", ids == [], ids)
+_live = json.loads((HERE.parent / "config.json").read_text(encoding="utf-8"))["phone"]["personal_exceptions"]
+check("live config: friends / family never get a reply card (include_family false)", _live.get("include_family") is False, _live)
 
 print(f"\n{'ALL OK' if not FAILS else 'FAILED: ' + ', '.join(FAILS)}  ({len(FAILS)} failures)")
 sys.exit(1 if FAILS else 0)

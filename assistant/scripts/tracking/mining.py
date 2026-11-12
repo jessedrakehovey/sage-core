@@ -428,6 +428,8 @@ def mine(msg: dict, ctx: Context) -> list:
             return []
     if msg["bulk"] and cls != "money":
         return []
+    if cls != "money" and broadcast(msg, cls, c):
+        return []                              # a mass / promo text names no plan of ours (2026-10-16, 2026-10-19)
     suspect = False
     if cls == "unknown" and Context._k(who) and Context._k(who) == Context._k(msg["handle"]):
         subject, suspect = ctx.known_subject(msg["handle"])
@@ -483,6 +485,42 @@ def mine(msg: dict, ctx: Context) -> list:
                         "text": s[:240], "word": word, "source": msg["source"], "ref": msg["ref"], "channel": msg["channel"],
                         "past": d < ctx.today, "suspect": suspect})
     return out
+
+
+_OPT_OUT = (r"\bstop\s*=\s*(?:end|quit|stop|cancel|opt\s*out)\b|\b(?:reply|text|txt|send)\s+(?:\"|')?stop\b|"
+            r"\bstop\s+to\s+(?:end|quit|cancel|stop|opt\s*-?\s*out|unsubscribe)\b|\bopt\s*-?\s*out\b|\bmsg\s*(?:&|and)\s*data rates\b")
+_PROMO = (r"\b(loyalty|rewards?|members?(?:hip)?|deals?|sale|coupon|promo\w*|discount\w*|double (?:stars|points)|bonus points|"
+          r"shop now|order now|limited time|exclusive offer|free shipping|bogo)\b|\d+\s*%\s*off\b|https?://|\bwww\.")
+_TOLL_FREE = ("800", "833", "844", "855", "866", "877", "888")
+
+
+def broadcast(msg: dict, cls: str, c: dict) -> str:
+    """Why this text is a mass or marketing message, '' when it is not. Words: mining.json -> skip.bulk.
+    Any sender's opt-out line ('Stop=End', 'Reply STOP') is a broadcast (the political ballot text, two hold cards
+    for 10/17, 2026-10-16). A sender nobody knows (class unknown) is one when it texts from a short code or a
+    toll-free number, or, when not a saved contact, uses promo words or a link (Ragamuffin's 'Double Stars ... for
+    all loyalty members' from +15550427742, two hold cards, 2026-10-19). Saved contacts, clients and leads keep theirs."""
+    bcfg = (c.get("skip") or {}).get("bulk") or {}
+    if bcfg.get("enabled") is False:
+        return ""
+    text = f"{msg.get('subject') or ''}\n{msg.get('text') or ''}"
+    opt = _rx(bcfg.get("opt_out") or _OPT_OUT)
+    if opt and opt.search(text):
+        return "opt-out line"
+    if cls != "unknown":
+        return ""
+    handle = str(msg.get("handle") or "")
+    digits = "" if "@" in handle else re.sub(r"\D", "", handle)
+    toll = tuple(bcfg.get("toll_free") or _TOLL_FREE)
+    if digits and (len(digits) <= int(bcfg.get("short_code_max_digits") or 6)
+                   or (len(digits) in (10, 11) and digits[-10:-7] in toll)):
+        return "short code / toll-free sender"
+    name = str(msg.get("name") or "").strip()
+    saved = bool(name) and Context._k(name) != Context._k(handle) and name != handle
+    promo = _rx(bcfg.get("promo") or _PROMO)
+    if not saved and promo and promo.search(text):
+        return "promo words from an unsaved sender"
+    return ""
 
 
 def _mine_money(msg: dict, ctx: Context, said: date, lane: str, who: str, dcfg: dict, time_rx) -> list:
@@ -555,6 +593,30 @@ def already_known(f: dict) -> bool:
 
 
 # ------------------------------------------------------------------ cards
+_EVENT_WORDS = (r"\b(meet(?:ing)?|call|appointment|appt|surgery|procedure|flight|fly(?:ing)?|land(?:s|ing)?|arriv(?:e|es|ing|al)|"
+                r"dinner|lunch|brunch|breakfast|coffee|drinks|party|shower|wedding|ceremony|reception|rehearsal|shoot|session|"
+                r"visit(?:ing)?|tour|walkthrough|pickup|pick up|drop(?: |-)?off|deliver(?:y|ed)?|due|deadline|closing|move(?:-in|-out| in| out)?|"
+                r"class|lesson|practice|game|match|recital|concert|show|trip|vacation|conference|interview|exam|test|"
+                r"inspection|repair|install(?:ation)?|service|check-?up|dentist|doctor|vet|haircut|birthday|anniversary|"
+                r"funeral|memorial|graduation|open house|in town|coming over|stop(?:ping)? by|see you)\b")
+
+
+def has_event_word(text: str, ecfg: dict | None = None) -> bool:
+    """A sentence with a date becomes a calendar hold only when it also names an EVENT. tracking.json -> mining.event:
+    `require_event_word` (default true) and `words` (an extra regex the organization adds)."""
+    ecfg = ecfg or {}
+    if ecfg.get("require_event_word") is False:
+        return True
+    t = str(text or "")
+    if re.search(_EVENT_WORDS, t, re.I):
+        return True
+    extra = str(ecfg.get("words") or "")
+    try:
+        return bool(extra and re.search(extra, t, re.I))
+    except re.error:
+        return False
+
+
 def event_card(f: dict, ecfg: dict) -> dict:
     who = str(f["who"])[:40]
     gist = _gist(f["text"], int(ecfg.get("gist_words") or 7))
@@ -672,7 +734,7 @@ def tick(now: datetime | None = None, dry: bool = False, days: int | None = None
     budget = int(c.get("max_cards_per_run") or 3)
     money = [f for f in fresh if f["kind"] == "money"]
     events = [f for f in fresh if f["kind"] == "event"]
-    cards_out = []
+    cards_out, carded_refs = [], set()
     if money and budget > 0:
         cards_out.append(("money", money, money_card(money, c.get("money") or {})))
         budget -= 1
@@ -683,6 +745,19 @@ def tick(now: datetime | None = None, dry: bool = False, days: int | None = None
             skipped.append({"key": f["key"], "why": "already on the calendar / a card is open"})
             st["seen"][f["key"]] = {"ts": ctx.now.strftime("%Y-%m-%d %H:%M"), "skipped": "known"}
             continue
+        if not has_event_word(f["text"], c.get("event") or {}):
+            # 2026-11-09: six "Date from <who>" hold cards in one digest, one of them "Please join me in praying for":
+            # a date alone is not an event. Without a word that names one, nothing is carded.
+            skipped.append({"key": f["key"], "why": "no event word"})
+            st["seen"][f["key"]] = {"ts": ctx.now.strftime("%Y-%m-%d %H:%M"), "skipped": "no event word"}
+            continue
+        ref = (f["source"], f["ref"])
+        if ref in carded_refs:
+            # 2026-10-16: one text ("this weekend" ... "10/17") made two hold cards; one message, one card at most
+            skipped.append({"key": f["key"], "why": "one hold card per message"})
+            st["seen"][f["key"]] = {"ts": ctx.now.strftime("%Y-%m-%d %H:%M"), "skipped": "one per message"}
+            continue
+        carded_refs.add(ref)
         cards_out.append(("event", [f], event_card(f, c.get("event") or {})))
         budget -= 1
     for kind, group, q in cards_out:

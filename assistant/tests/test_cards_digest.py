@@ -23,6 +23,12 @@ os.environ["AGENT_DATA"] = str(TMP / "agent")
 os.environ["AGENT_STATE"] = str(TMP / "state")
 os.environ["RULINGS_FILE"] = str(ROOT / "data" / "rulings.json")
 os.environ["ASSISTANT_CARDS_DELIVERY"] = "weekly"
+# ONE RULE STORE: a scratch Sage rules file and lane lessons, never the live ones
+(TMP / "state").mkdir(parents=True, exist_ok=True)
+(TMP / "state" / "rules.json").write_text(json.dumps({"rules": [{"id": "r7", "active": True, "added": "2026-10-20 09:00",
+    "rule": "Never re-send the finishing touches file once the couple opened it"}]}), encoding="utf-8")
+os.environ["AGENT_RULES_FILE"] = str(TMP / "state" / "rules.json")
+os.environ["ASSISTANT_LEARNINGS"] = str(TMP / "learnings")
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "agent"))
 sys.path.insert(0, str(ROOT / "doer"))
@@ -237,6 +243,15 @@ import drain  # noqa: E402
 t_perm = {"id": "tk-x", "kind": "email_send", "approval_ref": f"card:{qid}", "payload": {}}
 check("drain: UNVERIFIED never reopens (the message may have landed)", drain._reopen_card(t_perm, drain.UNVERIFIED + "timed out") is False)
 check("drain: a standing ticket (no card) never reopens", drain._reopen_card({"id": "tk-y", "kind": "email_send", "approval_ref": "standing:x"}, drain.PERM + "bad") is False)
+
+# ONE RULE STORE: the best matching Sage rule lands in the post advice; the card itself is unchanged
+ra = post("Finishing Touches: Kim", "Send the finishing touches file to Kim and Ray again?")
+ca = cards._read(cards.LIVE / f"{ra['qid']}.json")
+check("an agent rule that applies is in the post advice, with its id",
+      any("agent rule applies (sage r7, 2026-10-20)" in a for a in ra.get("advice") or []), ra.get("advice"))
+check("the agent rule never changes the card", "rulings" not in ca["questions"][0])
+rb = post("Vendor reply: Ambrose", "Reply to Ambrose about the timeline?")
+check("no agent rule advice when nothing pins the card down", not any("agent rule" in a for a in rb.get("advice") or []), rb.get("advice"))
 
 print(f"\n{len(FAILS)} FAILED" if FAILS else "\nALL OK")
 sys.exit(1 if FAILS else 0)
