@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.12+310eedb",
+  "version": "2026.11.12+bb4e18c",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-12T09:52:01"
+  "synced": "2026-11-12T09:58:49"
  },
  "modules": {
   "money": {
@@ -256,7 +256,7 @@
   "assistant/orgcfg.py": "210aca0896c047e1a8fd089730459caea7dc73845805fe9b38a0bf2ab361e206",
   "assistant/ports.py": "48ed625fdd18e6b996ee20098916705d57b13766170238432c80f58cc70503eb",
   "assistant/prompts/brief.md": "a13900819634e26e0219bad883c8c7d3454fd969fa3d708b976747e1f00f2a3c",
-  "assistant/prompts/operator.md": "9fd7f176a36d3b6cb7c5824f6b55f3532d1e18ed4bd48b726d1bd407219b829f",
+  "assistant/prompts/operator.md": "9721e2bc2bd49d1716eff14aa9120d2eb195a7c4698d24bc83c0f5e7a90422d6",
   "assistant/release.py": "9cd6fb23b6d7e3e87cf900e32c9152d3b6f0f2b14bc23f80430c5f52e9c20d27",
   "assistant/requirements-semantic.txt": "4fc7fc394ad0a9c9de3d812b5d61040c149416e8e94b307f53f83a2de4824f1f",
   "assistant/requirements.txt": "dce364b2ed4102cdf7618866e4b11b3b2145fb135844f013ac40bdb203b1aa94",

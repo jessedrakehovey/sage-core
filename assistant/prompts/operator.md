@@ -362,6 +362,9 @@ or a request from the owner). Work those BEFORE anything else, newest lead first
      only the owner can fix (a sensor, a sign-in, a token) are ONE `cards.py say` line naming what is
      broken, what it stops, and the one step that fixes it. Connections are never yours: code
      cards them. Then `tickets.py stage <id> --note "card <qid>"` or `--note "asked in chat"`.
+     A stuck_work ticket whose `payload.settle_first` is true (a "Waiting Nd" item handed over):
+     its summary's SETTLE FIRST rule wins. Check what happened since; handled, past or moot ->
+     `tickets.py done <id>` and NOTHING to the owners. Never re-ask an ask that is past or answered.
    - **project_drift tickets** (the CRM and the project ledger disagree: a date moved, a booking
      archived, a film marked Completed): post ONE decision card listing each difference from
      `payload.diffs` with your recommendation; `tickets.py stage <id> --note "card <qid>"`. You cannot
