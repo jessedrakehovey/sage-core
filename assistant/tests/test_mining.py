@@ -243,6 +243,27 @@ save_json(TMP / "phone_threads.json", {"+18055550142": {"name": "Mom", "messages
     {"ts": NOW.strftime("%Y-%m-%dT%H:%M:%S"), "dir": "in", "text": "Brunch Tuesday at 10. Lunch Wednesday at noon too.", "ref": ""}]}})
 r4 = mining.tick(now=NOW, dry=True, days=3)
 check("two dates in one text -> two findings but one hold card", r4["findings"] == 2 and len(r4["posted"]) == 1, r4)
+# one text naming the same date in two sentences, seen on two sources, gives ONE hold card (2026-10-19: two 10/26 cards)
+save_json(TMP / "phone_threads.json", {"+18055550142": {"name": "Mom", "messages": [
+    {"ts": NOW.strftime("%Y-%m-%dT%H:%M:%S"), "dir": "in", "text": "Dinner Tuesday at 6.", "ref": "a"},
+    {"ts": NOW.replace(minute=1).strftime("%Y-%m-%dT%H:%M:%S"), "dir": "in", "text": "Party Tuesday at 6 too.", "ref": "b"}]}})
+r5 = mining.tick(now=NOW, dry=True, days=3)
+check("the same person's same date across sentences / copies -> one hold card", r5["findings"] >= 2 and len(r5["posted"]) == 1, r5)
+# an open hold card for that person and day covers a later text naming it again
+_lv = C.DATA / "cards" / "live"
+_lv.mkdir(parents=True, exist_ok=True)
+save_json(_lv / "qhold.json", {"qid": "qhold", "status": "open", "questions": [{"header": "Date from Mom",
+          "exec": {"kind": "calendar_hold", "payload": {"title": "Mom: something else", "date": "2026-10-26",
+                                                       "note": "Mom (text, 10/19): \"Coverage ends 10/26.\""}}}]})
+check("an open hold card for the same person and date means no second card",
+      mining.already_known(dict(ev, key="k26", date="2026-10-26", text="Pay before 10/26 or it lapses")))
+check("another person's hold on that date does not", not mining.already_known(dict(ev, key="k26", who="Dad", date="2026-10-26", text="Pay before 10/26")))
+(_lv / "qhold.json").unlink()
+# a cancellation / pay-by date is a deadline reminder, not a 'double-booked' hold
+dq = mining.event_card(dict(ev, text="Coverage will end on 10/26/2026 if payment isn't received, call by then."), mining.cfg()["event"])
+check("a cancellation notice's hint calls it a deadline, never double-booked",
+      "deadline" in dq["advice"] and "double-booked" not in dq["advice"], dq["advice"])
+check("a dinner keeps the double-booked hint", "double-booked" in q["advice"] and "deadline" not in q["advice"], q["advice"])
 # an open reply card to the same person covers the ask (2026-10-17: the mechanic's "today" text)
 live = C.DATA / "cards" / "live"
 live.mkdir(parents=True, exist_ok=True)

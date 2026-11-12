@@ -783,7 +783,9 @@ All zero-LLM, all in `scripts/tracking/`, every word list in JSON so another org
   Mass and marketing texts get no hold (`mining.json -> skip.bulk`): any text with an opt-out line
   ("Stop=End", "Reply STOP"), and from a sender who is not a lead / client / vendor / family, a short
   code or toll-free number, or promo words / a link from a number not in Contacts. One incoming text
-  gives at most one hold card (2026-10-16 ballot text, 2026-10-19 loyalty promo).
+  gives at most one hold card (2026-10-16 ballot text, 2026-10-19 loyalty promo), and one person's
+  date gets one card even when it is named in several sentences or texts while a card for it is open.
+  A cancellation / pay-by date's hint calls it a deadline reminder, not a hold against double-booking.
   Vocabulary + switches: [mining.json](mining.json). State: `data/tracking/mining.json`.
   `python assistant/scripts/tracking/mining.py scan --days 7` lists every finding in the window.
 - **`text_gate.py`** (ruling 13) - personal texts stay logged-only EXCEPT a **time-related** one (a

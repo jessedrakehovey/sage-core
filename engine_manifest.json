@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.12+3d0ac78",
+  "version": "2026.11.12+ae06f49",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-12T10:19:45"
+  "synced": "2026-11-12T11:53:07"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "6251c032de2a38d3fb5b201f69f29f027b6e55b31551852bb9594f92d888578c",
+  "assistant/README.md": "ca219809e1ff44e241902089065f48e30aa1d60ea986bc3156dae51d143fb2a7",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
   "assistant/agent/README.md": "14657ea89a843ffcb9a755c84904862dd41c848d8ec1a256c7ec44f1a7f6b52e",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -352,7 +352,7 @@
   "assistant/scripts/tracking/dayplan.py": "4c897128459e55183d38b586a958e4a95947584cac9f6317840b28e05263ef55",
   "assistant/scripts/tracking/drift.py": "c9589ba8a0d5b970f020c79b5bd3ddd66d5e8036f0df40fae3836d41ffc2d157",
   "assistant/scripts/tracking/entities.py": "aebca6effd1c5a8b455c0f98541622125ea22ca98892f13c4777b4ef949fc154",
-  "assistant/scripts/tracking/mining.py": "0495d50ff70d7a9df03c8870990ab88c832c7242e864a2db34ba98b21167e6e6",
+  "assistant/scripts/tracking/mining.py": "9147682b799581a9a0c11ea59bef33ef0c7f80fe69e77814e8a223beb612c48f",
   "assistant/scripts/tracking/priority.py": "dc74b5bb295029dd5f4ed83c0de57a8435a67a5be095f32b7059e7fee2d3a354",
   "assistant/scripts/tracking/probation.py": "39120affad6cb63543778c6e8ab8a9ef2c0a9ab08b016d45abd40ebf4a3e589f",
   "assistant/scripts/tracking/rhythm.py": "55ec73816860ed326fc935cf26881e799b8c4362d3faba330c4632005958e6c9",
@@ -444,7 +444,7 @@
   "assistant/tests/test_memory_cap.py": "01cf49646a4c66f965d12133573c968b1195a5038851de63b48dc8282fe51023",
   "assistant/tests/test_memory_forget_rules.py": "4961bb1896e0d45bb895d18d343aab214a7107a58094c63aa4686f4b866fdcfd",
   "assistant/tests/test_metacheck.py": "7a8bd537c45dee51161323abd8f098e9276e228ee9d3c124c8fd3ffdcf8bb3a1",
-  "assistant/tests/test_mining.py": "3ad4618f95ed21d68caf2e9e5b7faab3c2725e7d11cb32e16c94c38236577e91",
+  "assistant/tests/test_mining.py": "f5f1ff5e9799abde83acea149890fa2533125622f96842d6e003b6fb612f4c43",
   "assistant/tests/test_money.py": "2df4ce3d7234cfe5ae74e8e8d6b64fc08b0568ccd56b3134f423fe75a6bc7be5",
   "assistant/tests/test_money_budget.py": "90aaa2e7b2e48c54a267755202cdeb4543a28d37856af2347f07370180b1975b",
   "assistant/tests/test_money_plaid.py": "8ea48427413e79f611f0f2a9a164711a36cac9487ad7090db095839312f7d3ae",

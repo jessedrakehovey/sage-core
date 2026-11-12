@@ -589,6 +589,9 @@ def already_known(f: dict) -> bool:
         ex = (q.get("exec") or {}).get("payload") or {}
         if (q.get("exec") or {}).get("kind") == "calendar_hold" and str(ex.get("date")) == f["date"] and len(C.words(ex.get("title")) & w) >= 2:
             return True
+        if (q.get("exec") or {}).get("kind") == "calendar_hold" and str(ex.get("date")) == f["date"] \
+                and str(ex.get("note") or "").startswith(f"{str(f['who'])[:40]} ("):
+            return True                        # the same person's date already has a hold card (2026-10-19: one text, two 10/26 cards)
     return False
 
 
@@ -617,6 +620,23 @@ def has_event_word(text: str, ecfg: dict | None = None) -> bool:
         return False
 
 
+_DEADLINE_WORDS = (r"\b(cancel(?:l?ed|l?ing|lation)?|terminat\w*|laps(?:e|es|ed|ing)|expir\w*|coverage (?:will )?end|"
+                   r"pay(?:ment)? (?:by|before|due)|past due|due (?:by|on)|deadline|no later than|last day to)\b")
+
+
+def is_deadline(text: str, ecfg: dict | None = None) -> bool:
+    """A notice's date (a cancellation, a 'pay by') is a deadline to remember, not a day to keep free.
+    tracking.json -> mining.event.deadline_words adds to the built-in words."""
+    t = str(text or "")
+    if re.search(_DEADLINE_WORDS, t, re.I):
+        return True
+    extra = str((ecfg or {}).get("deadline_words") or "")
+    try:
+        return bool(extra and re.search(extra, t, re.I))
+    except re.error:
+        return False
+
+
 def event_card(f: dict, ecfg: dict) -> dict:
     who = str(f["who"])[:40]
     gist = _gist(f["text"], int(ecfg.get("gist_words") or 7))
@@ -638,7 +658,8 @@ def event_card(f: dict, ecfg: dict) -> dict:
                      {"label": "Skip"}],
          "exec": {"kind": "calendar_hold", "approve_label": "Add to calendar (Recommended)", "payload": payload}}
     q["advice"] = advice.line({"kind": "offer", "lane": f["lane"], "title": title, "age_days": C.age_days(f["said"]),
-                               "why": f"{who} named {when}; a hold keeps it from being double-booked"})
+                               "why": f"{who} named {when} as a deadline; a reminder on the calendar keeps it from slipping by"
+                               if is_deadline(f["text"], ecfg) else f"{who} named {when}; a hold keeps it from being double-booked"})
     return q
 
 
@@ -752,12 +773,13 @@ def tick(now: datetime | None = None, dry: bool = False, days: int | None = None
             st["seen"][f["key"]] = {"ts": ctx.now.strftime("%Y-%m-%d %H:%M"), "skipped": "no event word"}
             continue
         ref = (f["source"], f["ref"])
-        if ref in carded_refs:
+        same_day = ("day", Context._k(f["handle"]) or str(f["who"]), f["date"])
+        if ref in carded_refs or same_day in carded_refs:
             # 2026-10-16: one text ("this weekend" ... "10/17") made two hold cards; one message, one card at most
             skipped.append({"key": f["key"], "why": "one hold card per message"})
             st["seen"][f["key"]] = {"ts": ctx.now.strftime("%Y-%m-%d %H:%M"), "skipped": "one per message"}
             continue
-        carded_refs.add(ref)
+        carded_refs |= {ref, same_day}          # 2026-10-19: one text naming 10/26 in two sentences (or seen twice) made two cards
         cards_out.append(("event", [f], event_card(f, c.get("event") or {})))
         budget -= 1
     for kind, group, q in cards_out:
