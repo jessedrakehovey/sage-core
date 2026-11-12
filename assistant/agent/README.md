@@ -804,8 +804,10 @@ note path). The first outcome posts it, every later outcome EDITS it (`gchat.pat
 outcome is a no-op, and the transcript carries each state (an edit marked `edited`). Routed through it:
 `commitments.check` (the bridge passes `receipts.poster()`; `_deliver` hands the row's ref along),
 `doer.deliver` (a DM ask's report now lands in the DM; before this it went top-level in the home space).
-The slipped lines are plain ("Still not built: ... say so once more and I'll file it again"), "I'm not
-going to keep repeating it" is gone, and `commitments._builder_said` no longer silences a build's
+The slipped lines are plain ("Still not built: ... It stays on my build list; you don't need to ask
+again"; since 2026-10-24 no line asks the owner to repeat, and a task waiting on a "Need from you" fact
+names that fact), a build that only asks to turn a `switches.json` job on/off is closed quietly (and
+dropped in builds.json) when the switch already stands that way, "I'm not going to keep repeating it" is gone, and `commitments._builder_said` no longer silences a build's
 confirmation (the builder's own note is transcript + Mission Control only, so until now a built request
 was never confirmed in the conversation that asked for it). `cards.reopen` marks the old Chat message
 closed ("not confirmed done; the card is posted again below") before the card comes back, and

@@ -227,12 +227,20 @@ def outcome(it: dict, now: datetime | None = None) -> tuple:
             # "That draft never came back, so nothing went out". An ask already answered in its thread is with the
             # owner, not slipped.
             return "owner", "answered in chat: " + said[:160]
+        need = _need_fact(it, note)
+        if need:
+            return "slipped", NEED_PREFIX + need           # waiting on one fact from the owner: the line names it
         return "slipped", f"still {st or 'waiting'}"      # new / claimed past the deadline
     if kind == "build":
         s = _build_state(ref)
         st = str(s.get("status") or "")
         if st == "built":
             return "kept", str(s.get("summary") or "")
+        if st not in ("dropped", "waiting") and _switch_handled(it):
+            # 2026-10-24 08:07: "Still not built: Turn off the nightly YouTube scout ... say so once more" while the
+            # switch had turned the scout off on 10-23. The switch already does what was asked: closed quietly.
+            _drop_handled(ref)
+            return "kept", HANDLED
         if st == "needs_owner":
             return "owner", str(s.get("question") or s.get("summary") or "")
         if st in ("asked", "approved", "retry"):
@@ -261,6 +269,85 @@ def outcome(it: dict, now: datetime | None = None) -> tuple:
 _REFUSED = re.compile(r"(?i:card (?:was )?(?:refused|blocked|didn't post|did not post|not posted))|"
                       r"\b(?:FRESHNESS_[A-Z_]+|DRAFT_LINT|NOT_A_DECISION|NEEDS_ACTION|NO_RECOMMENDATION|ONE_QUESTION|"
                       r"OPTIONS_ARE_DRAFTS|TEXT_NEEDS_DRAFT)\b")
+
+
+# ------------------------------------------------------------------ a standing job's switch already did it
+HANDLED = "already handled by its switch"
+_SWITCH_ASK = re.compile(r"^(?:please\s+)?(turn|switch|shut|stop|pause|disable|enable|start|resume)\b\s*(on|off|down)?\s+(.+?)"
+                         r"(?:\s+(on|off|down))?\s*[.!]?$", re.I)
+# words around a job's name that do not change which job is meant ("the nightly YouTube scout")
+_FILLER = {"the", "my", "our", "nightly", "daily", "weekly", "schedule", "scheduled", "job", "task", "cron", "run", "runs",
+           "automatic", "auto", "please", "now", "for", "good", "again", "every", "night", "morning"}
+
+
+def _switch_handled(it: dict) -> bool:
+    """The build asks only to turn a switchable job on or off (switches.json) and that job already stands that
+    way. Loose names never count: the ask must be the verb, the job's name and filler words, nothing more."""
+    m = _SWITCH_ASK.match(_asked(it).strip())
+    if not m:
+        return False
+    verb, part = m.group(1).lower(), (m.group(2) or m.group(4) or "").lower()
+    if verb in ("stop", "pause", "disable", "shut") or part in ("off", "down"):
+        want = False
+    elif verb in ("enable", "start", "resume") or part == "on":
+        want = True
+    else:
+        return False
+    try:
+        import switches
+        j = switches.find(m.group(3))
+        if not j:
+            return False
+        said = " " + _norm(m.group(3)) + " "
+        names = [_norm(n) for n in [j["key"], j.get("name", ""), j.get("task", "")] + list(j.get("aliases") or []) if _norm(n)]
+        if not any(f" {n} " in said and all(w in _FILLER for w in said.replace(f" {n} ", " ", 1).split()) for n in names):
+            return False
+        return switches.state(j) is want
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _drop_handled(key: str) -> None:
+    """The build request itself is closed too, so the builder never takes it up (it skips 'dropped')."""
+    try:
+        import builder
+        if builder.running():
+            return
+        st = core.load(builder.STATE, {})
+        s = st.get(key) if isinstance(st, dict) else None
+        if not isinstance(st, dict) or (isinstance(s, dict) and s.get("status") in ("built", "dropped", "waiting")):
+            return
+        st[key] = {**(s if isinstance(s, dict) else {}), "status": "dropped", "summary": HANDLED, "answered": core.stamp(), "by": "switch"}
+        core.save(builder.STATE, st)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# ------------------------------------------------------------------ the one fact a task waits on
+NEED_PREFIX = "need from you: "
+_NEED = re.compile(r"(?im)need(?:s|ed)? from you:?\s*(.+)$")
+
+
+def _need_fact(it: dict, note: str = "") -> str:
+    """The one fact a hand-off waits on from the owner: a "Need from you: ..." in the ticket's note, else in the
+    agent's own reply in the hand-off's thread since it was handed off. '' when nothing names one."""
+    m = _NEED.search(str(note or ""))
+    if m:
+        return _short(m.group(1), 200)
+    thread = str(it.get("thread") or "")
+    if not thread:
+        return ""
+    owners = {str(v.get("name") or "").lower() for v in (core.people().get("users") or {}).values()}
+    since = str(it.get("created") or "")[:16]
+    for r in reversed(core.rows(core.DATA / "transcript.jsonl")):
+        if str(r.get("thread") or "") != thread or str(r.get("who") or "").lower() in owners | {"card", "code"}:
+            continue
+        if str(r.get("ts") or "")[:16].replace(" ", "T") < since:
+            continue
+        m = _NEED.search(str(r.get("text") or ""))
+        if m:
+            return _short(m.group(1), 200)
+    return ""
 
 
 # ------------------------------------------------------------------ the lines, in the agent's voice
@@ -375,7 +462,7 @@ def line_for(it: dict, verdict: str, detail: str) -> str:
     what = _short(it.get("what"), 110)
     kind = it.get("kind")
     if verdict == "kept":
-        if kind == "build" and detail == "dropped at the owner's word":
+        if kind == "build" and detail in ("dropped at the owner's word", HANDLED):
             return ""
         if kind == "build" and not _allowed("build_landed"):
             return ""                                      # the ask itself is replayed and done (capability.py); no announcement
@@ -409,20 +496,23 @@ def line_for(it: dict, verdict: str, detail: str) -> str:
             return f"I didn't manage to get this done: {what}." + (f" {why[0].upper() + why[1:]}." if why else "") + " Ask me for the link and the steps and you can finish it from your phone, or tell me how you'd rather handle it."
         if detail.startswith("the card was blocked: "):
             return (f"The card for this didn't post, so there's nothing to tap yet: {what}. "
-                    f"What blocked it: {_short(detail[len('the card was blocked: '):], 160)}. Ask me again here and I'll put it straight up.")
-        return f"That didn't get done: {what}." + (f" ({why})" if why else "") + " Ask me again and I'll set it up properly."
+                    f"What blocked it: {_short(detail[len('the card was blocked: '):], 160)}.")
+        return f"That didn't get done: {what}." + (f" ({why})" if why else "")
     # slipped: ONE line, then silence (the owner, 2026-10-20: nothing that could not be done goes on a loop;
     # the chat is their portal). The first report is the only one; the item is closed as unkept right after.
+    # Never ask the owner to repeat the ask (2026-10-24: "say so once more", "Ask me again"); a task waiting on
+    # one fact from them names that fact.
     if int(it.get("reports", 0)) >= 1:
         return ""
     if kind == "build":
         if not _allowed("build_slipped"):
             return ""                                      # switched off at an owner's word (reflex.py, 2026-10-26 11:51)
-        return (f"Still not built: {what}. If you still want it, say so once more and I'll file it again; "
-                f"if it's something you'd rather set by hand, tell me where and I'll give you the link and the steps.")
+        return f"Still not built: {what}. It stays on my build list; you don't need to ask again."
     if kind == "do":
-        return f"Still not done: {what}. Say the word and I'll start it fresh, or ask me for the link and the steps to finish it from your phone."
-    return f"That draft never came back, so nothing went out: {what}. Ask me again and I'll redo it."
+        return f"Still not done: {what}. If you'd rather finish it from your phone, ask me for the link and the steps."
+    if str(detail).startswith(NEED_PREFIX):
+        return f"This is waiting on one thing from you: {detail[len(NEED_PREFIX):]}. Then I'll finish it: {what}."
+    return f"That draft never came back, so nothing went out: {what}."
 
 
 def _announce_keys(it: dict) -> list:

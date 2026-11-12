@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.12+4a5534d",
+  "version": "2026.11.12+310eedb",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-12T09:24:12"
+  "synced": "2026-11-12T09:52:01"
  },
  "modules": {
   "money": {
@@ -98,7 +98,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "6251c032de2a38d3fb5b201f69f29f027b6e55b31551852bb9594f92d888578c",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
-  "assistant/agent/README.md": "5182abe11c14f4259c8530900f1eddb7b4320fbd7ab32fe3e756e255cc73f696",
+  "assistant/agent/README.md": "14657ea89a843ffcb9a755c84904862dd41c848d8ec1a256c7ec44f1a7f6b52e",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "379a52a9d9c1791c552fd420b379f222b3859e81df63aeedd69c304c0d7ce27e",
@@ -116,7 +116,7 @@
   "assistant/agent/chatfirst.py": "039e8eb31203e2de65181397f0f12110b6c0b68647486762f0d134a9afafa5dc",
   "assistant/agent/claims.py": "a80933e05400cd2ddd07456320b23cc72cb37e7e858e7acdadb36bd1ef3f5f0d",
   "assistant/agent/clock.py": "1cc963677ecf6dff9d572369c8ca5bbc9f8077f4af43e1d033d5e29a643eae62",
-  "assistant/agent/commitments.py": "d7856808ad75a75f0f8f99f1aebdf5cc69b7c880a1f3c5307f59c42f13075d03",
+  "assistant/agent/commitments.py": "363e2835ba0a4d79a30ac25ab89557e66fed69a28dfe2433c148d4ecce364e02",
   "assistant/agent/core.py": "4e1f8969d5fb814fb90cf5c331b85c1069d149c1c7c8089fa03c19848ff52612",
   "assistant/agent/correction.py": "3c5d1567c36b7d15e0469ee3952bb804078f5ba1a70de6f2ba60acbc44e17447",
   "assistant/agent/desk.py": "5705765ad73d487111c8e46c108c42d65ca812e2e94721ec664ba1608659e8bd",
