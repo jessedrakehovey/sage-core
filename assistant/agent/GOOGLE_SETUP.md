@@ -222,3 +222,15 @@ attachments.
   The signed-in address is read from the consent's id_token. A network timeout on the old userinfo
   check once threw away a consent the owner had just given.
 - `drive_ingest.py status` shows the connections, watermarks and pending files. The task is "example Drive to Wiki".
+
+## Sign in from the phone (added 2026-11-13)
+
+Every consent above can be given on the phone instead of at the PC: an owner says "connect owner's Google" or
+"reconnect my Drive" in Chat and gets a single-use link (`assistant/agent/google_phone.py`). It needs ONE more
+client on **example-agent**, made once:
+1. **Clients → Create client → Web application**, name `phone sign-in`.
+2. Authorised redirect URI: `<mission_control_url>/oauth/google` (today `https://<this-pc>.<tailnet>.ts.net:9443/oauth/google`).
+3. Download JSON → save as `client_secret_web.json` next to `client_secret.json`.
+Tokens it stores refresh with this web client; the desktop client keeps working for `auth` at the PC.
+Guess, not fact yet: that Google accepts the `ts.net` address with its port as a redirect (it is https on a public
+domain, which is what Google asks for).

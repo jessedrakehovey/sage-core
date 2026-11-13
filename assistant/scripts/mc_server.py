@@ -19,6 +19,8 @@ from the CLI: answer / undo a card, and drop a request into the operator queue.
   POST /api/contacts/import?owner=the owner|owner   raw .vcf body -> contacts.py (replaces that owner's book)
   GET  /welcome               the first-run wizard (assistant/welcome.py); POST /api/welcome/<step>
   GET  /chat                  the chat with the household agent (assistant/agent/chat_page.py)
+  GET  /oauth/go?t=<key>      a single-use Google sign-in link from chat -> Google's consent (agent/google_phone.py)
+  GET  /oauth/google          Google's return: the token is stored on the PC, the page says Connected
   GET  /api/agent/thread      ?as=the owner|owner -> that person's conversation
   POST /api/agent/say         {as, text} -> one line into the agent's inbox (the bridge answers)
   POST /gchat/events          Google Chat's HTTP connection for the Sage app (public via Funnel :8443;
@@ -437,6 +439,23 @@ class H(BaseHTTPRequestHandler):
             from urllib.parse import parse_qs, urlparse
             t = (parse_qs(urlparse(self.path).query).get("t") or [""])[0][:80]
             return self._send(200, phone_run_page(t), "text/html")
+        if p in ("/oauth/go", "/oauth/google"):
+            # a Google consent from the owner's phone (agent/google_phone.py): the single-use chat link sends the phone
+            # to Google, Google sends it back here, the token is stored on the PC. Nothing secret is logged.
+            from urllib.parse import parse_qs, urlparse
+            import google_phone
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            if p == "/oauth/go":
+                code, out = google_phone.go(q.get("t", ""))
+                if code == 302:
+                    self.send_response(302)
+                    self.send_header("Location", out)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return
+            else:
+                code, out = google_phone.back(q.get("state", ""), q.get("code", ""), q.get("error", ""))
+            return self._send(code, out, "text/html")
         if p in ("/", "/index.html"):
             return self._send(200, _build_page(), "text/html")
         if p in ("/chat", "/chat/"):

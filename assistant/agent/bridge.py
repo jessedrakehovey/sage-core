@@ -1019,6 +1019,13 @@ def _chat_setup(text: str, person: dict, msg: dict | None = None) -> str:
                 return chat_forms.offer_line(fid)
             log(f"chat setup: the {fid} form could not be posted")
             return "I couldn't put the form up just now. Ask me again in a minute and it will come with the answer."
+        # a Google consent done on the phone: one single-use link per missing consent (google_phone.py, 2026-11-13)
+        import google_phone
+        if google_phone.asked(text) and core.can(person, "approve"):
+            out = google_phone.reply(text, str(person.get("key") or ""))
+            if out:
+                log(f"chat setup: Google phone sign-in links for {person['key']} (keys not logged)")
+                return out
         return connect.answer(text)
     except Exception as e:  # noqa: BLE001
         log(f"chat setup failed: {type(e).__name__}: {str(e)[:160]}")

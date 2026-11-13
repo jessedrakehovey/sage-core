@@ -1085,6 +1085,14 @@ feed is down or never set up, ending with one line on how to ask for SimpleFIN (
 2026-10-17). Tests:
 `python assistant/tests/test_connect.py`.
 
+**Google sign-in from the phone (2026-11-13).** "Connect owner's Google", "reconnect my Drive", "allow Sheets
+access" get, by code, one single-use link per missing Google consent (`agent/google_phone.py`, 15 minutes, owners
+only). The link opens Mission Control's `/oauth/go` on the phone, which hands over to Google's consent page; Google
+returns to `/oauth/google`, the PC stores the token where `google_api.py` / `drive_ingest` already read it (the
+signed-in address must be the account's own), and the page says Connected. No sitting at the PC; nothing secret in
+chat or logs. Needs the web OAuth client `client_secret_web.json` (GOOGLE_SETUP.md, "Sign in from the phone").
+Tests: `python assistant/tests/test_google_phone.py`.
+
 ## Connection health (2026-10-02)
 
 `assistant/connections.json` is the registry of every external connection (MCP, credential,
