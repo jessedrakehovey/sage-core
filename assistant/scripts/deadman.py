@@ -15,7 +15,8 @@ depend on being healthy (a subprocess each, first that works wins):
   3. `notify.py` (a dashboard card) + a banner file assistant/data/deadman_alert.json
 
 Watched (local wall clock; each alarm is latched in assistant/data/deadman_state.json and re-raised after
-REALERT_H; a recovery is said once):
+REALERT_H; a stopped heartbeat is restarted quietly first and said only if a restart did not bring it back;
+a recovery is said once):
   spine    assistant/data/spine_state.json      newest `last` older than 45 min inside 06:45-23:30
   bridge   assistant/data/agent/bridge_alive.json  `ts` older than 20 min inside 06:00-23:30 (Sage's heartbeat)
   probe    assistant/data/comms_probe_state.json  `last_wake` older than 40 min inside 07:00-21:30
@@ -216,6 +217,11 @@ FIXES = {
 }
 
 
+def _fix_allowed() -> bool:
+    # a scratch-store test must never start a LIVE scheduled task (2026-10-25: a test did)
+    return not (os.environ.get("ASSISTANT_DATA") or os.environ.get("DEADMAN_NO_FIX"))
+
+
 def tick(dry: bool = False, now: datetime | None = None) -> dict:
     now = now or datetime.now()
     st = _load(STATE, {}) or {}
@@ -223,31 +229,30 @@ def tick(dry: bool = False, now: datetime | None = None) -> dict:
     res = check_all(now)
     stale = [n for n, r in res.items() if not r["ok"]]
     said = []
-    fixing = st.get("fixing") or {}
+    fixing = st.get("fixing") or {}        # name -> when the first restart of this outage was tried
+    fix_last = st.get("fix_last") or {}    # name -> when a restart was last tried
     for name in stale:
-        last = float(alerted.get(name) or 0)
-        if now.timestamp() - last < REALERT_H * 3600:
-            continue
         # the owner 2026-10-24 17:40 / 21:32: "I don't want to see messages like this. I just want you to fix it."
-        # First a stale heartbeat gets its fix run quietly; the owner hears only when it is STILL stale on the
-        # next tick after a fix was tried (and on a tick inside the window).
-        fix = FIXES.get(name)
-        if os.environ.get("ASSISTANT_DATA") or os.environ.get("DEADMAN_NO_FIX"):
-            fix = None            # a scratch-store test must never start a LIVE scheduled task (2026-10-25: a test did)
-        if fix and not dry and float(fixing.get(name) or 0) < now.timestamp() - FIX_GAP_MIN * 60:
-            ok_fix, out_fix = _run(fix, timeout=120)
-            _log(f"auto-fix {name}: {'ok' if ok_fix else 'failed'} {out_fix[-120:]}")
-            fixing[name] = now.timestamp()
-            continue
-        if fix and float(fixing.get(name) or 0) > now.timestamp() - FIX_GAP_MIN * 60 * 3 and name not in st.get("fix_failed", {}):
-            # the fix ran within the last few ticks; give it one tick to show a heartbeat before telling anyone
-            st.setdefault("fix_failed", {})[name] = now.timestamp()
+        # A stale heartbeat is restarted quietly on every tick (at most every FIX_GAP_MIN); the owner hears one
+        # plain line only when it is STILL stale a tick after the first restart, latched REALERT_H.
+        fix = FIXES.get(name) if _fix_allowed() else None
+        if fix and not dry:
+            if now.timestamp() - float(fix_last.get(name) or 0) >= FIX_GAP_MIN * 60:
+                ok_fix, out_fix = _run(fix, timeout=120)
+                _log(f"auto-fix {name}: {'ok' if ok_fix else 'failed'} {out_fix[-120:]}")
+                fix_last[name] = now.timestamp()
+                fixing.setdefault(name, now.timestamp())
+            if now.timestamp() - float(fixing.get(name) or now.timestamp()) < FIX_GAP_MIN * 60:
+                continue          # the restart just ran; give it a tick to show a heartbeat before telling anyone
+        if now.timestamp() - float(alerted.get(name) or 0) < REALERT_H * 3600:
             continue
         what = CHECKS.get(name, {}).get("what", name)
-        text = (f"Heads up: {what} has stopped: {res[name]['why']}. Nothing on that path is happening until it is back. "
-                f"Say 'run the day spine' or 'restart the bridge' here and I restart it.")
         if name == "disk":
             text = f"Heads up: {res[name]['why']}; sends and ingests will start failing. Free some space on that drive."
+        elif fix and not dry:
+            text = f"Heads up: {what} has stopped and did not come back after a restart ({res[name]['why']})."
+        else:
+            text = f"Heads up: {what} has stopped ({res[name]['why']})."
         how = tell(text, dry)
         said.append({"check": name, "via": how})
         if not dry:
@@ -263,12 +268,12 @@ def tick(dry: bool = False, now: datetime | None = None) -> dict:
             said.append({"check": name, "via": how, "recovered": True})
             if not dry:
                 alerted.pop(name, None)
-    for name in list(fixing):
+    for name in list(set(fixing) | set(fix_last)):
         if res.get(name, {}).get("ok"):
             fixing.pop(name, None)
-            (st.get("fix_failed") or {}).pop(name, None)
+            fix_last.pop(name, None)
     if not dry:
-        _save(STATE, {"alerted": alerted, "fixing": fixing, "fix_failed": st.get("fix_failed") or {},
+        _save(STATE, {"alerted": alerted, "fixing": fixing, "fix_last": fix_last,
                       "last_run": now.strftime("%Y-%m-%dT%H:%M:%S"), "last": res})
         if not stale:
             try:

@@ -476,7 +476,9 @@ clock is changed, and a dead cron is noticed from outside the machine. Ported, t
   Deadman (assistant)**, every 30 min, `assistant/tasks/Deadman.xml`): the Day Spine, the chat bridge, the comms
   probe and disk space, each with its window; a stall is said through `cards.py say`, then the owner's own email
   (`config.json -> deadman.email_fallback`, default on), then a dashboard card + `assistant/data/deadman_alert.json`;
-  latched 6 h, the recovery said once. `deadman.py --status`.
+  latched 6 h, the recovery said once. A stopped probe, spine or bridge is first restarted quietly (every tick it
+  stays down); the owner hears one plain line, no instructions, only if it is still down a tick after that restart.
+  `deadman.py --status`.
 - **The owner's own line is on a clock** (`bridge.stalled_turns`): an owner message still in flight after 45 min gets
   one plain line where it was asked and a failed `turn` row in the ledger. `/open` and `/failed` in chat list what is
   not confirmed and what did not go (zero-LLM); the morning brief carries an UNCONFIRMED sentence (`connect.py brief`).

@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.13+968e26e",
+  "version": "2026.11.13+fd935df",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-13T08:05:44"
+  "synced": "2026-11-13T14:13:55"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "c9999b9a35247ccdebfff1f0705c41578fa87d090feeb14cdcf207bf580affe2",
+  "assistant/README.md": "11b0fbacb59c0ebf529de74b5876161eba2a001cde18932904268fb0ad1b05a7",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "c13c9464377b0b7e479eeb2d6bea6fca9aff7cbca9dd008ee8fbd7fd00760eb3",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -279,7 +279,7 @@
   "assistant/scripts/crm.py": "7f726aa0fa305698476f6ec848e11aa4522d45cdf2da0563ca292604b16768c9",
   "assistant/scripts/dashboard.py": "fa00147dbec74d324acf0447acbe4ad586638645844041d49a174787637238d5",
   "assistant/scripts/deadman.ps1": "32f6b22bc9d3a3be95bb1a0187c86de327bfe34503d211f130624153f0a63ea5",
-  "assistant/scripts/deadman.py": "0f528067bc2e6595f9108a2c4852b8386699e3624d1f022ce3b2e2b19867941c",
+  "assistant/scripts/deadman.py": "94053f7413ca6ce922b6e6c2fd7e7ae9a2bd888701ab26ae2c426a4c067ba983",
   "assistant/scripts/decision_keys.py": "b93619e189df9eff30057145029ab485586f94a79a866df726812b3d96969077",
   "assistant/scripts/digest.py": "7d4a973537e2690fb3d477093dd6b598f1f7231a92ac945bcf28774483fd9746",
   "assistant/scripts/draft_lint.py": "b321397bbcf19a2bf8492c509041291b9dc8a94f059045ad1627947bf0032498",
