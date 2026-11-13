@@ -36,6 +36,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -104,11 +105,16 @@ def _append(row: dict) -> None:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def fold() -> dict:
-    out = {}
-    if not STORE.exists():
-        return out
-    for ln in STORE.read_text(encoding="utf-8-sig").splitlines():
+# 2026-11-12 (ported from the pm-operator family's request-ledger cache): the store is ~2 MB and the comms
+# probe asked state_for_ticket once per handed text, re-parsing all of it each time (~80 ms x every text, every
+# minute). The folded rows are cached per process and only lines appended since the last read are parsed. The
+# store is append-only (_append); a replaced (prune), shrunk or edited-in-place file triggers a full re-read.
+_FOLD_LOCK = threading.Lock()
+_FOLD = {"key": None, "ino": None, "off": 0, "tail": b"", "rows": {}}
+
+
+def _fold_apply(out: dict, raw: bytes) -> None:
+    for ln in raw.decode("utf-8-sig", errors="replace").splitlines():
         try:
             e = json.loads(ln)
         except ValueError:
@@ -117,7 +123,43 @@ def fold() -> dict:
             prev = out.get(e["id"], {})
             checks = list(prev.get("checks") or []) + list(e.get("checks") or [])
             out[e["id"]] = {**prev, **e, "checks": checks[-20:]}
-    return out
+
+
+def _fold_copy() -> dict:
+    return {k: {**v, "checks": list(v.get("checks") or [])} for k, v in _FOLD["rows"].items()}
+
+
+def fold() -> dict:
+    """id -> folded row. Fresh row dicts and checks lists (callers may change them); deeper values are
+    shared with the cache."""
+    with _FOLD_LOCK:
+        try:
+            st = STORE.stat()
+        except OSError:
+            _FOLD.update(key=None, ino=None, off=0, tail=b"", rows={})
+            return {}
+        key = (getattr(st, "st_ino", 0) or 0, st.st_size, st.st_mtime_ns)
+        if _FOLD["key"] == key:
+            return _fold_copy()
+        off, tail = _FOLD["off"], _FOLD["tail"]
+        try:
+            with open(STORE, "rb") as fh:
+                if _FOLD["ino"] != key[0] or st.st_size < off:
+                    off = 0
+                elif off:                        # the bytes we last ended on must still be there (no in-place edit)
+                    fh.seek(off - len(tail))
+                    if fh.read(len(tail)) != tail:
+                        off = 0
+                fh.seek(off)
+                raw = fh.read()
+        except OSError:
+            return _fold_copy()
+        if not off:
+            _FOLD["rows"], tail = {}, b""
+        cut = raw.rfind(b"\n") + 1              # only whole lines; a half-written tail waits
+        _fold_apply(_FOLD["rows"], raw[:cut])
+        _FOLD.update(ino=key[0], off=off + cut, tail=(tail + raw[:cut])[-256:], key=key if cut == len(raw) else None)
+        return _fold_copy()
 
 
 def _by_ref(kind: str, ref: str) -> dict | None:

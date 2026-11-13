@@ -408,7 +408,8 @@ Until this, "done" meant a ticket was consumed, a card was tapped, or a model sa
 read-back said `VERIFIED=no` was done, a text handed to a phone that never acks got a green check, 27 tickets
 staged "asked in chat" never closed. `assistant/scripts/outcomes.py` owns ONE row per claim and moves it to a
 state a read of the record justifies: `claimed -> verifying -> verified | unverified | failed | abandoned`
-(`assistant/data/outcomes.jsonl`, append-only, folded; every change is a link in the audit ledger).
+(`assistant/data/outcomes.jsonl`, append-only, folded; every change is a link in the audit ledger). The fold is
+cached per process and only newly appended lines are parsed (a pruned or hand-edited file re-reads in full).
 
 - **Executors prove, by kind** (`outcomes.verdict_from_exec`): `email_send` needs `SENT=1 <Message-ID>`; CRM kinds
   need the record id and their read-back token (`MEMBER=yes`, `VERIFIED=yes`, `ARCHIVED=yes`); `sheet_set`

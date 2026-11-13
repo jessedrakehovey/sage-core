@@ -199,6 +199,36 @@ check("'asked in chat' tickets close after 48 h instead of rotting", tickets._lo
 check("/open renders", "not yet confirmed" in oc.render_open() or oc.render_open().startswith("Nothing"))
 check("/failed renders the failures with their route", "said via words" in oc.render_failed())
 
+# ------------------------------------------------------------------ 7. the folded-row cache (2026-11-12)
+def _cold():
+    oc._FOLD.update(key=None, ino=None, off=0, tail=b"", rows={})
+    return oc.fold()
+
+
+warm = oc.fold()
+check("the cached fold equals a cold re-read", warm == _cold())
+calls = []
+_orig_apply = oc._fold_apply
+oc._fold_apply = lambda out, raw: (calls.append(len(raw)), _orig_apply(out, raw))
+oc.fold(); oc.fold()
+check("an unchanged store is not re-parsed", calls == [], calls)
+c1 = oc.claim("imessage_send", "tk-cache", "cache text", verifier="imessage_send")
+f1 = oc.fold()
+check("an append parses only the new line", len(calls) == 1 and calls[0] < 2000 and f1[c1["id"]]["what"] == "cache text", calls)
+with open(oc.STORE, "ab") as fh:
+    fh.write(b'{"id": "' + c1["id"].encode() + b'", "state": "fail')
+check("a half-written line waits", oc.fold()[c1["id"]]["state"] == "claimed")
+with open(oc.STORE, "ab") as fh:
+    fh.write(b'ed", "updated": "' + oc._now().encode() + b'"}\n')
+check("the finished line lands", oc.fold()[c1["id"]]["state"] == "failed")
+oc.fold()[c1["id"]]["checks"].append({"x": 1})
+check("a caller changing a row does not change the cache", {"x": 1} not in oc.fold()[c1["id"]]["checks"])
+oc.STORE.write_text(oc.STORE.read_text(encoding="utf-8").replace('"what": "cache text"', '"what": "cache text, edited in place"'), encoding="utf-8")
+check("an in-place edit forces a full re-read", oc.fold()[c1["id"]]["what"] == "cache text, edited in place")
+oc._fold_apply = _orig_apply
+oc.fold(); oc.prune(days=-1)
+check("a pruned (replaced) store re-reads in full", oc.fold() == _cold() and c1["id"] not in oc.fold())
+
 print()
 print("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}", f"({TMP})")
 sys.exit(1 if FAILS else 0)

@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.12+0ecc6fc",
+  "version": "2026.11.12+d6a9707",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-12T17:54:59"
+  "synced": "2026-11-12T17:56:57"
  },
  "modules": {
   "money": {
@@ -96,7 +96,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "4744ff792d9c313210b902fba52cc0c373302bf7506d04b09b2e9481f5f153f7",
+  "assistant/README.md": "d369e6e6c4e69d11d501ba9dc338887fce7e6c045c92deadfe5d50310a2d1500",
   "assistant/agent/GOOGLE_SETUP.md": "1e0b25e940de7694b4a9228d82c19d85486a2a62d13eafd38f9b0da3a6962c6e",
   "assistant/agent/README.md": "14657ea89a843ffcb9a755c84904862dd41c848d8ec1a256c7ec44f1a7f6b52e",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -315,7 +315,7 @@
   "assistant/scripts/money/simplefin.py": "39307157d3a21258ed9f57668ae1c7f13905af4ae69029b4be369757a6a515aa",
   "assistant/scripts/notify.py": "21f0b30a92165bca05ed4bd53995a03779b2f37ad613923b50a6d039f3eb2f53",
   "assistant/scripts/operator_cron.ps1": "e1fe7129c4867a3f872918101bdc3e56a92ca9c4ccc2d6179ffd37c95e6510e3",
-  "assistant/scripts/outcomes.py": "3daa46041f175a7ea969a20e1320fa95079db4dad6c961eac5704078111aff57",
+  "assistant/scripts/outcomes.py": "2987e03de0a1fdb2230403c816576dbfea58671c51d2c6b9c519d799a1741f3c",
   "assistant/scripts/owner_chat.py": "261ef6134e9bbfdcd60d5ecbf7069a191b6f2cddc4f4b18d1fa457a155b34f21",
   "assistant/scripts/phone_bridge.py": "8f9f1fa89f6b0fc123466100c95b8b04ebb090e2d70b20096592bca5c80c6312",
   "assistant/scripts/phone_nudge.py": "c56ba4de44ef4f06546401e9819e86f1be455182fbd11de2187678152e4214b4",
@@ -451,7 +451,7 @@
   "assistant/tests/test_new_org_boot.py": "daea625fb557f59dc79cc82c6c125199376ca8a1fc898115f034b3a52119717c",
   "assistant/tests/test_onboarding_chat.py": "de2b485c057273c1d1dd9b7c2578a3403d2f221a2ea15898e90c1a54d8c10351",
   "assistant/tests/test_org_setup.py": "c1844376809aeb5d8325a1b8938a749f27f94feffe1245739b4454a71aa3027e",
-  "assistant/tests/test_outcomes.py": "32ac200663e2b31d73ef8fe36bcc435ac23895cf40fbab45923537dec02a643a",
+  "assistant/tests/test_outcomes.py": "da4151225f2d1f9817a6d36e2f740f3a71346f8fe238f2b99db514e6ca6eaa79",
   "assistant/tests/test_outreach.py": "de52e9cbbcfb9faabdc53d962075869cb1869edd80abb4fbd08473992973c96a",
   "assistant/tests/test_pending.py": "4aeeaf4cfaaf64910576db0cf08b7df487e48842ce719e12913b78b617afe6e2",
   "assistant/tests/test_phone_bridge.py": "5c7c150532b87f455e6b73e2e19831e35c347f79a86ab0f2a53cffe315d28cbd",
