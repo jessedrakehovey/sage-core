@@ -1563,4 +1563,38 @@ miss = upload.run(str(TMP / "nope.mov"), url=PAGE["url"], background=False)
 ok(miss["state"] == "failed" and "no file" in miss["why"], "a missing file fails plainly")
 _browser._cdp_calls, _browser.open_browser, upload._pages, upload.time.sleep = _cdp0, _open0, _pages0, _sleep0
 
+# ---------------------------------------------------------------- 26. "the mechanic parked it illegally" settles it and drafts the ask (gap g-b9f40e)
+# the owner, 2026-11-12 17:27: "So this means that our mechanic parked our vehicle somewhere illegal and now we're being charged the
+# parking fee" was answered "It could be, but I can't back that up from anything I have." The records say who had the car;
+# the deed is the reimbursement ask to the shop, on a card.
+MECH_ASK = "So this means that our mechanic parked our vehicle somewhere illegal and now we’re being charged the parking fee"
+MECH_BODY = ("Hi, our car got a parking ticket on the 3rd while it was in your care for the repair. "
+             "Could you cover the fine? I can send you the notice. Thanks, owner1")
+
+
+def fake_run_mech(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["mech"] = gmcp.call("task", {"lane": "home", "text": "Ask the repair shop to reimburse the parking ticket from while they had the car",
+                                      "draft": {"channel": "email", "to": "service@shop.example", "name": "the shop",
+                                                "subject": "Parking ticket while the car was with you", "text": MECH_BODY}})
+    return {"ok": True, "session": "S26", "text": "Yes, the ticket landed the day the shop had the car, so it's theirs to cover; "
+                                                  "the email asking them to reimburse it is on the card below."}
+
+
+brain._run_claude = fake_run_mech
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": MECH_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/mech", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+mc = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+      if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("body") == MECH_BODY]
+ok(str(seen["mech"]).startswith("accepted") and len(mc) == 1,
+   f"'our mechanic parked our vehicle somewhere illegal' posts one reimbursement card ({str(seen['mech'])[:120]})")
+ok("back that up" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   f"no 'I can't back that up' line, no build filed: {out!r}")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    t = (ROOT / "agent" / f).read_text(encoding="utf-8")
+    ok("so this means X" in t and "Never \"I can't back that up\"" in t, f"{f}: a fault-for-a-charge line is settled and acted on")
+
 print(f"\nall {N} checks passed")

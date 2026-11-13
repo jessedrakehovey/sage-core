@@ -443,6 +443,9 @@ around the same read-only brain:
 - **Whether a bill or fee is paid is looked up (2026-10-30, gap g-c0da13).** "I probably paid the fee by now. So now
   what do I do with it" got "a quick search of your email or bank would settle it". Both prompts now say: `mail_search`
   for the receipt first, then a `do` that signs in to the account and reads the payment and the next step. Section 22.
+- **Who is at fault for a charge is settled and acted on (2026-11-12, gap g-b9f40e).** "So this means that our mechanic
+  parked our vehicle somewhere illegal" got "I can't back that up". Both prompts now say: read the notice, texts, mail and
+  calendar for who had the car, then the same turn a `task` draft asking them to cover it (or a `do`). Section 26.
 - **An email follow-up reads the thread first (2026-10-31, gap g-754648).** "Read the email thread that we just sent him and
   make a logical follow up" was redrafted from notes with "I couldn't open the actual email thread". `mail_read` now takes
   `thread` (`google_api.mail_thread`: every message oldest first, sent ones flagged), and both prompts say an email
