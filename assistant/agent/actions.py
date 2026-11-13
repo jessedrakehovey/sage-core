@@ -1120,8 +1120,8 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
 
     # the money talk (scripts/money/brief.py, 2026-11-03): an owner's answer becomes a rule, a target, a move; ledgered, undoable
     for m in _list(sug.get("money"))[:4]:
-        if not (isinstance(m, dict) and m.get("op") and core.is_owner(person) and core.can(person, "teach")) or m.get("op") in ("history", "bills"):
-            continue                                            # history / bills are read only; its figures went to the model already
+        if not (isinstance(m, dict) and m.get("op") and core.is_owner(person) and core.can(person, "teach")) or m.get("op") in ("history", "bills", "balances"):
+            continue                                            # history / bills / balances are read only; its figures went to the model already
         try:
             sys.path.insert(0, str(core.VAULT / "assistant" / "scripts" / "money"))
             import brief

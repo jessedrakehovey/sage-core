@@ -37,7 +37,7 @@ import forecast  # noqa: E402
 if _other is not None:
     sys.modules["common"] = _other
 
-OPS = ("place", "target", "move", "cover", "assign", "reconciled", "fund", "history")
+OPS = ("place", "target", "move", "cover", "assign", "reconciled", "fund", "history", "bills", "balances")
 
 
 # ------------------------------------------------------------------ the open questions
@@ -232,6 +232,43 @@ def bills(days: int = 0, led: dict | None = None, c: dict | None = None, today: 
     return {"ok": True, "line": "\n".join(lines)}
 
 
+def balances(led: dict | None = None, c: dict | None = None) -> dict:
+    """Read only (2026-11-12, "what is my current balance according to the ledger across all accounts, including credit
+    cards?"): every ledger account's latest bank balance, grouped by side, with what each side has in cash, what its cards
+    owe, and the net; then the same for everything together. The ledger keeps net sign (a card or loan owed is negative),
+    so the net is a plain sum. -> {"ok", "line"}; nothing changes."""
+    led = led if led is not None else C.ledger()
+    c = c or C.cfg()
+    accts = B.accounts(led, c)
+    if not accts:
+        return {"ok": False, "line": "no account is on the bank feeds yet."}
+    words = {"spending": "cash", "card": "card", "vault": "savings", "off": "investment or loan"}
+    lines, tot = ["balances from the ledger (each the bank's latest figure; a card shows what it owes):"], {"cash": 0.0, "owed": 0.0, "net": 0.0}
+    for side in dict.fromkeys(a["side"] for a in accts):
+        rows = [a for a in accts if a["side"] == side]
+        lines.append(f"{side}:")
+        cash = owed = 0.0
+        for a in rows:
+            if a.get("balance") is None:
+                lines.append(f"  {a.get('name') or a['id']} ({words.get(a['role'], a['role'])}): no balance on the feed yet")
+                continue
+            bal = float(a["balance"])
+            if bal < 0:
+                owed += bal
+            else:
+                cash += bal
+            lines.append(f"  {a.get('name') or a['id']} ({words.get(a['role'], a['role'])}): "
+                         + (f"owes {C.money(-bal, True)}" if bal < 0 else C.money(bal, True))
+                         + f" (as of {str(a.get('balance_date') or '')[:10] or 'latest pull'})")
+        lines.append(f"  {side} total: {C.money(cash, True)} in accounts, {C.money(-owed, True)} owed, net {C.money(cash + owed, True)}")
+        tot["cash"] += cash
+        tot["owed"] += owed
+    tot["net"] = tot["cash"] + tot["owed"]
+    lines.append(f"all accounts together: {C.money(tot['cash'], True)} in accounts, {C.money(-tot['owed'], True)} owed on cards and loans, "
+                 f"net {C.money(tot['net'], True)}")
+    return {"ok": True, "line": "\n".join(lines)}
+
+
 # ------------------------------------------------------------------ resolving the owner's words
 def resolve_envelope(word: str, r: dict | None = None) -> str:
     r = r or C.rules()
@@ -272,6 +309,8 @@ def apply(op: str, payload: dict, by: str = "") -> dict:
     why = f"chat ({by})" if by else "chat"
     if op == "history":
         return history(str(payload.get("account") or ""), int(_amt(payload.get("days")) or 30), led, c, r)
+    if op == "balances":
+        return balances(led, c)
     if op == "place":
         g = resolve_merchant(str(payload.get("merchant") or ""), led, c)
         env = resolve_envelope(str(payload.get("envelope") or ""), r)

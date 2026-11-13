@@ -48,7 +48,7 @@ CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "schedule": 2, "un
         "event_change": 4, "event_remove": 4, "followup": 4, "task": 3, "do": 3, "note": 2, "skill": 2, "decide": 2, "switch": 2,
         "identify": 5, "job": 2, "approve": 2, "blocked": 3, "project": 3, "money": 4, "onboard": 3, "revoke": 3}
 # the money deeds (scripts/money/brief.py, 2026-11-03): an owner's answer in the money talk becomes a rule, a target, a move
-MONEY_OPS = ("place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills")
+MONEY_OPS = ("place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances")
 PROJECT_OPS = ("open", "update", "park", "close", "resume")
 # a project step that pays, moves money, deletes or handles a credential is never a job of the system's (the money lane never pays)
 _PROJECT_OWNER_ONLY = re.compile(r"\b(?:pay|pays|paying|paid|transfer|wire|venmo|zelle|withdraw|purchase|buy|delete|erase|wipe|format|password|passcode|credential)\b", re.I)
@@ -776,6 +776,13 @@ def _validate_money(payload: dict) -> tuple:
         return True, ("accepted, read only (nothing changes): the forecast says\n" + h["line"] + "\nAnswer from these figures: "
                       "say plainly whether a bill they ask about is really due (and that the date is predicted from past charges), "
                       "then the breakdown per account, balance against bills. Never 'I can't move money' to a question."), out
+    if op == "balances":                    # read only: every account's balance, cards included, and the net (2026-11-12)
+        h = brief.balances()
+        if not h["ok"]:
+            return False, f"refused: {h['line']}", payload
+        return True, ("accepted, read only (nothing changes): the ledger says\n" + h["line"] + "\nAnswer from these figures: the "
+                      "total across every account first (what is in the accounts, what the cards owe, the net), then each account "
+                      "in a short line, with the date the bank last reported it."), out
     if op == "place":
         g = brief.resolve_merchant(_s(payload.get("merchant")))
         env = brief.resolve_envelope(_s(payload.get("envelope")))

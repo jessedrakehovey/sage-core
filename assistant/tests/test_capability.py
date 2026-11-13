@@ -1340,6 +1340,43 @@ ok("bills" in intents.MONEY_OPS and any(t["name"] == "money" and "bills" in t["i
 for f in ("prompt.md", "templates/prompt.generic.md"):
     ok("money` `bills`" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: an 'is it really due / why short' question has its rung")
 
+# ---------------------------------------------------------------- 35b. "what is my current balance ... including credit cards?" (money team build)
+# the owner, 2026-11-12 10:20: asked for every account's balance from the ledger, cards included. The `money` tool's
+# `balances` op lists each account's latest bank figure by side, what the cards owe, and the net, read only.
+BAL_ASK = "What is my current balance according to the ledger across all accounts, including credit cards?"
+(TMP / "adata" / "money" / "ledger.json").write_text(json.dumps({
+    "accounts": {"chk": {"id": "chk", "name": "Everyday Checking", "type": "depository", "balance": 900.0, "balance_date": _d(0)},
+                 "sav": {"id": "sav", "name": "High Yield Savings", "type": "depository", "subtype": "savings", "balance": 2500.0, "balance_date": _d(1)},
+                 "cc1": {"id": "cc1", "name": "Sapphire Card", "type": "credit", "balance": -3150.0, "balance_date": _d(0)},
+                 "new": {"id": "new", "name": "Fresh Card", "type": "credit", "balance": None}},
+    "transactions": {}, "pulled": {}}), encoding="utf-8")
+seen35b = {}
+
+
+def fake_run_balances(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen35b["balances"] = gmcp.call("money", {"op": "balances"})
+    return {"ok": True, "session": "S35b", "text": "Across every account the ledger shows $3,400 in the accounts and $3,150 owed on the "
+                                                   "Sapphire card, so you're $250 ahead."}
+
+
+brain._run_claude = fake_run_balances
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": BAL_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/bal35b", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+b35b = str(seen35b.get("balances"))
+ok(b35b.startswith("accepted") and "Everyday Checking" in b35b and "$900.00" in b35b and "High Yield Savings" in b35b
+   and "Sapphire Card (card): owes $3,150.00" in b35b and "Fresh Card" in b35b and "no balance on the feed yet" in b35b
+   and "$3,400.00 in accounts, $3,150.00 owed on cards and loans, net $250.00" in b35b,
+   f"'{BAL_ASK[:50]}...': the money `balances` deed lists every account, cards included, with the totals and net ({b35b[:240]!r})")
+ok("can't" not in out and len(cap._load()["gaps"]) == g0 and len(NOTES) == n0,
+   "the balance ask is answered from the ledger: no 'can't' line, no build filed")
+ok("balances" in intents.MONEY_OPS and any(t["name"] == "money" and "balances" in t["inputSchema"]["properties"]["op"]["enum"] for t in gmcp.TOOLS),
+   "the money tool offers `balances` to the brain")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("money` `balances`" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a balance-right-now question has its rung")
+
 # ---------------------------------------------------------------- 36. "So what this video is talking about <YouTube link>" (gap g-57f6b7)
 # the owner, 2026-11-12 07:40: answered "I couldn't get what's said in that video". web_read on a YouTube link returns the
 # video's transcript (yt-dlp captions), so the brain reads it and says what the video is about.

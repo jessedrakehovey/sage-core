@@ -960,6 +960,9 @@ An envelope budget on top of the ledger, the way YNAB works, zero LLM, nothing m
   **Bills breakdown** (2026-11-09, gap g-a9b3c1: "are you sure the lens rentals are due tomorrow? ... give me a
   breakdown"): `money` op `bills` is read only; `brief.bills` lists forecast.py's bills due in the next `days`, how
   each is known (rhythm, charge count, last charge) and each account's balance against them.
+  **Balances now** (2026-11-12, money-team build: "what is my current balance ... across all accounts, including credit
+  cards?"): `money` op `balances` is read only; `brief.balances` lists every ledger account's latest bank figure by
+  side (cards as owed), each side's total in accounts, owed and net, then all accounts together.
 
 Tests: `python assistant/tests/test_money_budget.py` (offline, scratch data, nothing posts).
 

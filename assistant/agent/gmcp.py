@@ -122,10 +122,12 @@ WRITE_TOOLS = [
                     "`fund` to refill a side's envelopes to their targets; `history` (read only) when they ask why a card's balance went up or "
                     "what it was a while ago: it returns what each card owed `days` ago and every charge since, to answer from; "
                     "`bills` (read only) when they ask what is due, whether a bill is really due, or why money is short: the predicted "
-                    "bills of the next `days`, how each is known, and each account's balance against them. "
+                    "bills of the next `days`, how each is known, and each account's balance against them; "
+                    "`balances` (read only) when they ask what they have or owe right now: every account's latest balance, "
+                    "credit cards included, with the totals and the net. "
                     "Envelope names come from MONEY. Never guess a category yourself.",
      "inputSchema": {"type": "object", "required": ["op"], "properties": {
-         "op": {"type": "string", "enum": ["place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills"]},
+         "op": {"type": "string", "enum": ["place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances"]},
          "account": {"type": "string", "description": "history: the card by name; leave out for every card"},
          "days": {"type": "number", "description": "history: how far back ('a month ago' = 30); bills: how far ahead (default a week)"},
          "merchant": {"type": "string", "description": "place: the merchant as MONEY QUESTIONS names it"},
