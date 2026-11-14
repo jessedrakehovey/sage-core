@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+20afba9",
+  "version": "2026.11.14+3d3857d",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T13:30:28"
+  "synced": "2026-11-14T14:03:50"
  },
  "modules": {
   "money": {
@@ -97,12 +97,12 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "04d5e5cf21fa750777bde4fd126b10ed3f46e08b33d9029812c8d0c156dc7d6f",
+  "assistant/README.md": "3cc42994447a5cf607d110649786af81b10d15b11c36d5c73cd10635f772da47",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "fbc7262e72a6d603dd087791128f1c176b51133146e40ed4eb16cd87cc5bc116",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
-  "assistant/agent/actions.py": "4a9846e3be651d4dfedc32af7e00019f9ceded6988f62ffb74a98d2d4bcd7e43",
+  "assistant/agent/actions.py": "501301da3c89784a9df5bf285769fd067431525725c9f90bc1995213aa7148f7",
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/brain.py": "9a71ade0d8506ae6c0a52873aa24270350d4dfc02c4e25d5c439b156d368f530",
   "assistant/agent/bridge.py": "5b02752026aba665f9ae36451a6a37fd597f9567e70495401566920a0d2bef12",
@@ -318,7 +318,7 @@
   "assistant/scripts/money/simplefin.py": "39307157d3a21258ed9f57668ae1c7f13905af4ae69029b4be369757a6a515aa",
   "assistant/scripts/notify.py": "21f0b30a92165bca05ed4bd53995a03779b2f37ad613923b50a6d039f3eb2f53",
   "assistant/scripts/operator_cron.ps1": "c0e4ed35ab2d45b738521daf6cd1bdf0f9f33334bd9250bb62aebc47916ec67f",
-  "assistant/scripts/outcomes.py": "2987e03de0a1fdb2230403c816576dbfea58671c51d2c6b9c519d799a1741f3c",
+  "assistant/scripts/outcomes.py": "5ce6d782b6665013c549f0f82a6ecf9820ce1adf3d8f4288bf5a332f8916c517",
   "assistant/scripts/owner_chat.py": "261ef6134e9bbfdcd60d5ecbf7069a191b6f2cddc4f4b18d1fa457a155b34f21",
   "assistant/scripts/phone_bridge.py": "8f9f1fa89f6b0fc123466100c95b8b04ebb090e2d70b20096592bca5c80c6312",
   "assistant/scripts/phone_nudge.py": "c56ba4de44ef4f06546401e9819e86f1be455182fbd11de2187678152e4214b4",
@@ -344,9 +344,10 @@
   "assistant/scripts/spine.py": "6a0334e11d0bac97613ae7e72ff77465bc3a550624b0670760451d236714b46b",
   "assistant/scripts/spine_long.ps1": "296fae7b934117b16fa826d2a490b9185bcfbf96f082eccc07bd26103b75b4f9",
   "assistant/scripts/startup.py": "1026c8a2b3949dd9356ba2cde24062c916b852a28effd4bacbb2e92359944b92",
+  "assistant/scripts/test_sends.py": "dee319f18c0acd04becc9ca46bfac0822431a58f3dd89e32543d969be5d9beb1",
   "assistant/scripts/text_confirm.py": "3bdbbff54a2470dd8c0cafa69e8da7a9d077bb420a292c553dc7b56da026637b",
   "assistant/scripts/text_gate.py": "dbd731bdc87f120cd57be59d121f06c991699789731a5b80c427f55d7ab990d1",
-  "assistant/scripts/tickets.py": "6a0ba3df1d80a803e0c5c002fd760c9a6a7e1b0f8639ef470cf714004c4c9a97",
+  "assistant/scripts/tickets.py": "2c1254ca8813b81c801ac7bc10eb1273fb2a618fd4c002c9ac3002e1d4fca6c1",
   "assistant/scripts/tracking/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "assistant/scripts/tracking/advice.py": "8c58adf86d370f066fbcfcd935f30e59cd5be66b2339451ccc77080024985346",
   "assistant/scripts/tracking/chains.py": "efb3e4c93964be431351afe85c4523583b890169864a99876e8af5dd7d86f4ca",
@@ -396,7 +397,7 @@
   "assistant/tests/test_builder_order.py": "3068dfb25d14934b48971f35962d99830ff1b50a6f89a81c847857559c074990",
   "assistant/tests/test_builder_verify.py": "f16933b5d2d125fbd08d736dc8d37d0e65db193515e64d409cf45a2bd642b0bb",
   "assistant/tests/test_burst.py": "8ecbd9b8a57e012921ad892d9f2ae7d22cf4e09238972a4e0241bddb676faeae",
-  "assistant/tests/test_capability.py": "a73f9eb2263ddb81dc7c11b34bc0a863ea80513275a76fdf6ed82f4855603efc",
+  "assistant/tests/test_capability.py": "f08046731fd67cfed55f0baafea8e344de06c0348ce520936bdda455bbf21801",
   "assistant/tests/test_capacity.py": "cc545627a22adfcbc383a92c3424dc332ccb1c08f2756be2ad3ee6ae18d15eac",
   "assistant/tests/test_cards_digest.py": "d8b4a4b1cfd242f29430d1471bcf76068ce99f47a05ee4c0eae1c96822594ddb",
   "assistant/tests/test_cards_exec.py": "b6e1d162bb3cc74298785e0c24d31b0add4a740708de942eca9b2eb37835285d",

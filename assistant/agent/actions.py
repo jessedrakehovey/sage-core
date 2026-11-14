@@ -1018,6 +1018,17 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
             if r.get("ok"):
                 LAST_APPLIED.append({"kind": "card", "what": f"skipped in chat: {str(q.get('header') or '')[:120]}", "ref": qid})
                 core.log_change("card_skip", f"card {qid} skipped on {person['name']}'s words", {"op": "none"}, by)
+                try:
+                    # "He said you would stop sending these messages" on a failed TEST send (2026-10-25): every other
+                    # trace of the test sends closes with it (retries, outbox texts, sibling cards, a paused channel)
+                    import test_sends
+                    import outcomes
+                    if test_sends._card_is_test(q, outcomes.fold(), test_sends._tickets()):
+                        swept = test_sends.sweep()
+                        LAST_APPLIED.append({"kind": "card", "what": f"test sends closed quietly: {swept['cards']} more card(s), "
+                                                                     f"{swept['cancelled']} retry(ies) stopped", "ref": qid})
+                except Exception:  # noqa: BLE001
+                    pass
             else:
                 out.append(f"I couldn't skip that card ({str(r.get('reason') or '')[:140]}); it is still open.")
             continue

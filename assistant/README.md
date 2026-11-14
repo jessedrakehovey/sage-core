@@ -463,6 +463,11 @@ clock is changed, and a dead cron is noticed from outside the machine. Ported, t
   `unverified` and the owner is asked once (`outcomes.settle`), instead of waiting again. A failed standing send
   (a quiz draft, a standing text, a triage note: no card to come back) gets ONE "Did not go" card by code with
   Retry it / Drop it; Retry mints a fresh ticket with the card's provenance.
+- **Test sends close quietly** (`scripts/test_sends.py`, 2026-10-25): a send to an example.com / .test address or a
+  555-01xx number, or with a bare test body ("s", "hi 0"), never gets a "Did not go" / "Not confirmed" card or an
+  exception ticket; every `outcomes.py settle` pass cancels its queued retries, pulls it out of the phone outbox,
+  closes its cards and resets a breaker only test sends tripped. An owner's "stop sending these" in such a card's
+  thread (the `approve` skip deed) does the same at once.
 - **Sentinel findings are cards by code**, not `stuck_work` tickets (`sentinels._plan`, `cards.sentinel_card`): a
   failing spine job (Run it now), a stalled spine or a failed scheduled task (Start it now), a quiet sensor (Run the
   sensor now), an approved item still queued (Run the drain now / Cancel it), dreaming or a self-test (Run it now /

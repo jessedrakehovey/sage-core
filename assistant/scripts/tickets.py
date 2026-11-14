@@ -65,6 +65,14 @@ def add_many(items, owner):
         items = text_gate.keep(list(items))
     except Exception:           # the gate failing must never lose a text: ticket everything
         pass
+    try:                        # a failed TEST send is no work for anyone (test_sends.py, 2026-10-25)
+        import exec_store as _es
+        import test_sends
+        _t = _es.fold()
+        items = [it for it in items if not (it.get("kind") == "exec_exception"
+                                            and test_sends.is_test_ticket(_t.get(str((it.get("payload") or {}).get("ticket") or "")) or {}))]
+    except Exception:  # noqa: BLE001
+        pass
     new_rows = []
     with QueueLock(owner) as ok:
         if not ok:

@@ -542,6 +542,14 @@ def _job_reported(row: dict) -> bool:
         return False
 
 
+def _is_test(row: dict) -> bool:
+    try:
+        import test_sends
+        return test_sends.is_test_row(row)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def ask_owner(row: dict, dry: bool = False, failed: bool = False) -> dict:
     """ONE card per unverified row: the system cannot read the record, so the owner's answer is the evidence.
     Every button is something the code does on the tap (It went -> verified; Send it again -> the original
@@ -550,6 +558,11 @@ def ask_owner(row: dict, dry: bool = False, failed: bool = False) -> dict:
     who = _who(row)
     if row.get("ask_card"):
         return {"posted": False, "reason": "already asked"}
+    if _is_test(row):
+        # a send to a test address or a 555-01xx number, or a bare "s" / "hi 0" (test_sends.py, 2026-10-25: "He said
+        # you would stop sending these messages"): never a "Did not go" / "Not confirmed" card
+        set_state(row["id"], "abandoned", {}, "closed quietly: a test send", escalation="none")
+        return {"posted": False, "reason": "test send"}
     if kind == "agent_run" and not failed and _job_reported(row):
         # the job already told the owner how it ended, in the conversation it was asked in, caveat included ("I could
         # not check this one"): a "Not confirmed" card an hour later asks about work they have already read about
@@ -693,7 +706,7 @@ def _tell(row: dict, state: str, detail: str, dry: bool) -> None:
     """The ledger's voice: the card's own thread (push_result) when the row came from a card, else the
     receipt in the conversation it was asked in (the agent's receipts), else nothing."""
     text = _line(row, state, detail)
-    if not text or dry:
+    if not text or dry or (state != "verified" and _is_test(row)):      # a test send's end is no news (test_sends.py)
         return
     qid = str(row.get("card") or "")
     try:
@@ -718,6 +731,11 @@ def settle(now: datetime | None = None, dry: bool = False) -> dict:
     owner's one card (daytime only); anything past GIVEUP_H is abandoned with a line. -> counts."""
     now = now or datetime.now()
     out = {"checked": 0, "verified": 0, "failed": 0, "unverified": 0, "asked": 0, "abandoned": 0, "waiting": 0}
+    try:                      # test sends first: their retries, outbox texts, rows and cards close quietly (test_sends.py)
+        import test_sends
+        out["test_sends"] = test_sends.sweep(dry=dry)
+    except Exception:  # noqa: BLE001
+        pass
     for row in sorted(fold().values(), key=lambda r: r.get("created", "")):
         st = str(row.get("state") or "")
         if st in TERMINAL:

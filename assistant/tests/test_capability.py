@@ -1597,4 +1597,78 @@ for f in ("prompt.md", "templates/prompt.generic.md"):
     t = (ROOT / "agent" / f).read_text(encoding="utf-8")
     ok("so this means X" in t and "Never \"I can't back that up\"" in t, f"{f}: a fault-for-a-charge line is settled and acted on")
 
+
+# ---------------------------------------------------------------- 37. "He said you would stop sending these messages" (test sends, 2026-10-25)
+# the owner, 2026-10-25 10:50, in the thread of a "Did not go" card for a 10:43 test send: five failure cards, a "Texts paused"
+# card and a retry every 10 minutes, all for p0@example.com / +1805555010x and bodies like "s" and "hi 0". Test sends close
+# quietly by code (test_sends.py); his words in the thread skip the card and every other trace goes with it.
+import exec_store as es  # noqa: E402
+import outcomes  # noqa: E402
+import phone_bridge  # noqa: E402
+import drain  # noqa: E402
+import test_sends  # noqa: E402
+import tickets as tickets_mod  # noqa: E402
+STOP_ASK = "He said you would stop sending these messages"
+ok(test_sends.is_test_payload({"to": "p0@example.com", "body": "Hello there"}) and test_sends.is_test_payload({"to": "+18055550101", "body": "x y"})
+   and test_sends.is_test_payload({"to": "+13105551234", "body": "hi 0"}) and test_sends.is_test_payload({"to": "a@b.co", "body": "s"})
+   and not test_sends.is_test_payload({"to": "+18055551234", "body": "See you Saturday!"})
+   and not test_sends.is_test_payload({"to": ["p1@example.com", "real@example.invalid"], "body": "Hello"}),
+   "a test recipient (example.com, 555-01xx) or a bare test body is a test send; a real number or a real co-recipient is not")
+t_mail = es.enqueue("email_send", {"from": es.ALLOWED_FROM[0], "to": "p0@example.com", "subject": "s", "body": "s"}, es.APPROVER, "card:q0000000037a1")
+es.set_status(t_mail["id"], "exception", "PERMANENT: SMTP refused")
+row = outcomes.claim("email_send", t_mail["id"], "s", lane="personal", route="email_send", verifier="email_send", card="")
+n_cards0 = len(cards.pending())
+r37 = outcomes.ask_owner(outcomes.set_state(row["id"], "failed", {}, "SMTP refused"), failed=True)
+ok(not r37.get("posted") and outcomes.fold()[row["id"]]["state"] in outcomes.TERMINAL and len(cards.pending()) == n_cards0,
+   "a failed test send gets no 'Did not go' card: its outcome stays closed, nothing asked")
+ok(tickets_mod.add_many([{"source": "executor", "source_id": f"exc|{t_mail['id']}", "lane": "personal", "kind": "exec_exception",
+                          "title": "Executor exception", "summary": "x", "payload": {"ticket": t_mail["id"]}}], "test") == 0,
+   "a test send's executor exception becomes no ticket for anyone")
+# the state the owner saw: a text to a 555 number queued for retry, one waiting in the phone outbox, a "Did not go" card, a paused channel
+for _t in es.pending(es.KIND_LANES["imessage_send"]):          # earlier sections' fixtures: this channel starts empty
+    es.set_status(_t["id"], "cancelled", "test fixture")
+t_ph = es.enqueue("imessage_send", {"to": "+18055550102", "body": "hi 0", "account": "owner1-iphone"}, es.APPROVER, "card:q0000000037a2")
+t_ob = es.enqueue("imessage_send", {"to": "+18055550103", "body": "hi 1", "account": "owner1-iphone"}, es.APPROVER, "card:q0000000037a3")
+es.set_status(t_ob["id"], "done", "PHONE_QUEUED m-0000000037ob")
+phone_bridge.save_json(phone_bridge.OUTBOX, {"items": [{"id": "m-0000000037ob", "ticket": t_ob["id"], "to": "+18055550103",
+                                                         "body": "hi 1", "status": "ready", "ts": time.strftime("%Y-%m-%dT%H:%M:%S")}]})
+orow = outcomes.claim("imessage_send", t_ph["id"], "hi 0", lane="personal", route="imessage_send", verifier="imessage_send")
+dn = cards.post([{"header": "Did not go: imessage send", "lane": "personal", "urgent": True, "outcome_id": orow["id"],
+                  "question": 'This did not go through to +18055550102: "hi 0".',
+                  "options": [{"label": "Retry it (Recommended)"}, {"label": "Drop it"}]}], "outcomes", lane="personal")
+dnq = dn.get("qid")
+b37 = drain._breaker_load()
+b37[es.KIND_LANES["imessage_send"]] = {"fails": 2, "tripped_ts": time.time()}
+drain._breaker_save(b37)
+pz = cards.breaker_card(es.KIND_LANES["imessage_send"], 2, 1)
+pzq = pz.get("qid")
+ok(dnq and pzq and cards._read(cards.LIVE / f"{pzq}.json").get("status") == "open", "the 'Did not go' and the 'Texts paused' cards are open")
+_c = cards._read(cards.LIVE / f"{dnq}.json")
+_c["chat"] = {"owner1": "spaces/AAQAtest/messages/stop37.stop37"}
+cards._write(cards.LIVE / f"{dnq}.json", _c)
+
+
+def fake_run_stop(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["stop"] = gmcp.call("approve", {"skip": True, "words": STOP_ASK})
+    return {"ok": True, "session": "S37", "text": "Done, those test sends are closed and the texts channel is running again; no more of these."}
+
+
+brain._run_claude = fake_run_stop
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": STOP_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/stop37", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+ok(str(seen.get("stop", "")).startswith("accepted"), f"'{STOP_ASK}': the approve deed with skip is accepted ({str(seen.get('stop'))[:100]})")
+ok(cards._read(cards.LIVE / f"{dnq}.json").get("status") == "answered", "the 'Did not go' card in his thread is closed on his words")
+ok((cards._read(cards.LIVE / f"{pzq}.json") or {}).get("status") != "open" and not drain.breaker_tripped(es.KIND_LANES["imessage_send"]),
+   "the 'Texts paused' card closes and the channel is open again: only test sends tripped it")
+ok(es.fold()[t_ph["id"]]["status"] == "cancelled", "the queued test text is cancelled: no retry every 10 minutes")
+ok(phone_bridge.load_json(phone_bridge.OUTBOX, {})["items"][0]["status"] == "recalled" and es.fold()[t_ob["id"]]["status"] == "cancelled",
+   "the test text still waiting in the phone outbox is pulled back")
+ok("can't" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, f"no 'can't' line, no build filed: {out!r}")
+r_s = test_sends.sweep()
+ok(not any(r_s.values()), f"a second sweep finds nothing left to close: {r_s}")
+
 print(f"\nall {N} checks passed")
