@@ -753,6 +753,17 @@ def act_cancel(ticket_id: str, by: str = "owner") -> str:
         return f"Could not cancel {ticket_id}: {str(e)[:120]}"
 
 
+def _quiet(now=None) -> bool:
+    """Quiet hours (exec_store's 21:00-07:00): a status line to Chat waits for the morning."""
+    try:
+        import exec_store as es
+        start, end = es.QUIET_START, es.QUIET_END
+    except Exception:  # noqa: BLE001
+        start, end = 21, 7
+    h = (now or datetime.now()).hour
+    return h >= start or h < end
+
+
 def _chase_line_today(latch: dict) -> bool:
     return str(latch.get("chase-line:day") or "") == date.today().isoformat()
 
@@ -812,6 +823,11 @@ def run(dry=False):
             latch[f["key"]] = now
             chase.remove(f)
             fresh.remove(f)
+    if chase and _quiet():
+        # quiet hours (21:00-07:00): the line waits and nothing is latched, so the first run after 07:00 collects the
+        # findings again and says only what still applies (2026-10-25: an 06:01 line named a card already done)
+        fresh = [f for f in fresh if not _is_chase(f)]
+        chase = []
     if chase:
         if not _chase_line_today(latch) and _allowed("chase_line"):
             cards.say("sentinels", "personal", "Still waiting on you: " + "; ".join(f["text"][:140] for f in chase[:6])

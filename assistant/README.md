@@ -253,7 +253,9 @@ now on besides one drop down card with them all together once a week."
   nudges / Check the open invoices hands the work to Sage as one ticket, Leave keeps those leads off next
   week's card. The cold count leaves out leads dropped on a card, leads Sage's memory records as dropped,
   skipped or lost, and leads with a booked meeting. A ticket staged 5+ days is a held "Waiting Nd" card
-  (`sentinels._staged_card`: Hand it to Sage / Close it), not the daily chase line. Before that card (2026-10-26)
+  (`sentinels._staged_card`: Hand it to Sage / Close it), not the daily chase line. The chase line itself never
+  goes out 21:00-07:00 (`sentinels._quiet`): nothing is latched, so the first run after 07:00 re-checks and says only
+  what still applies. Before that card (2026-10-26)
   an ask that already landed closes quietly (a later finished ticket or a memory fact shows the same names and
   change done), so does an expired card about a number memory flags as a scam, and rewordings of one job
   ride ONE card ("asked N times"; Close it closes them all) (`sentinels._settled`, `_same_job_groups`). An ask an
