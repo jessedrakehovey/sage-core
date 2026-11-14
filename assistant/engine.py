@@ -10,7 +10,7 @@ organization. This module draws the line once and both `new_org.py` and `sage up
            the spine, Mission Control, learnings), the knowledge tooling under scripts/ (wiki, semantic search,
            dreaming cron, graphify, guardrails, monitoring, evals, skill radar, drive ingest), Schema/, the
            generic Claude skills. Owned by the engine: `sage update` replaces these files.
-  PACK     everything the organization owns: data/, out/, learnings/, agent/state/, agent/skills/, the
+  PACK     everything the organization owns: data/, out/, learnings/, agent/state/, agent/skills/, agent/specialists/, the
            profile / people / prompt / google / org / config / connections / tracking / chains / mining /
            spine_jobs files, Wiki/, Memory/, Raw/, Context/, Schema/mistakes.md, the task XMLs. An update
            never touches a pack path. The engine carries each pack file once, as the TEMPLATE `new_org.py`
@@ -58,7 +58,7 @@ ENGINE_ROOTS = ("assistant", "scripts", "Schema", ".claude")
 SKIP_DIRS = {"__pycache__", ".git", "node_modules", ".pytest_cache", ".semantic_store", ".cache", "graphify-out"}
 # inside assistant/: the organization's own state never travels (new_org creates empty ones)
 SKIP_ASSISTANT_DIRS = {"data", "out", "learnings", "gchat_relay", "tools"}
-SKIP_ASSISTANT_AGENT_DIRS = {"state", "skills"}
+SKIP_ASSISTANT_AGENT_DIRS = {"state", "skills", "specialists"}
 SKIP_FILES = {"gchat.local.json", "google.json", "index.html"}          # plus any *_IPHONE_SETUP.md (an owner's phone notes)
 SKIP_SUFFIXES = (".jsonl", ".log", ".kdbx", ".png", ".jpg", ".jpeg", ".gif", ".mp4", ".wav", ".pyc", ".tmp")
 SKIP_PLANNING_PREFIXES = ("BUILD_PLAN", "BUILD_PROPOSAL", "PLAN-", "TRACKING_DESIGN", "SAGE2_PLAN", "SAGE_CORE_PLAN")
@@ -93,7 +93,7 @@ MODULES = {
 }
 # the organization's own files (relative to the org root): an update never touches these
 PACK_PREFIXES = ("assistant/data/", "assistant/out/", "assistant/learnings/", "assistant/agent/state/", "assistant/agent/skills/",
-                 "assistant/tasks/", "assistant/state/", "Wiki/", "Memory/", "Raw/", "Context/", "Schema/templates/")
+                 "assistant/agent/specialists/", "assistant/tasks/", "assistant/state/", "Wiki/", "Memory/", "Raw/", "Context/", "Schema/templates/")
 # pack files that are pure organization data, never a template: new_org.py writes a fresh one (2026-10-29: the scrubbed
 # copy of one organization's notes still carried its people)
 PACK_NEVER_TEMPLATE = {"assistant/agent/prompt.local.md", "assistant/core_sync.json"}     # core_sync.json lists the people it scrubs

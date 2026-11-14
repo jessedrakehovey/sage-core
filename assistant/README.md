@@ -94,9 +94,10 @@ Traffic is low, so nothing loops. Three tiers:
    SUGGEST; the bridge retries once, then queues the task itself (`forced`), so a card follows every time. Chat layout:
    labelled sections "The decision" / "What you're approving", "Draft · to X · goes out exactly as written", "Details".
 
-Every ticket carries a `lane`. Today one operator drains all lanes. If one lane's
-queue wait ever hurts, run a second operator with `tickets.py claim --lane <x>` -
-a config change, not a rebuild.
+Every ticket carries a `lane`. One operator drains all lanes until the records say one queue is
+not enough; then the agent opens a lane for itself (`agent/capacity.py`, section "Capacity:
+lanes and specialists opened on evidence"): a second pass that claims only that lane, in parallel,
+still wake-on-work. Nobody edits a config for it and nothing loops.
 
 ## Safety properties (protected core - do not weaken without the owner)
 
@@ -1810,6 +1811,49 @@ code, with `tests/test_usage_week.py` as the gate.
    one-word receipt is for asks to DO something. The money boundary said in passing is not a gap. The prompt now
    says model names, order items, amounts and dates are copied from the record read that turn. The name typed into
    the sign-in form is no longer written to the transcript or the log.
+
+## Capacity: lanes and specialists opened on evidence (2026-11-14)
+
+the owner: "I want sage and sage core come natively with the ability to judge when capacity requires making
+multiple lanes (like property OS specialized lanes for throughput) and agents (that operate as sage's name
+but are more specialized at certain tasks) by perceiving when work or problems frequently arise that need
+more throughput or specialization."
+
+The property OS's standing lanes were turned down here on 2026-10-05 for their cost (lanes that loop whether
+or not there is work). This is the other way to get the same thing: one queue stays the default, and
+`agent/capacity.py` asks every hour, by code and from records the system already writes, whether one queue
+is still enough. Zero LLM.
+
+| Step | What it reads or does |
+|------|----------------------|
+| **Sense** | `data/tickets.json`: per lane and kind, arrivals a week and the minutes from a ticket's arrival to its first claim (only work that arrived 08:00-21:00 counts; nights wait by design), slow days, what waits now. The desk's jobs, the hand jobs (`data/learn/runs.jsonl`) and `corrections.jsonl`: how often one kind of work (a playbook in `agent/skills/`, or a word the asks share) failed or had to be asked again. |
+| **Judge** | *Throughput*: a lane whose median wait passed `wait_min` (45) on `slow_days` (3) days with `min_per_week` (8) coming in. One kind carrying 60% of the waiting scopes the lane to that kind. *Specialization*: a kind of work with `trouble_min_jobs` (6) tries of which `trouble_rate` (30%) went wrong, on two or more days. Both need something from the last 7 days, and the verdict must hold on `confirm_days` (3) separate days before anything opens. |
+| **Act: a lane** | A record in `data/agent/capacity.json`. Its tickets now belong to it: `tickets.py claim` / `pending` without `--worker` leave them alone unless one has waited `orphan_min` (90) minutes (opening a lane can never make work wait longer); `--worker <id>` takes only them, claimed as `worker:<id>`. `capacity.py dispatch` (called by every operator tick and comms wake, after the drain) starts `operator_cron.ps1 -Worker <id>` detached for each lane with work waiting: no sensors, no sweep, no drain, its own in-flight marker, the same prompt with the claim narrowed, the same allow / deny lists, the same daily run budget, at most `lane_runs_per_day` (24). No tickets = no run. |
+| **Act: a specialist** | A focus brief in `agent/specialists/<id>.md` (the organization's own, git-tracked, never touched by an engine update), written once from the record: why it exists, what went wrong (the failed asks, the lane's stuck-work tickets), the lane's lessons, the playbooks that fit. `desk.render` appends it to the turn of any ask that matches (playbook first, then the longest trigger word) and the job records which one rode along; a lane's operator pass carries its lane's brief. Dreaming and the builder may refine the file; reopening never overwrites it. |
+| **Review** | Quiet for `retire_quiet_days` (14): closed, the work is the one queue's again. Open `review_days` (14) and no better: said once, kept open. A lane or brief an owner opened is never closed by the judge. A closed one is not reopened by itself for `cooldown_days` (21). |
+
+It is one agent throughout. A lane's pass and a brief carry the same voice, rules and gates; the brief says so
+in its first lines and widens nothing. Every open and close is one line in the work log and one idea line under
+the next digest ("Alpha email waited a median 80 min or more before I got to it on 5 of the last 14 days, so I
+now work it side by side with everything else instead of after it. Say 'go back to one queue for alpha email'
+and I'll do it."), never a card, never an id. The brain's context gets a short block while anything is open, so
+"why was that slow" is answered from the record.
+
+Browser and PC jobs are measured too, but there is one browser profile: queuing there is said once and nothing is
+opened. A second browser lane is not built.
+
+Switch: `agent/profile.json -> capacity {mode, max_lanes (2), max_specialists (4), ...}`; `mode` is `auto` (opens
+and closes inside the caps), `suggest` (says the idea once, an owner's word opens it) or `off` (one queue, at once,
+nothing deleted); env `AGENT_CAPACITY`. Spine job `capacity` hourly; on a pack whose job list predates it the
+reflex runs the pass when it is three hours stale.
+
+    python assistant/agent/capacity.py status            # open, watched, closed
+    python assistant/agent/capacity.py report            # the measurements behind it
+    python assistant/agent/capacity.py open "<what>"     # an owner's word
+    python assistant/agent/capacity.py retire "<what>"
+
+Tests: `tests/test_capacity.py` (65). First live read, 2026-11-14: tickets wait about one minute in every lane
+(the comms probe wakes the operator), so no lane is warranted today; one kind of work is being watched.
 
 ## Not built yet
 

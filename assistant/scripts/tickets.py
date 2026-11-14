@@ -11,7 +11,7 @@ A claim older than CLAIM_TTL_S is treated as abandoned and becomes claimable aga
 CLI (what the headless operator is allowed to run):
   tickets.py list [--status new] [--lane wedding] [--json]
   tickets.py pending                      -> prints count of claimable tickets
-  tickets.py claim [--lane L] [--limit N] -> claims + prints tickets as JSON
+  tickets.py claim [--lane L] [--limit N] [--worker ID] -> claims + prints tickets as JSON
   tickets.py show <id>
   tickets.py stage <id> --note "..."      -> needs the owner (draft ready / decision)
   tickets.py dismiss <id> --note "..."
@@ -163,9 +163,35 @@ def _transition(tid, to, by, note="", allowed_from=None, lane=None, note_max=500
         return t
 
 
-def claim(lane=None, limit=10, by="operator", kind=None, where=None):
+def _lane_scope(worker):
+    """Which tickets this claimer may take, by the lanes the agent opened for itself (agent/capacity.py):
+    a lane's own pass (`worker`) takes only its tickets; the general pass leaves an open lane's tickets alone
+    unless one has waited past capacity's orphan time, so opening a lane can never make work wait longer.
+    -> a predicate, or None when no lane is open (the one queue, as before). Any fault here = the one queue."""
+    try:
+        agent = str(Path(__file__).resolve().parent.parent / "agent")
+        if agent not in sys.path:
+            sys.path.append(agent)          # appended: this folder's modules of the same name must keep winning
+        import capacity
+        if capacity.cfg()["mode"] == "off":
+            return (lambda t: False) if worker else None
+        ws = capacity.workers()
+        if worker:
+            return lambda t: capacity.owner_of(t, ws) == worker
+        if not any(w.get("type") == "lane" for w in ws):
+            return None
+        return lambda t: not capacity.owner_of(t, ws) or capacity.orphaned(t)
+    except Exception:  # noqa: BLE001
+        return (lambda t: False) if worker else None
+
+
+def claim(lane=None, limit=10, by="operator", kind=None, where=None, worker=None):
     """kind=None claims every kind except DOER_KINDS (the operator); kind="agent_run" claims only those (the doer).
-    where: optional predicate; a ticket it rejects is left waiting (e.g. a client send during quiet hours)."""
+    where: optional predicate; a ticket it rejects is left waiting (e.g. a client send during quiet hours).
+    worker: the id of a lane the agent opened for itself; only that lane's tickets, claimed as `worker:<id>`."""
+    scope = _lane_scope(worker) if (worker or (lane is None and kind is None)) else None
+    if worker:
+        by = "worker:" + str(worker)
     with QueueLock(by) as ok:
         if not ok:
             return []
@@ -178,6 +204,8 @@ def claim(lane=None, limit=10, by="operator", kind=None, where=None):
             if kind is not None and t.get("kind") != kind:
                 continue
             if where is not None and not where(t):
+                continue
+            if scope is not None and not scope(t):
                 continue
             if _claimable(t) and (lane is None or t["lane"] == lane):
                 t["status"], t["updated"] = "claimed", ts
@@ -198,10 +226,13 @@ def claim(lane=None, limit=10, by="operator", kind=None, where=None):
         return got
 
 
-def pending(lane=None, kind=None):
-    """The operator's count leaves out the doer's kinds, so a waiting browser task never wakes an LLM operator that cannot work it."""
+def pending(lane=None, kind=None, worker=None):
+    """The operator's count leaves out the doer's kinds, so a waiting browser task never wakes an LLM operator that cannot work it.
+    With lanes open (agent/capacity.py) the general count leaves out what a lane owns, and `worker` counts only that lane's."""
+    scope = _lane_scope(worker) if (worker or (lane is None and kind is None)) else None
     return sum(1 for t in _load().values() if _claimable(t) and (lane is None or t["lane"] == lane)
-               and ((t.get("kind") not in DOER_KINDS) if kind is None else t.get("kind") == kind))
+               and ((t.get("kind") not in DOER_KINDS) if kind is None else t.get("kind") == kind)
+               and (scope is None or scope(t)))
 
 
 def prune(days=30):
@@ -220,8 +251,8 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("list"); p.add_argument("--status"); p.add_argument("--lane"); p.add_argument("--json", action="store_true")
-    p = sub.add_parser("pending"); p.add_argument("--lane")
-    p = sub.add_parser("claim"); p.add_argument("--lane"); p.add_argument("--limit", type=int, default=10)
+    p = sub.add_parser("pending"); p.add_argument("--lane"); p.add_argument("--worker")
+    p = sub.add_parser("claim"); p.add_argument("--lane"); p.add_argument("--limit", type=int, default=10); p.add_argument("--worker")
     p = sub.add_parser("show"); p.add_argument("id")
     for name in ("stage", "dismiss", "done"):
         p = sub.add_parser(name); p.add_argument("id"); p.add_argument("--note", default="", required=(name != "done"))
@@ -241,9 +272,9 @@ def main():
                 print(f"{t['id']}  {t['status']:<9} {t['lane']:<9} {t['kind']:<14} {t['title'][:70]}")
             print(f"({len(rows)} tickets)")
     elif a.cmd == "pending":
-        print(pending(a.lane))
+        print(pending(a.lane, worker=a.worker))
     elif a.cmd == "claim":
-        print(json.dumps(claim(a.lane, a.limit), indent=1, ensure_ascii=False))
+        print(json.dumps(claim(a.lane, a.limit, worker=a.worker), indent=1, ensure_ascii=False))
     elif a.cmd == "show":
         print(json.dumps(_load().get(a.id) or {"error": "NOT_FOUND"}, indent=1, ensure_ascii=False))
     elif a.cmd in ("stage", "dismiss", "done"):

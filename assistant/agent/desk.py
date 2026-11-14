@@ -345,6 +345,16 @@ def render(job: dict, person: dict) -> str:
             "thread_name": job.get("thread") or "", "space": job.get("space") or "", "tap_paths": _tap_paths(), "rules": rules}
     for k, v in vals.items():
         tpl = tpl.replace("{" + k + "}", str(v))
+    # a kind of work that kept going wrong has its own focus brief (agent/capacity.py): it rides along on the turn.
+    # Same agent, same belt, same gates; the brief only carries what went wrong before and the lessons on file.
+    try:
+        import capacity
+        sp = capacity.brief_for(job.get("text") or "")
+        if sp:
+            tpl = tpl + "\n\n" + sp["block"] + "\n"
+            job["specialist"] = sp["id"]
+    except Exception:  # noqa: BLE001
+        pass
     return tpl
 
 
@@ -570,6 +580,8 @@ def run(jid: str) -> dict:
     job["turn"] = str(turn)
     _save(job)
     prompt = render(job, person)
+    if job.get("specialist"):
+        _save(job)                                   # which focus brief rode along is on the job's record
     t0 = time.time()
     r = _run_claude(prompt, job, turn)
     job = load_job(jid) or job                       # notes landed meanwhile

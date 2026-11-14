@@ -107,6 +107,18 @@
    "expect": "RESULT REFLEX"
   },
   {
+   "name": "capacity",
+   "cmd": [
+    "python",
+    "assistant/agent/capacity.py",
+    "tick"
+   ],
+   "every_min": 60,
+   "timeout_s": 120,
+   "_what": "the capacity judge (assistant/agent/capacity.py, 2026-11-14), zero-LLM: reads the ticket queue (arrivals, minutes from arrival to first claim, slow days) and the asks and hand jobs (how often one kind of work failed or was asked again); a lane whose work kept waiting gets its own parallel operator pass, a kind of work that kept going wrong gets a focus brief that rides along on its turns; a verdict must hold on 3 separate days, caps on both, quiet ones are closed. profile.json -> capacity (mode auto | suggest | off)",
+   "expect": "RESULT CAPACITY"
+  },
+  {
    "name": "projects",
    "cmd": [
     "python",

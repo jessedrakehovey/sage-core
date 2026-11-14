@@ -60,5 +60,11 @@
   "settle_s": 20,
   "max_wait_s": 120,
   "pace_factor": 1.5
+ },
+ "capacity": {
+  "_doc": "The capacity judge (assistant/agent/capacity.py, 2026-11-14): by code, every hour, from the ticket queue and the record of asks, it judges whether one queue is still enough. A lane whose work kept waiting gets its own parallel pass (wake-on-work, same budget); a kind of work that kept going wrong gets a focus brief (assistant/agent/specialists/) that rides along on its turns. mode: auto = opens and closes by itself inside the caps and says so once under the digest; suggest = only says the idea and waits for an owner's word; off = one queue, nothing measured. Every other number has a default in the module (window_days, wait_min, slow_days, min_per_week, trouble_min_jobs, trouble_rate, confirm_days, review_days, retire_quiet_days).",
+  "mode": "auto",
+  "max_lanes": 2,
+  "max_specialists": 4
  }
 }

@@ -1042,6 +1042,15 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
         _log(f"{key} step {f['step']}: {r.get('what', '')}")
     if not dry:
         _save(d)
+        # the capacity judge (agent/capacity.py) has its own hourly job; on a pack whose job list predates it the
+        # reflex runs it, so an updated engine still asks "is one queue enough?" without anyone editing a job list
+        try:
+            import capacity
+            if capacity.stale():
+                c = capacity.tick()
+                _log(f"capacity (backstop): verdicts={c['verdicts']} opened={c['opened']} retired={c['retired']} active={c['active']}")
+        except Exception as e:  # noqa: BLE001
+            _log(f"capacity backstop failed: {type(e).__name__}: {str(e)[:100]}")
     return out
 
 

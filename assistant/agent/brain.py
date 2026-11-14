@@ -253,11 +253,16 @@ def context_block(person: dict | None = None, scope: str = "", space_title: str 
         worklog_block = worklog.render()
     except Exception:  # noqa: BLE001
         worklog_block = ""
+    try:                      # the lanes and focus briefs the agent opened for itself (agent/capacity.py); '' with one queue
+        import capacity
+        capacity_block = capacity.render()
+    except Exception:  # noqa: BLE001
+        capacity_block = ""
     # recall AFTER instruction (upgrade 9, 2026-11-08): the persona, the organization and the rules first; memory and the
     # work log at the very end, labelled as recall, so a remembered line can never read as a rule
     parts = [persona, org.render(), core.render_rules(), grants_block, routines.render(), _jobs_render(), skills.render(),
              wiki_map(), resources.render(), texters_block(), sent_block(), connections_block(), builder.render(), reflex_block, projects_block,
-             truth_block, money_block(), core.render_memory(), worklog_block]
+             capacity_block, truth_block, money_block(), core.render_memory(), worklog_block]
     return "\n\n".join(x for x in parts if x)
 
 

@@ -38,7 +38,7 @@ VAULT = HERE.parent
 sys.path.insert(0, str(HERE))
 import engine  # noqa: E402  (sage-core, 2026-10-27: the engine / pack contract both this script and `sage update` read)
 
-SKIP_DIRS = {"data", "out", "__pycache__", "learnings", ".git", "state", "gchat_relay", "tools", "skills", "tests"}
+SKIP_DIRS = {"data", "out", "__pycache__", "learnings", ".git", "state", "gchat_relay", "tools", "skills", "specialists", "tests"}
 SKIP_FILES = {"gchat.local.json", "google.json", "org.json"}
 # the data files a new organization cannot run without (followups exits FATAL without a sop_map; the comms law sets
 # the reply clocks; client_texts holds the standing-text words to rewrite): copied as templates (WP5, 2026-10-24)

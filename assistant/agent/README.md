@@ -131,6 +131,19 @@ Switch: `profile.json -> "pickup": {"enabled", "max_rounds", "window_h", "later_
 in code), env `AGENT_PICKUP=off`. State: `data/agent/pickup.json`; `python assistant/agent/pickup.py` prints
 it; every start is in `~/.claude/desk-wv.log` ("pickup ..."). Tests: `tests/test_pickup.py`. Org-free.
 
+## Capacity: it judges when one queue, or one way of working, is not enough (2026-11-14)
+
+`capacity.py`, zero LLM, hourly on the spine (and from the reflex when the job list predates it). It reads the
+ticket queue for work that kept waiting and the record of asks for work that kept going wrong, and after the
+verdict held on three separate days it opens, inside caps, either a **lane** (a parallel operator pass that owns
+that lane's tickets, wake-on-work) or a **specialist** (a focus brief in `agent/specialists/`, appended by
+`desk.render` to every turn doing that work, and by the lane's pass). It closes what went quiet. It is the same
+agent in every case: the brief's first lines say that no gate widens and that nobody is ever told about a lane or
+a brief; `brain.context_block` carries `capacity.render()` so the agent can say truthfully why something was slow.
+Owner words reach it through the desk (`capacity.py open` / `retire`, in `desk_prompt.md`). Full description:
+[../README.md](../README.md) section "Capacity: lanes and specialists opened on evidence". Tests:
+`tests/test_capacity.py`.
+
 ## Projects: long-running problems worked on a schedule, with every try on record (2026-10-27, evening)
 
 the owner, 2026-10-27: "example has long term problem solving capabilities under projects. I want Sage to manage long term issues

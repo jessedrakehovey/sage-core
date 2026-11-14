@@ -13,7 +13,11 @@
 #   -Comms      a wake from comms_probe.py (a human message just landed): same sensors, same
 #               operator, but refuses to overlap a run already in flight and counts against
 #               the same daily budget. The .operator_running marker is the in-flight lock.
-param([switch]$Morning, [switch]$SenseOnly, [switch]$Comms)
+#   -Worker ID  a pass for ONE lane the agent opened for itself (assistant/agent/capacity.py, started by its
+#               dispatch): no sensors, no sweep, no drain (the general tick does those); it claims only that
+#               lane's tickets, under its own in-flight marker, against the same daily budget and the same
+#               allow / deny lists. Still wake-on-work: nothing waiting = no run.
+param([switch]$Morning, [switch]$SenseOnly, [switch]$Comms, [string]$Worker = '')
 
 $ErrorActionPreference = 'Stop'
 $vault  = "{{ORG_ROOT}}"
@@ -66,9 +70,13 @@ function Notify($text) {
 }
 
 $running = Join-Path $asst 'data\.operator_running'
+if ($Worker) {
+    if ($Worker -notmatch '^[a-z0-9][a-z0-9-]{0,59}$') { Log "refused: -Worker id is not a lane id"; exit 1 }
+    $running = Join-Path $asst "data\.operator_running.$Worker"
+}
 try {
     Set-Location $vault
-    $mode = if ($Morning) { 'morning' } elseif ($SenseOnly) { 'sense-only' } elseif ($Comms) { 'comms-wake' } else { 'tick' }
+    $mode = if ($Worker) { "lane $Worker" } elseif ($Morning) { 'morning' } elseif ($SenseOnly) { 'sense-only' } elseif ($Comms) { 'comms-wake' } else { 'tick' }
     # One operator at a time: a comms wake (1-min probe) and the half-hour tick must never
     # both claim the queue. The marker is the lock; a marker older than 25 min is a dead run.
     if (-not $SenseOnly) {
@@ -87,6 +95,7 @@ try {
     $own = @()
     try { $own = @((Get-Content (Join-Path $asst 'config.json') -Raw | ConvertFrom-Json).operator.sensors | Where-Object { $_ }) } catch {}
     $sensors = @('mail.py sense', 'mail_arm.py', 'sense_local.py') + $own + @('followups.py tick', 'sentinels.py')
+    if ($Worker) { $sensors = @() }     # a lane's pass only works its queue; the general tick senses, sweeps and drains
     foreach ($line in $sensors) {
         $s = @(([string]$line).Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
         if (-not $s -or -not (Test-Path (Join-Path $asst "scripts\$($s[0])"))) { continue }
@@ -101,8 +110,19 @@ try {
 
     # Zero-LLM approval chain, every tick: expire dead cards, hand the owner's answers to the
     # queue (free text / mint errors become tickets), then run approved exec tickets.
-    try { Log ("CARDS " + ((& $py (Join-Path $asst 'scripts\cards.py') sweep 2>&1 | Out-String).Trim())) } catch { Log "cards sweep error: $($_.Exception.Message)" }
-    try { Log ("DRAIN " + ((& $py (Join-Path $asst 'scripts\drain.py') 2>&1 | Out-String).Trim())) } catch { Log "drain error: $($_.Exception.Message)" }
+    if (-not $Worker) {
+        try { Log ("CARDS " + ((& $py (Join-Path $asst 'scripts\cards.py') sweep 2>&1 | Out-String).Trim())) } catch { Log "cards sweep error: $($_.Exception.Message)" }
+        try { Log ("DRAIN " + ((& $py (Join-Path $asst 'scripts\drain.py') 2>&1 | Out-String).Trim())) } catch { Log "drain error: $($_.Exception.Message)" }
+        # the lanes the agent opened for itself (agent/capacity.py): start a pass, detached, for each one with work waiting
+        if (-not $SenseOnly) {
+            try {
+                $ErrorActionPreference = 'Continue'
+                $lo = (& $py (Join-Path $asst 'agent\capacity.py') dispatch 2>$null | Out-String).Trim()
+                $ErrorActionPreference = 'Stop'
+                if ($lo) { Log "LANES $lo" }
+            } catch { $ErrorActionPreference = 'Stop'; Log "lane dispatch error: $($_.Exception.Message)" }
+        }
+    }
 
     if ($Morning) {   # once a day: drop closed tickets older than 30 days (ids stay in the seen-sets)
         try { Log ("PRUNE " + ((& $py (Join-Path $asst 'scripts\tickets.py') prune 2>&1 | Out-String).Trim())) } catch { Log "prune error: $($_.Exception.Message)" }
@@ -115,7 +135,8 @@ try {
     $pending = 0
     try {
         $ErrorActionPreference = 'Continue'
-        $raw = (& $py (Join-Path $asst 'scripts\tickets.py') pending 2>$null | Out-String).Trim()
+        $pargs = @((Join-Path $asst 'scripts\tickets.py'), 'pending'); if ($Worker) { $pargs += @('--worker', $Worker) }
+        $raw = (& $py @pargs 2>$null | Out-String).Trim()
         $ErrorActionPreference = 'Stop'
         if ($raw -notmatch '^\d+$') { throw "unreadable count '$raw'" }   # [int]"" is 0 in PowerShell: a crash would read as "empty"
         $pending = [int]$raw
@@ -127,6 +148,7 @@ try {
     Log "claimable tickets: $pending"
 
     if ($SenseOnly) { Build-Dashboard; Log "=== sense-only end ==="; exit 0 }
+    if ($Worker -and $pending -eq 0) { Log "lane $Worker has nothing waiting -- no LLM pass (0 tokens)"; Log "=== $mode end ==="; exit 0 }
     if (-not $Morning -and $pending -eq 0) { Log "queue empty -- no LLM pass (0 tokens)"; Build-Dashboard; Log "=== tick end ==="; exit 0 }
     if (-not (Test-Path $claude)) { Log "ERROR: claude CLI not found at $claude"; exit 1 }
     if (-not (Test-Budget -Max ([int]$cfg.operator.runs_per_day_max))) { exit 0 }
@@ -144,6 +166,16 @@ try {
         $chat = & $py (Join-Path $asst 'scripts\owner_chat.py') 2>$null | Out-String
         if ($chat -and $chat.Trim()) { $prompt = $prompt + "`n`n" + $chat.Trim() + "`n" }
     } catch { Log "owner_chat block skipped: $_" }
+    if ($Worker) {
+        # one lane only: the same prompt, the claim narrowed to this lane, plus the lane's own focus brief (its lessons,
+        # what went wrong on record). Same voice, same cards, same allow / deny lists below.
+        $prompt = $prompt.Replace('tickets.py claim --limit', "tickets.py claim --worker $Worker --limit")
+        $prompt = $prompt + "`n`n## This pass works one part of the queue`nClaim ONLY with: python assistant/scripts/tickets.py claim --worker $Worker --limit 12  (never a bare claim, never --lane). An empty claim means exit with NOTHING TO DO. Everything else above applies unchanged.`n"
+        try {
+            $brief = & $py (Join-Path $asst 'agent\capacity.py') brief $Worker 2>$null | Out-String
+            if ($brief -and $brief.Trim()) { $prompt = $prompt + "`n" + $brief.Trim() + "`n" }
+        } catch { Log "lane brief skipped: $_" }
+    }
     # NOTE: keep these as @(...) -join ' ' arrays: scripts/guardrails/check_gates.py
     # parses that exact shape to freeze/verify the allow/deny lists.
     # File writes: the harness matches file tools only through Edit(path) rules
