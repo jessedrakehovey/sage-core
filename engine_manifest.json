@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+762f248",
+  "version": "2026.11.14+7c0c683",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T21:32:32"
+  "synced": "2026-11-14T21:33:14"
  },
  "modules": {
   "money": {
