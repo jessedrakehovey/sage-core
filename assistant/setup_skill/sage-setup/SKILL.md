@@ -78,6 +78,13 @@ Mission Control, answer the first card (the smoke test), show the owner `python 
 
 ## 4. Google, in this order
 
+**An owner with the app does most of this from its Connect Google screen** (`assistant/google_connect.py`): one Google
+sign-in makes the Chat project, switches the services on, makes the agent's service account and key (asking before it
+lifts Google's rule against new keys, for that project only), opens the Pub/Sub line and writes `gchat.local.json`;
+the relay script and the Chat app's page are guided there with a Copy button per value, and "Check the connection"
+proves it. Use the steps below when there is no app on the machine, or to finish what that screen reports as stopped
+(`python assistant/google_connect.py status`).
+
 Follow `assistant/agent/GOOGLE_SETUP.md` in the pack (generic copy). Where `gcloud` is already on the machine, use it for projects, APIs, the
 service account and Pub/Sub; where it is not, do not install it: the same steps work from the console links. Give the owner one link per click that is theirs:
 

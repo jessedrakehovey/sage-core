@@ -137,6 +137,16 @@ li.done .tick,.tick.ok{background:var(--green);color:#fff}
 .items li{display:grid;grid-template-columns:28px 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 18px}
 .items b{font-weight:600;font-size:15.5px;display:block}
 .items span.d{font-size:14px;color:var(--muted);display:block}
+.stages.wide{max-width:none;margin-top:26px}
+.stages li small{display:block;font-size:13px;color:var(--muted);min-height:0}
+.stages li small:empty{display:none}
+ol.how{margin:10px 0 0;padding-left:20px;display:grid;gap:10px;font-size:15px;color:var(--muted);line-height:1.6}
+ol.how b{color:var(--ink);font-weight:600}
+ol.how .btn{margin-right:6px}
+.chip.copy{cursor:pointer;margin:0 4px;padding:4px 12px;font-size:13px;border-color:var(--mint2);color:var(--green-d);background:#f5fbf8;transition:background .15s,color .15s,border-color .15s}
+.chip.copy:hover{border-color:var(--green)}
+.inp.gin{display:block;margin-top:8px;font-size:14.5px;padding:10px 14px;border-radius:12px;font-family:ui-monospace,Consolas,monospace}
+.card.ask{margin-top:24px}.card.ask h3{font-size:22px}.card.ask p{margin-top:8px;font-size:15.5px;max-width:56ch}
 .haves{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
 .have{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 14px 7px 9px;font-size:14px;font-weight:500;color:var(--ink)}
 .spin{display:inline-block;width:16px;height:16px;border-radius:50%;border:2.5px solid var(--mint2);border-top-color:var(--green);animation:spin .8s linear infinite;vertical-align:-3px}
@@ -196,12 +206,13 @@ async function api(path, body) {
     : {method: "POST", headers: {"Content-Type": "application/json", "X-Sage-Key": KEY}, body: JSON.stringify(body)};
   try { return await (await fetch("/api/" + path, o)).json(); } catch (e) { return {ok: false, message: "The app lost touch with its own service. Close this window and open Sage again."}; }
 }
-async function job(p, onLine) {
+async function job(p, onLine, onStep) {
   const d = await p;
   if (!d.ok || !d.job) return d;
   for (;;) {
     await sleep(600);
     const j = await api("job", {id: d.job});
+    if (onStep && j.step) onStep(j.step);
     if (onLine && j.line) onLine(j.line);
     if (j.status !== "running") return j.result || {ok: false, message: j.message || "It stopped before finishing."};
   }
@@ -298,13 +309,8 @@ const SCREENS = {
   google: () => solo(
     eyebrow(S.chat_connected ? "Google Chat" : "Step 5 of 5") +
     '<h1>Where you will <em>talk</em> to ' + esc(agent()) + '.</h1>' +
-    '<p class="lede">' + esc(agent()) + ' lives in Google Chat, on your phone and your computer. Connecting it is the one long step: about an hour, once, mostly waiting on Google. It can wait for a quieter day.</p>' +
-    '<div class="steps">' +
-    layer(1, "A Google Workspace account", "Chat apps need Google Workspace: a Google account on your own domain. Already have one? Skip to the next step.", [["Open Google Workspace", "https://workspace.google.com/"]]) +
-    layer(2, "A home for " + agent() + " in Google Cloud", "Create a project, then switch on the three services " + agent() + " uses.", [["Create the project", "https://console.cloud.google.com/projectcreate"], ["Chat", "https://console.cloud.google.com/apis/library/chat.googleapis.com"], ["Gmail", "https://console.cloud.google.com/apis/library/gmail.googleapis.com"], ["Calendar", "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"]]) +
-    layer(3, "The sign-in screen and its keys", "Set up the sign-in screen with " + agent() + "'s name, then download the two key files Google gives you into " + agent() + "'s keys folder.", [["Sign-in screen", "https://console.cloud.google.com/auth/overview"], ["Keys", "https://console.cloud.google.com/auth/clients"]]) +
-    layer(4, "Say hello", "Add " + agent() + " in Google Chat and say hi. From there it finishes its own set-up and starts learning your business, one question at a time.", [["Open Google Chat", "https://chat.google.com/"]]) +
-    '</div><div class="row"><button class="btn primary" id="go">' + (S.chat_connected ? "Done" : "I will do this later") + '</button></div>'),
+    '<p class="lede" id="gl">' + esc(agent()) + ' lives in Google Chat, on your phone and your computer.</p>' +
+    '<div id="gbox"><div class="wait"><span class="spin"></span>One moment</div></div>'),
 
   home: () => {
     const run = S.serve_running && !S.paused;
@@ -326,17 +332,13 @@ const SCREENS = {
       '</ul><p class="foot">Sage ' + esc((S.engine_version || "").split("+")[0]) + (S.release_url ? " · updates itself" : "") + '</p></div></div>';
   },
 };
-function layer(n, title, text, links) {
-  return '<div class="layer"><span class="i">' + n + '</span><div><h3>' + esc(title) + '</h3><p>' + esc(text) + '</p><div class="acts">' +
-    links.map(([l, u]) => '<button class="btn ghost small" data-open="' + esc(u) + '">' + esc(l) + '</button>').join("") + '</div></div></div>';
-}
 function conn(title, detail, ok, go, label) {
   return '<li><span class="tick ' + (ok ? "ok" : "todo") + '">' + (ok ? "&#10003;" : "!") + '</span><div><b>' + esc(title) + '</b><span class="d">' + esc(detail) + '</span></div>' +
     (go ? '<button class="link" data-go="' + go + '">' + esc(label) + '</button>' : '<span></span>') + '</li>';
 }
 function nextStep() {
   if (!S.auth_ok) return {k: "Next", t: "Connect Claude", p: agent() + " is set up but cannot think yet. Connecting your Claude account takes about a minute.", b: "Connect Claude", go: "claude"};
-  if (!S.chat_connected) return {k: "Next", t: "Connect Google Chat", p: "That is where you and " + agent() + " talk. Until then " + agent() + " keeps this computer ready and waits for you.", b: "Show me the steps", go: "google"};
+  if (!S.chat_connected) return {k: "Next", t: "Connect Google Chat", p: "That is where you and " + agent() + " talk. One Google sign-in does most of it; until then " + agent() + " keeps this computer ready and waits for you.", b: "Connect Google", go: "google"};
   return {k: "All set", t: "Say hello in Google Chat", p: agent() + " answers there, asks what it still needs to know about " + orgName() + ", and brings you anything that needs your tap.", b: "Open Google Chat", open: "https://chat.google.com/"};
 }
 
@@ -461,7 +463,113 @@ const AFTER = {
     } else if (S.auth_ok) connected("Claude is already signed in on this computer, and " + agent() + " will use that account.");
     else idle();
   },
-  google: el => { $("#go", el).onclick = () => { wake(); show("home"); }; },
+  google: async el => {
+    const box = $("#gbox", el), lede = $("#gl", el), A = agent();
+    const leave = () => { wake(); show("home"); };
+    const later = '<button class="link" id="later">Do this later</button>';
+    const bind = () => { const l = $("#later", box); if (l) l.onclick = leave; };
+    let G = await api("google_status", {});
+    if (cur !== "google") return;
+    const refresh = async () => { G = await api("google_status", {}); await load(); if (cur === "google") draw(); };
+    const cp = (label, what) => '<button class="chip copy" data-copy="' + what + '">' + esc(label) + '</button>';
+    const cv = (label, value) => '<button class="chip copy" data-copyv="' + esc(value) + '">' + esc(label) + '</button>';
+    const op = (label, url) => '<button class="btn ghost small" data-open="' + esc(url) + '">' + esc(label) + '</button>';
+    const part = (n, title, lines) => '<div class="layer"><span class="i">' + n + '</span><div><h3>' + esc(title) + '</h3><ol class="how">' + lines.map(x => '<li>' + x + '</li>').join("") + '</ol></div></div>';
+
+    const running = async (body) => {
+      lede.textContent = "Sign in to Google when your browser asks, and choose Allow. The rest happens by itself: about three minutes.";
+      box.innerHTML = '<ul class="stages wide" id="gs">' + G.steps.map(x => '<li data-k="' + x.key + '"' + (x.status === "done" ? ' class="done"' : '') + '><span class="tick">&#10003;</span><span>' + esc(x.title.replace("the agent", A)) + '<small></small></span></li>').join("") + '</ul>';
+      const at = k => { let seen = false; box.querySelectorAll("#gs li").forEach(li => { if (li.dataset.k === k) { li.className = "on"; seen = true; } else if (!seen) li.className = "done"; else if (li.className === "on") li.className = ""; }); };
+      await job(api("google", body || {}),
+        line => { const sm = box.querySelector("#gs li.on small"); if (sm) { const m = /(\d+)% of (\d+) MB/.exec(line); sm.textContent = m ? "Downloading: " + m[1] + "%" : (/^[A-Z]/.test(line) ? line : ""); } },
+        step => at(step));
+      await refresh();
+    };
+
+    const auto = () => {
+      const some = G.steps.some(x => x.status === "done");
+      lede.textContent = A + " lives in Google Chat, on your phone and your computer. Sign in to Google once and " + A + "'s side of Google is set up for you. About three minutes.";
+      let top = "";
+      if (G.needs === "keys") top = '<div class="card mint ask"><span class="kicker">Your say</span><h3>Allow one key for ' + esc(A) + '?</h3>' +
+        '<p>Google blocks new keys on every new organization until an administrator allows them. ' + esc(A) + ' needs one, for its own project. Allowing it lifts that rule for ' + esc(A) + '\'s project only. Nothing else in your Google organization changes.</p>' +
+        '<div class="row" style="margin-top:16px"><button class="btn primary small" id="allow">Allow for this project</button>' + later + '</div></div>';
+      else if (G.needs === "workspace") top = '<div class="err">' + esc(G.error) + '</div><div class="row"><button class="btn primary" id="other">Use a different Google account</button>' + op("Get Google Workspace", "https://workspace.google.com/") + later + '</div>';
+      else if (G.needs === "terms") top = '<div class="err">' + esc(G.error) + '</div><div class="row">' + op("Open Google Cloud", "https://console.cloud.google.com/") + '<button class="btn primary" id="go">Continue</button>' + later + '</div>';
+      else if (G.error) top = '<div class="err">' + esc(G.error) + '</div><div class="row"><button class="btn primary" id="go">Try again</button>' + later + '</div>';
+      else top = '<div class="row"><button class="btn primary" id="go" autofocus>' + (some ? "Continue" : "Connect Google") + '</button>' + later + '</div>' +
+        '<p class="proof">' + CHECK + '<span><b>You need Google Workspace:</b> a Google account on your organization\'s own domain. A personal Gmail account cannot hold a Chat app.</span></p>' +
+        '<p class="proof">' + CHECK + '<span>Your browser opens for one Google sign-in. ' + esc(A) + ' gets a project, its own identity and a message line; the sign-in is handed back when that is done.</span></p>';
+      box.innerHTML = top;
+      bind();
+      const go = $("#go", box), al = $("#allow", box), ot = $("#other", box);
+      if (go) go.onclick = () => running({});
+      if (al) al.onclick = () => running({allow: true});
+      if (ot) ot.onclick = () => running({other: true});
+    };
+
+    const relay = () => {
+      const g = G.guide || {}, L = g.links || {};
+      lede.textContent = "Google's side is ready. Two short parts are left that Google only offers as pages, so these are by hand. Every value has a Copy button.";
+      box.innerHTML = '<div class="steps">' +
+        part(1, "The sign-in screen", [
+          op("Open the sign-in screen", L.signin_screen) + ' and choose <b>Get started</b>.',
+          'App name: ' + cv("Copy the name", g.app_name) + ' Then your email, audience <b>Internal</b>, your email again, agree, <b>Create</b>.']) +
+        part(2, "The relay: a small script in your Google account", [
+          op("Open a new script", L.script_new) + ' Select everything in the editor and paste: ' + cp("Copy the code", "code"),
+          'Gear icon (Project Settings): tick <b>Show "appsscript.json" manifest file in editor</b>. Back in the editor open <b>appsscript.json</b>, select everything and paste: ' + cp("Copy the manifest", "manifest"),
+          'Project Settings, <b>Google Cloud Platform (GCP) Project</b>, Change project: ' + cv("Copy the project number", g.project_number) + ' then <b>Set project</b>.',
+          'Project Settings, <b>Script Properties</b>, Add script property. Property: ' + cv("Copy the name", "RELAY_SECRET") + ' Value: ' + cp("Copy the secret", "secret") + ' then <b>Save script properties</b>.',
+          '<b>Deploy</b>, New deployment, gear: <b>Web app</b>. Execute as <b>Me</b>, who has access <b>Anyone</b>, Deploy, and allow it when Google asks. Copy the <b>Web app URL</b> and paste it here:<input class="inp gin" id="gurl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" value="' + esc(g.webapp_url || "") + '">',
+          '<b>Deploy</b>, New deployment, gear: <b>Add-on</b>, Deploy. Copy the <b>Deployment ID</b> and paste it here:<input class="inp gin" id="gid" placeholder="AKfyc..." autocomplete="off" value="' + esc(g.deployment_id || "") + '">']) +
+        '</div><div id="gmsg"></div><div class="row"><button class="btn primary" id="go">Save and continue</button>' + later + '</div>';
+      bind();
+      $("#go", box).onclick = async () => {
+        const r = await api("google_relay", {url: $("#gurl", box).value, id: $("#gid", box).value});
+        if (!r.ok) { $("#gmsg", box).innerHTML = '<div class="err">' + esc(r.message) + '</div>'; return; }
+        await refresh();
+      };
+    };
+
+    const chat = (err) => {
+      const g = G.guide || {}, L = g.links || {};
+      lede.textContent = "Last part: tell Google Chat who " + A + " is. One page, six fields, then Save.";
+      box.innerHTML = '<div class="steps">' +
+        part(1, A + "'s page in Google Chat", [
+          op("Open the Chat app page", L.chat_config),
+          'App name: ' + cv("Copy", g.app_name) + ' Avatar URL: ' + cv("Copy", g.avatar) + ' Description: ' + cv("Copy", g.description),
+          'Under <b>Functionality</b> tick <b>Join spaces and group conversations</b>.',
+          'Under <b>Connection settings</b> choose <b>Apps Script</b> and paste the Deployment ID: ' + cv("Copy the ID", g.deployment_id),
+          'Under <b>Visibility</b> make ' + esc(A) + ' available to specific people: ' + cv("Copy the addresses", g.owners),
+          '<b>Save</b>.']) +
+        '</div><div id="gmsg">' + (err ? '<div class="err">' + esc(err) + '</div>' : '') + '</div>' +
+        '<div class="row"><button class="btn primary" id="go">Check the connection</button><button class="link" id="back">Back to the relay</button>' + later + '</div>';
+      bind();
+      $("#back", box).onclick = relay;
+      $("#go", box).onclick = async () => {
+        $("#gmsg", box).innerHTML = '<div class="wait"><span class="spin"></span>Checking that ' + esc(A) + ' and Google can reach each other</div>';
+        const r = await job(api("google_check", {}));
+        G = await api("google_status", {}); await load();
+        if (cur !== "google") return;
+        if (r.ok) draw(); else chat(r.message || "The check did not pass yet.");
+      };
+    };
+
+    const done = () => {
+      lede.textContent = A + " is in Google Chat. Open a new chat, find " + A + " by name, and say hello: it answers there, and starts learning about " + orgName() + " one question at a time.";
+      box.innerHTML = '<div class="okbox">' + CHECK + '<span><b>Connected.</b> ' + esc(A) + ' and Google can reach each other.</span></div>' +
+        '<div class="row"><button class="btn primary" data-open="https://chat.google.com/">Open Google Chat</button><button class="btn ghost" id="later">Done</button></div>';
+      bind();
+    };
+
+    const draw = () => {
+      if (!G.ok) { box.innerHTML = '<div class="err">' + esc(G.message || "Not ready yet.") + '</div><div class="row">' + later + '</div>'; return bind(); }
+      if (G.checked || (S.chat_connected && !G.steps.some(x => x.status === "done"))) return done();
+      if (!G.auto_done) return auto();
+      if (!G.relay_done) return relay();
+      return chat();
+    };
+    draw();
+  },
   home: el => {
     const p = $("#pause", el), w = $("#wake", el), n = $("#next", el), nx = nextStep();
     if (p) p.onclick = async () => { p.disabled = true; await api(S.paused ? "resume" : "pause", {}); await load(); show("home"); };
@@ -488,6 +596,15 @@ async function wake() {
   if (cur === "home") show("home");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-open]"); if (b) api("open", {url: b.dataset.open}); });
+document.addEventListener("click", async e => {
+  const c = e.target.closest("[data-copy],[data-copyv]");
+  if (!c) return;
+  const was = c.textContent, say = t => { c.textContent = t; c.classList.toggle("ok", t === "Copied"); setTimeout(() => { c.textContent = was; c.classList.remove("ok"); }, 1400); };
+  let t = c.dataset.copyv;
+  if (t === undefined) { const r = await api("google_text", {what: c.dataset.copy}); if (!r.ok) return say("Not available"); t = r.text; }
+  try { await navigator.clipboard.writeText(t); say("Copied"); }
+  catch (err) { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); say(ok ? "Copied" : "Could not copy"); }
+});
 setInterval(() => { if (!timer) load(); }, 9000);          // keeps the window's own service awake, and the status pill true
 
 (async () => {

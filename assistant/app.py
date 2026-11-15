@@ -44,6 +44,7 @@ if not os.environ.get("SAGE_HOME") and HERE.parent.name == "engine" and (HERE.pa
     os.environ["SAGE_HOME"] = str(HERE.parent.parent)
 sys.path.insert(0, str(HERE))
 import welcome  # noqa: E402  (the steps: state, create, doctor, probe, start; one backend for the window and the page)
+import google_connect  # noqa: E402  (the Google side with one sign-in; the window's Connect Google screen)
 
 IS_WIN = os.name == "nt"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -114,12 +115,16 @@ def fetch_fonts(dst: Path | None = None) -> bool:
 # ---------------------------------------------------------------- background jobs (the window polls them)
 def job_start(kind: str, title: str, fn) -> dict:
     jid = secrets.token_hex(5)
-    rec = {"id": jid, "kind": kind, "title": title, "status": "running", "line": "", "result": None, "started": time.time()}
+    rec = {"id": jid, "kind": kind, "title": title, "status": "running", "line": "", "step": "", "result": None, "started": time.time()}
     with _JOBS_LOCK:
         _JOBS[jid] = rec
 
     def note(line: str) -> None:
-        rec["line"] = str(line).strip()[-200:]
+        line = str(line).strip()
+        if line.startswith("##step "):                 # which step a long job is on (the window ticks its list by this)
+            rec["step"], rec["line"] = line[7:].strip(), ""
+        else:
+            rec["line"] = line[-200:]
 
     def run() -> None:
         try:
@@ -139,7 +144,7 @@ def job_get(jid: str) -> dict:
         rec = _JOBS.get(jid)
     if not rec:
         return {"ok": False, "status": "gone", "message": "no such job"}
-    return {"ok": True, **{k: rec[k] for k in ("id", "kind", "title", "status", "line", "result")}}
+    return {"ok": True, **{k: rec[k] for k in ("id", "kind", "title", "status", "line", "step", "result")}}
 
 
 def running_jobs() -> list:
@@ -271,6 +276,51 @@ def claude_window(mode: str = "subscription") -> dict:
     return {"ok": True, "message": "A small sign-in window opened."}
 
 
+# ---------------------------------------------------------------- Google, with one sign-in (google_connect.py)
+def _pack_or_none():
+    return welcome.current_pack()
+
+
+def google_run(body: dict) -> dict:
+    pack = _pack_or_none()
+    if not pack:
+        return {"ok": False, "message": "no organization yet"}
+    return job_start("google", "Connecting Google", lambda note: google_connect.run(
+        pack, note, allow_keys_rule=bool(body.get("allow")), other_account=bool(body.get("other"))))
+
+
+def google_status(body: dict) -> dict:
+    pack = _pack_or_none()
+    return google_connect.status(pack) if pack else {"ok": False, "message": "no organization yet"}
+
+
+def google_text(body: dict) -> dict:
+    pack = _pack_or_none()
+    return google_connect.text(pack, str(body.get("what") or "")) if pack else {"ok": False, "message": "no organization yet"}
+
+
+def google_relay(body: dict) -> dict:
+    pack = _pack_or_none()
+    return google_connect.save_relay(pack, str(body.get("url") or ""), str(body.get("id") or "")) if pack else {"ok": False, "message": "no organization yet"}
+
+
+def google_check(body: dict) -> dict:
+    pack = _pack_or_none()
+    if not pack:
+        return {"ok": False, "message": "no organization yet"}
+    return job_start("google_check", "Checking the connection", lambda note: google_connect.check(pack))
+
+
+def chat_connected(pack: Path) -> bool:
+    """Connected means proven: the app's own check passed. An organization connected before this screen existed (its
+    relay or endpoint already in the config, no record of a run here) counts as connected too."""
+    gst = google_connect.load(pack)
+    if (gst.get("done") or {}).get("checked"):
+        return True
+    gl = welcome._load(pack / "assistant" / "agent" / "gchat.local.json", {}) or {}
+    return not gst and bool(gl.get("relay_webapp_url") or gl.get("endpoint_url") or gl.get("relay_deployment_id"))
+
+
 def pause(on: bool) -> dict:
     pack = welcome.current_pack()
     if not pack:
@@ -309,7 +359,7 @@ def state() -> dict:
     s.update({
         "app": TITLE, "fonts": have_fonts(), "jobs": running_jobs(),
         "paused": bool(a and (a / "data" / ".sage_paused").exists()),
-        "chat_connected": bool(a and (a / "agent" / "gchat.local.json").exists()),
+        "chat_connected": bool(pack and chat_connected(pack)),
         "google_accounts": len(((welcome._load(a / "agent" / "google.json", {}) or {}).get("accounts") or {})) if a else 0,
         "first_name": (str((s.get("owners") or [""])[0]).split() or [""])[0],
     })
@@ -329,12 +379,13 @@ POSTS = {
     "claude": lambda b: claude_window(str(b.get("mode") or "subscription")), "probe": lambda b: probe(), "start": lambda b: start(),
     "pause": lambda b: pause(True), "resume": lambda b: pause(False), "open": lambda b: open_link(b),
     "job": lambda b: job_get(str(b.get("id") or "")),
+    "google": google_run, "google_status": google_status, "google_text": google_text, "google_relay": google_relay, "google_check": google_check,
     "quit": lambda b: (_QUIT.update(now=True) or {"ok": True, "message": "closing"}),
 }
 
 
 DRY = {"on": False}                # --dry: a preview or a test may look at every screen; nothing is started, installed or signed in
-DRY_STEPS = ("create", "fix", "claude", "probe", "start", "pause", "resume", "open")
+DRY_STEPS = ("create", "fix", "claude", "probe", "start", "pause", "resume", "open", "google", "google_text", "google_relay", "google_check")
 
 
 class _Handler(BaseHTTPRequestHandler):

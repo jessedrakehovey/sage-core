@@ -1518,6 +1518,15 @@ every command below, update, modules):
   entry runs the pack's own copy, which the hourly update keeps current. `--dry` looks without starting anything (a
   preview once woke a scratch agent: never show the home screen of a real service in a test), `--quit` closes it.
   `welcome.py`'s page stays for a clone install and `/welcome`; the installer no longer opens it. Test: `tests/test_app.py`.**
+  **`google_connect.py` (2026-11-14, the app's Connect Google screen): one Google sign-in, then every step Google lets
+  a program do, by Google's own command-line tool fetched into the app's folder and run on the pack's Python with its
+  own config folder: project (inside the owner's organization), services, the agent's service account and key,
+  Pub/Sub topic + subscription + subscriber right, `gchat.local.json`, then `auth revoke`. Stops and asks at a personal
+  Gmail account, unaccepted Cloud terms, and the organization's rule against new keys (lifted for the one project only,
+  and only on the owner's Allow). The relay script and the Chat app's page stay by hand, guided with Copy buttons
+  (`guide` / `text` / `save_relay`), then `check` proves it with `gchat.py --test` + `sage relay check`. Resumable
+  (`data/google_connect.json`). Tests: `tests/test_google_connect.py` (a stand-in for Google's tool). Not yet run
+  against a live Google account.**
   `updater.py` (hourly `serve.json` job `engine-update`, since 2026-11-14; was nightly 03:00-05:00 and `sage update` with no `--engine`: release.json
   at `org.json -> engine_release_url` / `SAGE_RELEASE_URL`, date-part compare (same date + other sha = "different",
   `--force` only), sha256-checked download, staged under `<pack>/.sage-engines/staging-<v>/`, gated there (compile,

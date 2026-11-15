@@ -101,6 +101,11 @@ try:
     check("--dry starts nothing and says so", code == 200 and json.loads(body).get("ok") is False and "preview" in json.loads(body).get("message", "").lower(), body[:160])
     code, body = http("POST", "/api/claude", {}, key=key)
     check("--dry opens no sign-in window", code == 200 and json.loads(body).get("ok") is False)
+    code, body = http("POST", "/api/google", {}, key=key)
+    check("--dry signs in to nothing at Google and hands out no secret", code == 200 and json.loads(body).get("ok") is False
+          and json.loads(http("POST", "/api/google_text", {"what": "secret"}, key=key)[1]).get("ok") is False)
+    code, body = http("POST", "/api/google_status", {}, key=key)
+    check("Google's status with no organization yet says so, plainly", code == 200 and json.loads(body).get("ok") is False and "organization" in json.loads(body).get("message", ""))
     code, body = http("POST", "/api/nothing", {}, key=key)
     check("an unknown step is a 404", code == 404)
     code, body = http("GET", "/fonts/../app.py")
@@ -115,6 +120,10 @@ time.sleep(0.8)
 g2 = app.job_get(j["job"])
 check("a job runs in the background and then carries its result", j.get("ok") and g1.get("status") == "running" and g2.get("status") == "done"
       and g2["result"]["message"] == "done" and g2.get("line") == "half way", json.dumps(g2)[:200])
+j = app.job_start("test", "A job in steps", lambda note: (note("##step signin"), note("60% of 54 MB"), time.sleep(0.4), {"ok": True})[-1])
+time.sleep(0.15)
+g = app.job_get(j["job"])
+check("a long job says which step it is on, apart from its small print", g.get("step") == "signin" and g.get("line") == "60% of 54 MB", json.dumps(g)[:200])
 j = app.job_start("test", "A failing job", lambda note: 1 / 0)
 time.sleep(0.3)
 g = app.job_get(j["job"])
@@ -189,6 +198,8 @@ check("the window loads nothing from outside: no stylesheet, script or font from
 shown = re.sub(r"<style>.*?</style>", "", ui, flags=re.S)
 check("the window speaks as one agent and sends nobody to a page or a terminal",
       not re.search(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I), str(re.findall(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I))[:120])
+check("the Google screen asks before anything in the owner's Google organization changes, and offers every value to copy",
+      "Allow for this project" in ui and "{allow: true}" in ui and 'data-copy="' in ui and "google_relay" in ui and "google_check" in ui)
 check("every screen the flow names exists", all(f"  {k}: " in ui for k in ("intro", "org", "agent", "people", "building", "computer", "claude", "google", "home")))
 
 print()

@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+4f5ee2b",
+  "version": "2026.11.15+12adc92",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T08:56:21"
+  "synced": "2026-11-15T08:58:08"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "9ae63bc72a9f039a5a791951cf844ac3157996643fdb53cc22f18a4ae58ed53e",
+  "assistant/README.md": "0b5ad2a2a8a3d4f4d9228ca3ea07a1225a2545b18c5343343eb8dec77484096b",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "402d97aba11ca9ab84bdd9eeb9c87b8f4d548b760f6f6f7dd9c58dc42a4dd330",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -179,8 +179,8 @@
   "assistant/agent/websearch.py": "a86d1b9b2218a6179f595b5e84c23e5e714b25cf86ee5340fe6eed90218e6694",
   "assistant/agent/wiki_writer.py": "2e453d90276acafaddace8f68d539c9a223ce1749f424f506f243783dd054834",
   "assistant/agent/worklog.py": "d10d5ef817ce171a309a22354d78921dec7898dc90dbd7d55e35d88037ee4b6f",
-  "assistant/app.py": "d45498374c2e1f90f96b69acb720cb5989574551d37ea9e39283ed8aa004e6f5",
-  "assistant/app_ui.html": "8a7b9e2ecc254ecafe347035f046136fd688f47ee52c9c07a445e72b406ae77a",
+  "assistant/app.py": "0f7eca251714a857f4352397ac60b33dedd85c17e93b9d63fe10daf493854b8e",
+  "assistant/app_ui.html": "c89a38e11ce69c821c6d599e755cb783d97c74f664f64b3910fe46adab2f1029",
   "assistant/catalog.py": "f750fdfcb56967ba75a20c59a78e9a644c59756f1532cd281af862a917bbe25d",
   "assistant/catalog/_schema.json": "a4937ca84147f9c9999334f49c659d8e5b9c928d89d6f81c60a66ee6f5eea82d",
   "assistant/catalog/acuity.json": "ded4abb33d5603b5d302125db99092fe7f3751f1e9fcd2893d9a1299b3df6ced",
@@ -242,8 +242,9 @@
   "assistant/doer/upload.py": "f34968ce80ed9ae574866a23c1f59ccf79a17e4efb35b50f5a3a22b105347215",
   "assistant/doer/vault.py": "755beb4f0a914ad528f8e292fcb23701f11245ff0be3a97270a9215701a855ee",
   "assistant/doer/vault_purge.py": "6f5c9fc7845b597a1709316b2c7680ae44cc5ef607d0775abc73eaa66192064a",
-  "assistant/engine.py": "adf112a6f2cba271615d4f05521ac2558d274812efee76a0b0eb31d6a38eaf0a",
-  "assistant/installer/README.md": "40011b1dc2ad893eae4209a9b5abda44d036dcae828216178bbea4567b1087d8",
+  "assistant/engine.py": "6dbce5d89e3f5ef0fef8421a517e8c5af467e4be47a019e099791ccbec4ee073",
+  "assistant/google_connect.py": "6d1a535b180daf3814de3cc97490b1652e4132367ccdfa808081376f550321be",
+  "assistant/installer/README.md": "4f9b709c2d31109b89db0ae25461489d05294a8be60d6b38fa6169769b1663e0",
   "assistant/installer/windows/SageSetup.iss": "c279f9302ddf443e3b818a528820815cef17cd71e07e8c1a365c27584c390b9b",
   "assistant/installer/windows/build.ps1": "77948cbcc9726b3136dc934c40e04cad7a0c59bc330573372890c2b1b986c6e5",
   "assistant/installer/windows/install.ps1": "10786cd078314e16cfe347bf9b341182baf7b86ead6ff9a6b5854e4be22d534e",
@@ -372,7 +373,7 @@
   "assistant/scripts/vault_chat.py": "9bb44c2cfa4eadafbab73d9833a1202bb5371b0c1d1d46fa4435c67764b37cba",
   "assistant/scripts/whois.py": "70555dab07b52282f0040c62ce20aed0a73ec8c57f0a9a1129177d8ea73fe16c",
   "assistant/serve.json": "81554776dedbc15975b2c2a999f3f90b0213bf45a2770de8f94c6204b716f2bc",
-  "assistant/setup_skill/sage-setup/SKILL.md": "dbacc5a357aa34ad4b2c848a4d542ad9d0f35d7e41de858d64e2817a29c566d4",
+  "assistant/setup_skill/sage-setup/SKILL.md": "5eb2620adb1586899d87c6a1082e4e29cf4f021416d03f9cdb1c1cff77788c41",
   "assistant/setup_skill/sage-setup/bootstrap.ps1": "6e4d5720972d2286030c7d533667788992a1c4508966602d6cf4a18c8729836d",
   "assistant/setup_skill/sage-setup/bootstrap.sh": "6b0d3a6842386ba2e040ffb486a846b075bb41c64c1061f59afdee7bc432cfea",
   "assistant/spine_jobs.json": "33b91aca0f6616b8c7a40e14e09f9c0d60e29272c4f9ce33853701b93d02533f",
@@ -398,7 +399,7 @@
   "assistant/templates/data/sop_map.json": "3e37ed67c3cc301da57cc6d833901b0d95e9fcc779ed72a8720478924bcf7e78",
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
   "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
-  "assistant/tests/test_app.py": "894bfc0fb9c95addd6c14f66c13b5e3f540d307ba1aab3db560a86834e676a4f",
+  "assistant/tests/test_app.py": "0d2b941824c022bd64f30cc3aba2822ef9e566bb73ce702338b1921c7358001e",
   "assistant/tests/test_browser_mcp.py": "8e3c2581b008a73690409d8d8e07b1a8dbf03da8cbdd184e19e3911d2d67077f",
   "assistant/tests/test_browser_stay_up.py": "ed244d913588e5046a0d996e796d903d826297cdcfa3bde03465bc79329948e8",
   "assistant/tests/test_build_ack.py": "5157cc084a99371522ea4e4ad06347795f3451935f91da8cece68f32cfe88246",
