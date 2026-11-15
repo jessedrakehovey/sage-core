@@ -513,8 +513,9 @@ What was measured on this PC before any of it was written (2026-11-14):
   is why the background is the second, not the first.
 - Attaching to the browser that is up is faster than starting one (the test checks it).
 
-**The agent's own cursor** (`browser_mcp.py`; `doer.cursor: {"on": true, "color": "#rrggbb", "label": ""}`, the label
-defaults to the agent's name). A pointer with the agent's name is drawn in the page and glides to each element before
+**The agent's own cursor** (`browser_mcp.py`; `doer.cursor: {"on": true, "color": "#rrggbb", "label": ""}`). A
+plain pointer, no name on it unless `label` is set (the owner: "it probably doesn't need a name"), is drawn in the
+page and glides to each element before
 the click, the typing or the hover lands, with a ring on the click. It is a second cursor in the full sense: the
 browser's input is made inside the browser, so the PC's mouse and keyboard are never moved or taken. Only the drawing
 glides; the real pointer event lands straight on the target (a real pointer dragged across a page opens every hover

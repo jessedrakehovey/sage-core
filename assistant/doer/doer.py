@@ -320,13 +320,12 @@ def _browser_server(out_dir: Path) -> dict:
     tail = ["--cdp-endpoint", browser.cdp_url(), "--output-dir", str(out_dir)]
     node = {"command": "npx", "args": ["-y", "@playwright/mcp@latest"] + tail}
     # the agent's own cursor in the page (browser_mcp.py): config.json -> doer.cursor {"on": true, "color": "#rrggbb",
-    # "label": ""}; the label defaults to the agent's name. The Node package has no such thing and is not passed it.
+    # "label": ""}. A plain pointer, no name on it (the owner, 2026-11-14: "it probably doesn't need a name"); a
+    # label is there for whoever wants one. The Node package has no such thing and is not passed it.
     cur = CFG.get("cursor") if isinstance(CFG.get("cursor"), dict) else {}
-    try:
-        label = str(cur.get("label") or _agent_name())
-    except Exception:  # noqa: BLE001
-        label = str(cur.get("label") or "")
-    own = tail + ["--cursor", "on" if cur.get("on", True) else "off", "--cursor-label", label]
+    own = tail + ["--cursor", "on" if cur.get("on", True) else "off"]
+    if str(cur.get("label") or "").strip():
+        own += ["--cursor-label", str(cur["label"]).strip()]
     if cur.get("color"):
         own += ["--cursor-color", str(cur["color"])]
     if str(CFG.get("browser_server") or "python").lower() == "node":
