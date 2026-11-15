@@ -443,6 +443,25 @@ def code_dialog(card: dict, q_index: int = 0, error: str = "") -> dict:
                 {"buttonList": {"buttons": [_button("Sign in", "card_edit_submit", {"qid": qid, "q": str(q_index)}, filled=True)]}}]}]}
 
 
+def note_dialog(card: dict, q_index: int = 0, error: str = "") -> dict:
+    """The dialog behind "Add a note" (the owner, 2026-10-25: "make a text entry box here in chat ... for any user required
+    input"): one free-text field and one button per choice. Its submit is card_edit_submit with mode=note; gchat_events
+    answers the card with that choice and the typed words as cards.answer(text=...), exactly the Mission Control note box."""
+    qid = str(card.get("id") or "")
+    q = (card.get("questions") or [{}])[q_index]
+    opts = [o for o in (q.get("options") or []) if isinstance(o, dict) and o.get("label")][:6]
+    top = []
+    if error:
+        top.append({"textParagraph": {"text": f'<font color="#B3261E"><b>{html.escape(error[:300])}</b></font>'}})
+    top.append({"textParagraph": {"text": "Type what I should know, then tap the choice it goes with."}})
+    btns = [_button(str(o["label"]), "card_edit_submit", {"qid": qid, "q": str(q_index), "mode": "note", "option": str(o["label"])},
+                    filled=(i == 0)) for i, o in enumerate(opts)]
+    return {"header": {"title": "Add a note", "subtitle": _names(str(q.get("header") or ""))[:200]},
+            "sections": [{"widgets": top + [
+                {"textInput": {"name": "body", "label": "Your note", "type": "MULTIPLE_LINE", "value": ""}},
+                {"buttonList": {"buttons": btns}}]}]}
+
+
 def vault_dialog(site: str = "", error: str = "", username: str = "", qid: str = "", rid: str = "") -> dict:
     """The dialog behind "Enter login" (vault_chat.card): site, username, password, an optional code-generator
     secret, one Save button. What is typed here goes to the app as formInputs, never into the conversation;
@@ -577,6 +596,9 @@ def card_body(card: dict, state: str = "open", answered: dict | None = None) -> 
             # grant types (scripts/policy.py, 2026-11-08): the tap can STAND. Only on a card the policy allows it for
             # (never a send, money or a login); the recommended choice is what the standing yes answers with later
             btns.append(_button("Always", "card_answer", {"qid": qid, "option": opts[rec[0]]["label"], "q": "0", "grant": "always"}))
+        if btns and buttons_on() and not blanks and len(btns) < 7 and not p_.get("ask_code") and not p_.get("login"):
+            # any card can carry typed words with its answer, in Chat itself (note_dialog, 2026-10-25): no trip to Mission Control
+            btns.append(_button("Add a note", "card_edit", {"qid": qid, "q": "0", "mode": "note"}, interaction="OPEN_DIALOG"))
         if btns and not buttons_on():
             # no public endpoint for taps (a new organization before Funnel / a relay): the choices are words,
             # answered in the card's own thread (the owner's-words-are-the-tap path, 2026-10-24)

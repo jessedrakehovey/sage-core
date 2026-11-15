@@ -394,10 +394,15 @@ def click(ev: dict, k: dict, log=lambda s: None, late: float | None = None) -> d
         if p.get("mode") == "later":
             log(f"click send-later {qid} by {person['key']}: picker opened")
             return _reply_dialog(ev, chat_push.later_dialog(card, int(p.get("q") or 0), tz_offset_min=_tz_offset_min(ev)))
+        if p.get("mode") == "note":
+            log(f"click note {qid} by {person['key']}: dialog opened")
+            return _reply_dialog(ev, chat_push.note_dialog(card, int(p.get("q") or 0)))
         log(f"click edit {qid} by {person['key']}: dialog opened")
         return _reply_dialog(ev, chat_push.edit_dialog(card, int(p.get("q") or 0)))
     if fn == "card_edit_submit" and p.get("mode") == "later":
         return later_submit(ev, k, person, qid, log)
+    if fn == "card_edit_submit" and p.get("mode") == "note":
+        return note_submit(ev, k, person, qid, log)
     if fn == "card_edit_submit":
         revised = str((k.get("form") or {}).get("body") or "").strip()
         if not revised:
@@ -480,6 +485,35 @@ def later_submit(ev: dict, k: dict, person: dict, qid: str, log=lambda s: None) 
     if r.get("mint_error"):
         return _reply_close(ev, f"Recorded, but not set up: {str(r['mint_error'])[:150]}")
     return _reply_close(ev, f"Goes out {es.when_text(send_at)}. Undo on the card works until then.")
+
+
+def note_submit(ev: dict, k: dict, person: dict, qid: str, log=lambda s: None) -> dict:
+    """The Add a note dialog's submit: the tapped choice + the typed words -> cards.answer(text=...), the same answer
+    the Mission Control note box gives. A one-time code typed here on a non-code card is refused, never kept."""
+    import cards
+    import chat_push
+    core = _core()
+    p = k.get("params") or {}
+    q_index = int(p.get("q") or 0)
+    card = cards._read(cards.LIVE / f"{qid}.json")
+    if not card or card.get("status") != "open":
+        return _reply_close(ev, "That card is no longer open.")
+    note = str((k.get("form") or {}).get("body") or "").strip()[:2000]
+    if not note:
+        return _reply_dialog(ev, chat_push.note_dialog(card, q_index, error="Type the note first, then tap a choice."))
+    if re.fullmatch(r"[\d\s-]{4,12}", note) and 4 <= len(re.sub(r"\D", "", note)) <= 10:
+        return _reply_dialog(ev, chat_push.note_dialog(card, q_index, error="That looks like a code. This card has no sign-in "
+                                                                             "waiting; a code card comes with its own Enter code box."))
+    option = str(p.get("option") or "")
+    r = cards.answer(qid, option, text=note, q_index=q_index, by=f"gchat:{person['key']}")
+    log(f"click note-submit {qid} {option!r} by {person['key']}: ok={r.get('ok')} {r.get('reason') or r.get('ticket') or ''} note={len(note)} chars")
+    core.say(chat_push_convo(person), person["name"], f"[answered card {qid}: {option}, with a note: {note[:200]}]", channel="gchat", meta={"click": True})
+    if not r.get("ok"):
+        return _reply_close(ev, f"That card could not be answered: {r.get('reason')}")
+    card = cards._read(cards.LIVE / f"{qid}.json") or card
+    chat_push.mark_answered(card, {"option": option, "by": person["key"], "ticket": r.get("ticket"), "mint_error": r.get("mint_error")})
+    _wake_doer(card)
+    return _reply_close(ev, f"{_plain(option)}, with your note.")
 
 
 # ------------------------------------------------------------------ the Home tab and the registered commands (home_tab.py, 2026-11-04)

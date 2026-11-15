@@ -1205,7 +1205,9 @@ opens the DM's Home tab (relay `onAppHome` → RenderActions `pushCard`) and eve
 `updateCard`. The registered commands `/desk /jobs /approvals /watch /stop /login /settings /help` and the quick
 commands Desk / Approvals / Control PC / Stop the job answer with the same cards as messages (`command_event`);
 any other registered command still reaches the brain. Outbound cards gained **Send later**: a date-time picker
-dialog whose submit is `cards.answer(send_at=...)`, the not_before "send it at 8am" in words would mint. The Google-side setup
+dialog whose submit is `cards.answer(send_at=...)`, the not_before "send it at 8am" in words would mint. Every other card gained **Add a note** (2026-10-25, "a text entry box here in chat ... for any user required
+input"): a text field and one button per choice (`chat_push.note_dialog`, `gchat_events.note_submit` -> `cards.answer(text=...)`, the
+Mission Control note box); a bare code typed there is refused and never kept. The Google-side setup
 (Apps Script new version, Support App Home, the commands table) is itself a Chat button: connection `chat-home`,
 setup kind **job** (`setup_actions._job`, `chat_forms.job_card`, `gchat_events.job_run_click`: the tap answers at once,
 the job runs on a thread, the card is edited with the result; `scripts/chat_console.py` drives the agent's browser and

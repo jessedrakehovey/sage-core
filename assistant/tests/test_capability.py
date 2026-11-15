@@ -1928,4 +1928,42 @@ ok(_doer._named_tabs({"payload": {"text": "Look up the library hours"}}) == [] a
    _doer._held_note("1" * 16, {"payload": {"text": "Look up the library hours"}}), "a job that names no tab still keeps off the held one")
 _lo._pages, _lo._load = _real_pages, _real_load
 
+# ---------------------------------------------------------------- 31. a text entry box in chat for any typed input (2026-10-25)
+# the owner, 2026-10-25 14:40: the DMV code card said to type the code on Mission Control and his phone showed no box
+ENTRY_ASK = ("In the future you should make a text entry box here in chat. Make this a general guideline for any user required "
+             "input for any organization using Sage I want to leave Google chat as infrequently as possible")
+seen31 = {}
+
+
+def fake_run_entry(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen31["learn"] = gmcp.call("learn", {"rule": "Anything an owner must type is typed in a box inside the Chat card, never on Mission Control",
+                                          "why": ENTRY_ASK})
+    return {"ok": True, "session": "S31", "text": "Done: every card in chat has its own box now, Enter code on a code card and Add a note on the rest."}
+
+
+for held_ in ("", "replay"):
+    brain._run_claude = fake_run_entry
+    g0, n0 = len(cap._load()["gaps"]), len(NOTES)
+    m_ = {"channel": "local", "person": owner1, "text": ENTRY_ASK, "convo": "spaces/AAQA6LAmbsA",
+          "thread": "spaces/AAQA6LAmbsA/threads/entry31", "space": "spaces/AAQA6LAmbsA", "direct": True}
+    if held_:
+        m_.update(_held=held_)
+    bridge.handle(m_)
+    out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+    ok(str(seen31.get("learn", "")).startswith("accepted") and "can't" not in out.lower() and len(cap._load()["gaps"]) == g0
+       and len(NOTES) == n0, f"'{ENTRY_ASK[:40]}...'{' (replayed)' if held_ else ''}: learned as a rule, no can't, no build")
+ok(any("box inside the Chat card" in str(r) for r in core.rules_active()), "the guideline is a standing rule")
+note_q = cards.post([{"header": "Missing fact", "lane": "personal", "question": "Which address goes on the form?",
+                      "options": [{"label": "Use what I type (Recommended)"}, {"label": "Skip"}]}], owner="owner1")
+nq = note_q.get("qid")
+ok(nq and "Add a note" in json.dumps(chat_push.card_body(cards._read(cards.LIVE / f"{nq}.json"), "open"))
+   and '"textInput"' in json.dumps(chat_push.note_dialog(cards._read(cards.LIVE / f"{nq}.json"))),
+   "a card that needs typed input carries its own text box in Chat (Add a note -> a textInput dialog)")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("every card in Chat carries its own entry box" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: the entry-box rung is there")
+g0 = len(cap._load()["gaps"])
+ok(cap.after_turn(owner1, "552190", "I can't use that number.", [], CTX) == "" and len(cap._load()["gaps"]) == g0,
+   "a pasted code in plain chat is never filed as a build request")
+
 print(f"\nall {N} checks passed")

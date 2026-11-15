@@ -356,6 +356,8 @@ def after_turn(person: dict, text: str, reply: str, applied: list, ctx: dict) ->
         return ""
     if about_a_build(text) and not ctx.get("replay"):
         return ""                                            # a question about a build is answered, never built
+    if re.fullmatch(r"[\d\s-]{4,12}", str(text or "").strip()):
+        return ""                                            # a pasted one-time code is never a build title (2026-10-25)
     if is_nudge(text):
         if ctx.get("replay"):                                # a nudge filed before this check: its replay closes it
             d = _load()

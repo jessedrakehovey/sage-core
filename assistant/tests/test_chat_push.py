@@ -47,6 +47,7 @@ card = {"id": "q0123456789ab", "ts": 1.0, "status": "open", "questions": [Q]}
 body = chat_push.card_body(card, "open")
 c = body["cardsV2"][0]["card"]
 btns = [w for s in c["sections"] for w in s["widgets"] if "buttonList" in w][0]["buttonList"]["buttons"]
+btns = [b for b in btns if b["text"] != "Add a note"]          # the typed-note box (9b) rides along on every card
 check("one button per option, '(Recommended)' shown as the filled green button not as text",
       [b["text"] for b in btns] == [chat_push._RECOMMENDED.sub("", o["label"]).strip() for o in Q["options"]]
       and [b["onClick"]["action"]["parameters"][1]["value"] if b["onClick"]["action"]["parameters"][1]["key"] == "option" else None for b in btns][0] is not None
@@ -265,6 +266,32 @@ check("dialog closes with a confirmation", "CLOSE_DIALOG" in json.dumps(resp) an
 check("the Chat message is rewritten with the edited text", edits and edits[-1][0] == "answered" and edits[-1][1] == qid3)
 ev_empty = json.loads(json.dumps(ev_sub)); ev_empty["commonEventObject"]["formInputs"]["body"]["stringInputs"]["value"] = ["   "]
 check("an empty edit sends nothing", "Nothing sent" in json.dumps(gchat_events.handle(ev_empty)))
+
+# 9b. the owner, 2026-10-25: "make a text entry box here in chat ... for any user required input": every card has Add a note
+QN = {"header": "Venue question", "lane": "wedding", "question": "Which venue address goes on the shoot sheet?",
+      "options": [{"label": "Use the one I type (Recommended)"}, {"label": "Skip"}]}
+rn = cards.post([QN], "test")
+qidn = rn["qid"]
+bodyn = chat_push.card_body(cards._read(cards.LIVE / f"{qidn}.json"), "open")
+btnsn = [b for s_ in bodyn["cardsV2"][0]["card"]["sections"] for w in s_["widgets"] if "buttonList" in w for b in w["buttonList"]["buttons"]]
+note_btn = next((b for b in btnsn if b["text"] == "Add a note"), None)
+check("a card carries an Add a note button that opens a dialog in Chat",
+      note_btn is not None and note_btn["onClick"]["action"]["interaction"] == "OPEN_DIALOG" and note_btn["onClick"]["action"]["function"] == "card_edit")
+ev_n = json.loads(json.dumps(ev_e)); ev_n["commonEventObject"]["parameters"] = {"qid": qidn, "q": "0", "mode": "note"}
+dlgn = json.dumps(gchat_events.handle(ev_n))
+check("the note dialog has a text field and one submit per choice", "pushCard" in dlgn and '"textInput"' in dlgn
+      and "Use the one I type" in dlgn and 'card_edit_submit' in dlgn and '"value": "note"' in dlgn)
+ev_ns = json.loads(json.dumps(ev_sub))
+ev_ns["commonEventObject"]["parameters"] = {"qid": qidn, "q": "0", "mode": "note", "option": "Use the one I type (Recommended)"}
+ev_ns["commonEventObject"]["formInputs"]["body"]["stringInputs"]["value"] = ["482911"]
+check("a bare code typed as a note is refused, never kept", "looks like a code" in json.dumps(gchat_events.handle(ev_ns))
+      and cards._read(cards.LIVE / f"{qidn}.json")["status"] == "open" and "482911" not in json.dumps(cards._answers_index().get(qidn) or {}))
+ev_ns["commonEventObject"]["formInputs"]["body"]["stringInputs"]["value"] = ["123 Example Street, Port Alder"]
+respn = gchat_events.handle(ev_ns)
+ansn = cards._answers_index().get(qidn) or {}
+check("submitting the note answers the card with that choice and the typed words, like the Mission Control note box",
+      cards._read(cards.LIVE / f"{qidn}.json")["status"] == "answered" and ansn.get("option") == "Use the one I type (Recommended)"
+      and ansn.get("text") == "123 Example Street, Port Alder" and "CLOSE_DIALOG" in json.dumps(respn))
 
 # 10. Marisa, 2026-10-18: a draft with [the owner: ...] blanks never goes out as written
 import exec_store as es  # noqa: E402
