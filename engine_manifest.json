@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+313ce24",
+  "version": "2026.11.14+27c0ab1",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T17:19:12"
+  "synced": "2026-11-14T17:41:12"
  },
  "modules": {
   "money": {
@@ -493,6 +493,7 @@
   "assistant/tests/test_thread_keys.py": "a726331dbc34b45afa6bdbf8a81cee2f84fc513e2874fe93aa75717b386307ce",
   "assistant/tests/test_threadfix.py": "21720972f7fd8366b3f9a8343b666e763ce375e651ceb66ab8935e2980c873a9",
   "assistant/tests/test_today_gaps.py": "314f0196ea6832e2b1c47a8f137098beb18f14115ae467d8d60562b7d66c4915",
+  "assistant/tests/test_totp.py": "931d226fe94f72998671887da8b575439c66c14f35241cc3bf4593763a64cdd5",
   "assistant/tests/test_tracking.py": "f35569000288edf2ccf586f30001cb34b931b90a0d6e891b5ab1ffcac6d14802",
   "assistant/tests/test_triage_next.py": "e5bc1ded3bd593a43060438ea4496ee24db37917b73e79a7f8d1af4b0fc2f362",
   "assistant/tests/test_truth.py": "212b36d8eb80fec846e5415f9994a0c67c3e9cd8c6c2243442c918f4bd579a4f",
