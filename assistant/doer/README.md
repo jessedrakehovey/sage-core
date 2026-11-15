@@ -317,6 +317,12 @@ Resolve was closed). Three things changed:
   presses Replace on a same-name prompt (a replaced Dropbox file keeps its share link) and watches until it reads done;
   past `--wait` a hidden watcher finishes, and the tab counts as held (`browser.held_tabs`) so nothing prunes it mid-upload.
   Status JSON in `assistant/out/doer/uploads/`. Tests: `test_capability.py` section 21.
+- **A file inside a browser form** (a resume on a job application, 2026-11-14, gap g-c5987d). The browser job ends its turn
+  `DOER_UPLOAD: <path> | <picker button>` on the page with the field; `doer.give_files` gives that file with `upload.run`
+  ONLY when the job's own text names the path and it exists, then resumes the same session ("## FILE GIVEN", up to
+  `doer.uploads_max` = 3). The deny list is unchanged: the model still never chooses a file. The prompt also sends it past a
+  job board's login to the employer's own careers site, and treats a password-less sign-in box as a login (sign-in card).
+  Tests: `test_doer.py` (upload), `test_capability.py` section 38.
 - **The learn bug.** `import learn` in `doer.py` / `computer.py` resolved to
   `assistant/scripts/learn.py` (the corrections ledger) whenever that was already loaded, so every
   run since 10-12 logged `learn failed: AttributeError` and recorded nothing. `doer._learn()` loads

@@ -1671,4 +1671,57 @@ ok("can't" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) 
 r_s = test_sends.sweep()
 ok(not any(r_s.values()), f"a second sweep finds nothing left to close: {r_s}")
 
+# ---------------------------------------------------------------- 38. a job application with a resume file is ONE browser job (gap g-c5987d)
+# the owner, 2026-11-14 18:17: the Mercy Housing application came back "Bandana wants a login before "Apply on company site"
+# will go on, so the resume was not uploaded ... DO IT YOURSELF". The ask is a browser `do` carrying the file's path; the
+# browser job gives the file to the page by code (doer.give_files), applies on the employer's own site past the board's
+# login, and a sign-in it needs is a sign-in card. Driven here: the brain's deed, then the doer's file step on that ticket.
+_cv_dir = TMP / "example-org" / "career" / "out"
+_cv_dir.mkdir(parents=True, exist_ok=True)
+CV38 = _cv_dir / "owner1_example_Resume_Mercy_Housing.docx"
+CV38.write_bytes(b"PK resume")
+JOB_ASK = ("Job application for owner1 example (his own day-job search, personal lane; nothing to do with any property-management "
+           f"account). The tailored resume is ALREADY made: {CV38} (upload this .docx). Do not build or edit any resume. "
+           "1. Open https://bandana.com/jobs/96ac18f0-0c31-49ec-83d1-e4df4dba45f7 (Mercy Housing, Property Manager - Villa Madera, "
+           "Brackwater, requisition PROPE004958). Click \"Apply on company site\" and follow it to Mercy Housing's application for that "
+           "requisition. 2. Fill the application from these values.")
+
+
+def fake_run_job(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["job_prompt"] = prompt
+    seen["job_do"] = gmcp.call("do", {"lane": "personal", "text": JOB_ASK + " Stop at the final Submit with a checkpoint card."})
+    return {"ok": True, "session": "S38", "text": "I'm filling the Mercy Housing application now with your resume attached; the Submit comes to you as a card."}
+
+
+brain._run_claude = fake_run_job
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": JOB_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/job38", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "PROPE004958" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen.get("job_do")).startswith("accepted") and tix and str(tix[-1]["payload"].get("where") or "") != "computer",
+   f"the Mercy Housing application becomes ONE browser job ({str(seen.get('job_do'))[:80]})")
+ok("DO IT YOURSELF" not in out and "wants a login" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   f"no hand-over line, no build filed: {out!r}")
+for f in ("prompt.md", "templates/prompt.generic.md"):
+    ok("attaches the file by code" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: a form with a file has its rung")
+sys.path.insert(0, str(ROOT / "doer"))
+import doer as _doer38  # noqa: E402
+import upload as _upload38  # noqa: E402
+_t38 = tix[-1]
+ok(_doer38.owner_files(_t38) == [str(CV38.resolve())], "the doer finds the resume the ask names")
+_ups38 = []
+_r0, _a0 = _upload38.run, _doer38.browser.active_page
+_upload38.run = lambda file, url="", match="", clicks=None, **k: _ups38.append((file, match, clicks)) or {"state": "done", "file": file, "page": match}
+_doer38.browser.active_page = lambda pages=None, focus=None: {"url": "https://careers.mercyhousing.org/apply/PROPE004958"}
+_line38 = _doer38.upload_step(_t38, f"{CV38} | Upload Resume")
+_upload38.run, _doer38.browser.active_page = _r0, _a0
+ok(_line38.startswith("UPLOADED owner1_example_Resume_Mercy_Housing.docx") and _ups38 and _ups38[0][2] == ["Upload Resume"],
+   f"the doer's DOER_UPLOAD gives the resume to the application page by code: {_line38}")
+_dp = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
+ok("employer's own careers site" in _dp and "no password field" in _dp, "the doer applies past a job board's login and signs in on a card")
+
 print(f"\nall {N} checks passed")

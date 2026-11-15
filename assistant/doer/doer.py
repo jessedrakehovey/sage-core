@@ -82,7 +82,7 @@ CLAUDE = os.environ.get("ASSISTANT_CLAUDE") or os.path.expandvars(r"%APPDATA%\np
 KIND = "agent_run"
 MCP = "playwright-doer"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
-MARK = re.compile(r"^\s*`?(DOER_(?:DONE|CHECKPOINT|BLOCKED|ANSWER)):\s*(.*?)`?\s*$")
+MARK = re.compile(r"^\s*`?(DOER_(?:DONE|CHECKPOINT|BLOCKED|ANSWER|UPLOAD)):\s*(.*?)`?\s*$")
 REPORT_MAX = 1500       # a multi-line DOER_ANSWER / DOER_DONE keeps this much (chat + ticket note)
 
 
@@ -454,6 +454,66 @@ def carry_on(t: dict, r: dict, out_dir: Path, timeout: int, turn=None, builder=N
             r2 = turn(builder(t, resume_block=block), out_dir, timeout=timeout)
         r = r2
     r["continued"] = n
+    return r
+
+
+# ------------------------------------------------------------------ a file the owner named, given by code (2026-11-14)
+# The browser tools have no file picker (browser_file_upload is on the frozen deny list: the model must never choose a
+# file off this PC). A job application with "upload this .docx" therefore stopped at the resume field (gap g-c5987d).
+# Now the turn ends with `DOER_UPLOAD: <path> | <the button that opens the picker>` on the page with the field; code
+# gives the file to that page with upload.py (CDP, straight from disk) ONLY when the path is one the owner's own ask
+# names and it exists, then carries the same session on with the result. Up to doer.uploads_max per run.
+_PATH = re.compile(r'[A-Za-z]:[\\/](?:[^\\/:*?"<>|\r\n]+[\\/])*[^\\/:*?"<>|\r\n]+?\.[A-Za-z0-9]{1,5}\b')
+UPLOADED = ("## FILE GIVEN\n{line}\nYou are in the same browser and on the same page. Check the field shows the file (read "
+            "the page), write a milestone note, and carry on with the job. A FAILED line: try once more with the exact "
+            "button that opens the file picker, else stop with DOER_BLOCKED naming the field.\n")
+
+
+def owner_files(t: dict) -> list:
+    """The files on this PC the owner's ask names (payload.text) that exist, as resolved paths."""
+    text = str((t.get("payload") or {}).get("text") or t.get("summary") or "")
+    out = []
+    for m in _PATH.findall(text):
+        f = Path(m.strip())
+        if f.is_file() and str(f.resolve()) not in out:
+            out.append(str(f.resolve()))
+    return out
+
+
+def upload_step(t: dict, arg: str) -> str:
+    """A DOER_UPLOAD line -> the one-line result of giving that file to the page in front (upload.py's own line)."""
+    path, _, label = str(arg or "").partition("|")
+    path, label = path.strip().strip("\"'`"), label.strip().strip("\"'`")
+    named = owner_files(t)
+    want = str(Path(path).resolve()) if path else ""
+    pick = [f for f in named if f.lower() == want.lower()] or [f for f in named if Path(f).name.lower() == Path(path).name.lower()]
+    if not pick:
+        return (f"FAILED {Path(path).name or 'the file'}: only a file the ask itself names can be given to a page"
+                + (f" ({', '.join(Path(f).name for f in named)})" if named else " and this ask names none"))
+    try:
+        import upload
+        page = browser.active_page() or {}
+        st = upload.run(pick[0], match=str(page.get("url") or ""), clicks=[label] if label else None)
+        return upload._line(st)
+    except Exception as e:  # noqa: BLE001
+        return f"FAILED {Path(pick[0]).name}: {type(e).__name__}: {str(e)[:160]}"
+
+
+def give_files(t: dict, r: dict, out_dir: Path, timeout: int) -> dict:
+    """While the turn ends on DOER_UPLOAD: give the file by code and carry the same session on (doer.uploads_max)."""
+    n = 0
+    while r.get("marker") == "DOER_UPLOAD" and n < int(CFG.get("uploads_max", 3)):
+        n += 1
+        line = upload_step(t, r.get("arg", ""))
+        log(f"ticket {t['id']}: upload {n}: {line[:160]}")
+        set_status(t, "attaching a file to the page")
+        block = UPLOADED.format(line=line)
+        sid = str(r.get("session") or "")
+        r = run_turn(block, out_dir, resume=sid, timeout=timeout) if sid else \
+            run_turn(build_prompt(t, resume_block=block), out_dir, timeout=timeout)
+        r = carry_on(t, r, out_dir, timeout)
+    if r.get("marker") == "DOER_UPLOAD":                   # out of uploads: an ending the rest of the code knows
+        r = dict(r, marker="DOER_BLOCKED", arg=f"the page kept asking for a file after {n} uploads ({r.get('arg', '')})")
     return r
 
 
@@ -942,6 +1002,7 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | No
         if not r.get("ok") and sid and "resume" in (r.get("error") or "").lower():
             r = run_turn(build_prompt(t, resume_block=follow_up), out_dir, timeout=int(CFG.get("turn_timeout_s", 900)))
         r = carry_on(t, r, out_dir, int(CFG.get("turn_timeout_s", 900)))     # a cut-off run goes on from its notes
+        r = give_files(t, r, out_dir, int(CFG.get("turn_timeout_s", 900)))   # a file the ask names, given by code
         keep = _leave_open(r, out_dir, login)     # a step only the owner can take: the page stays up for them
     finally:
         if not keep:
