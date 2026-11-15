@@ -184,6 +184,18 @@ def about_a_build(text: str) -> bool:
     return bool(t) and len(t) <= 240 and bool(_BUILD_QUESTION.match(t))
 
 
+# a line with no ask in it: a greeting or a "you there?" nudge (2026-11-14, gap g-59f66e: "Hello?" was answered with
+# an earlier job's "I couldn't get into <a site> on the web" and filed as a build titled 'Hello')
+_NUDGE = re.compile(r"^(?:hello|hi|hey|yo|ping|you there|are you there|still there|are you still there|anyone there|hello there|"
+                    r"hey there|hi there|good (?:morning|afternoon|evening))?[\s?!.,]*$", re.I)
+
+
+def is_nudge(text: str) -> bool:
+    """A greeting or a bare "Hello?": no ask of its own, so a "can't" in its reply belongs to an earlier ask
+    (that ask's own gap carries it) and is never filed as a build of the nudge."""
+    return bool(_NUDGE.match(str(text or "").strip().replace("\u2019", "'")))
+
+
 def _deed_kinds(applied: list) -> set:
     return {str((a or {}).get("kind") or "") for a in (applied or [])}
 
@@ -344,6 +356,14 @@ def after_turn(person: dict, text: str, reply: str, applied: list, ctx: dict) ->
         return ""
     if about_a_build(text) and not ctx.get("replay"):
         return ""                                            # a question about a build is answered, never built
+    if is_nudge(text):
+        if ctx.get("replay"):                                # a nudge filed before this check: its replay closes it
+            d = _load()
+            g = d["gaps"].get(str(ctx.get("replay")))
+            if g:
+                g["status"], g["done"] = "done", core.stamp()
+                _save(d)
+        return ""                                            # "Hello?" has no ask to build
     kinds = _deed_kinds(applied)
     if "blocked" in kinds:
         return ""                                            # the brain named its blockers itself; actions.apply acted on them

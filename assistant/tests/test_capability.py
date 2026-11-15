@@ -1770,4 +1770,36 @@ ok(_line38.startswith("UPLOADED owner1_example_Resume_Mercy_Housing.docx") and _
 _dp = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
 ok("employer's own careers site" in _dp and "no password field" in _dp, "the doer applies past a job board's login and signs in on a card")
 
+
+# ---------------------------------------------------------------- a bare "Hello?" is a nudge, never a build
+# the owner, 2026-11-14 19:51 (gap g-59f66e): "Hello?" was answered with an earlier job's status, "the owner Beach final for
+# Kingsmere: I couldn't get into Dropbox on the web", and that "couldn't" was filed as a build titled 'Hello'.
+for q in ("Hello?", "hello", "Hi!", "you there?", "Are you still there?", "??", "Hey there."):
+    ok(cap.is_nudge(q), f"a nudge with no ask of its own: {q!r}")
+for q in ("Hello? send the Kingsmere link", "Rent a 40 foot crane for the Saturday shoot", "Hi, text Corwin the rates"):
+    ok(not cap.is_nudge(q), f"an ask, not a nudge: {q!r}")
+HELLO_REPLY = "- **owner1 Beach final for Kingsmere:** I couldn't get into Dropbox on the web."
+
+
+def fake_run_hello(prompt, resume="", model="", timeout=600):
+    return {"ok": True, "session": "S59", "text": HELLO_REPLY}
+
+
+brain._run_claude = fake_run_hello
+n0, g0, k0 = len(NOTES), len(cap._load()["gaps"]), len(KICKS)
+bridge.handle({"channel": "local", "person": owner1, "text": "Hello?", "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/hello", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+ok(len(NOTES) == n0 and len(cap._load()["gaps"]) == g0 and len(KICKS) == k0, "'Hello?': no build filed, no gap, nothing kicked")
+ok(out != cap.ACK_LINE and "Dropbox" in out, f"'Hello?' gets its real answer, not the build receipt: {out!r}")
+# the gap filed before this check: its replay closes it and files nothing
+st = cap._load()
+st["gaps"]["g-hello"] = {"id": "g-hello", "cls": "capability", "ask": "Hello?", "person": owner1["key"], "status": "built",
+                         "attempts": 1, "ts": time.time(), "build": "Wiki/Personal/Build request Hello.md"}
+cap._save(st)
+bridge.handle({"channel": "local", "person": owner1, "text": "Hello?", "convo": "spaces/AAQAtest", "thread": "spaces/AAQAtest/threads/hello",
+               "space": "spaces/AAQAtest", "direct": True, "_held": "replay", "_capability_replay": "g-hello"})
+ok(cap._load()["gaps"]["g-hello"]["status"] == "done" and len(NOTES) == n0 and len(KICKS) == k0,
+   "the replayed 'Hello?' closes its gap and files no second build")
+
 print(f"\nall {N} checks passed")

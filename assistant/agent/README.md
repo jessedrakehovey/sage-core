@@ -415,6 +415,8 @@ around the same read-only brain:
   down) is NOT a gap: that is rung 6, the portal, said once. `classify()` decides; the regexes are narrow.
   Nor is an owner's question about a build ("Why is it not built?", "is it done?", `about_a_build()`, 2026-10-25):
   it is answered from BUILDS, never filed as a build, and gets no "building it now" line, at any of the seams.
+  Nor is a bare greeting or nudge ("Hello?", "you there?", `is_nudge()`, 2026-11-14): its "can't" belongs to an
+  earlier ask, so the reply is posted as it is and nothing is filed; a nudge gap filed before this closes on replay.
 - **Every gap files ONE build request at once**, the same `## Build request` wiki note an owner files in chat,
   carrying the ask verbatim, what was answered, what to build and an **Acceptance** line ("when the ask above
   is replayed, it completes with a deed"); de-duplicated against open gaps (7 days, same ask by content words)
