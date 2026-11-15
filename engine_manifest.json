@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+abd6b23",
+  "version": "2026.11.14+0f7c7d6",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T20:32:07"
+  "synced": "2026-11-14T20:33:25"
  },
  "modules": {
   "money": {
@@ -230,7 +230,7 @@
   "assistant/doer/login_fill.py": "220d7a9f5bf4fc781575e17ffe605c6f0a7c8465d67b68856ea71d9f02a258c4",
   "assistant/doer/notes.py": "e80b11c06d055f713a7c1953f1b4e09c6f0c9ded0e440146688a0d42f9c8e88f",
   "assistant/doer/policy.json": "181da6f398e1cc1ff80329b7d36256ee9a8c10a941aa091b7831957947de7462",
-  "assistant/doer/prompt.md": "ace6314b1b53054c714989453f17e76f237781dc22032e62a10b428760028acd",
+  "assistant/doer/prompt.md": "07c69e39818563699dd013eba7824d905a21f7446c8f1cd4df0ec28ad0d29e63",
   "assistant/doer/report.py": "8b0cef012e267fb7994318afc4c373e06d9c520c1c488742fb35cbfa22876cf5",
   "assistant/doer/teach.py": "49150491c7bc164fa7a743f5c3fe473162581a5b267595c12f8e993f7baefbf5",
   "assistant/doer/tools/README.md": "0be58dd230120207043c44b7c425a5ec1a0110062125602d9426c997114a29b1",
