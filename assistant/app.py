@@ -334,7 +334,7 @@ POSTS = {
 
 
 DRY = {"on": False}                # --dry: a preview or a test may look at every screen; nothing is started, installed or signed in
-DRY_STEPS = ("fix", "claude", "probe", "start", "pause", "resume", "open")
+DRY_STEPS = ("create", "fix", "claude", "probe", "start", "pause", "resume", "open")
 
 
 class _Handler(BaseHTTPRequestHandler):

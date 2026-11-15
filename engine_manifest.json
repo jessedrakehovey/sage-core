@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+7c0c683",
+  "version": "2026.11.14+7804c19",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T21:33:14"
+  "synced": "2026-11-14T21:34:38"
  },
  "modules": {
   "money": {
@@ -178,7 +178,7 @@
   "assistant/agent/websearch.py": "a86d1b9b2218a6179f595b5e84c23e5e714b25cf86ee5340fe6eed90218e6694",
   "assistant/agent/wiki_writer.py": "2e453d90276acafaddace8f68d539c9a223ce1749f424f506f243783dd054834",
   "assistant/agent/worklog.py": "d10d5ef817ce171a309a22354d78921dec7898dc90dbd7d55e35d88037ee4b6f",
-  "assistant/app.py": "b5fc4a34d3ad41e67b62ca333586f5c39fc390f9ccda0d8211e0dc9031e3c148",
+  "assistant/app.py": "d45498374c2e1f90f96b69acb720cb5989574551d37ea9e39283ed8aa004e6f5",
   "assistant/app_ui.html": "8a7b9e2ecc254ecafe347035f046136fd688f47ee52c9c07a445e72b406ae77a",
   "assistant/catalog.py": "f750fdfcb56967ba75a20c59a78e9a644c59756f1532cd281af862a917bbe25d",
   "assistant/catalog/_schema.json": "a4937ca84147f9c9999334f49c659d8e5b9c928d89d6f81c60a66ee6f5eea82d",
