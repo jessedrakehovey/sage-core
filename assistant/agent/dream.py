@@ -71,6 +71,12 @@ Also learn the way a person learns a job (owner1 2026-10-09):
   loops whose output nobody acts on (DEAD / IGNORED), lessons that did not reduce the owners' edits. Propose at
   most ONE rule, skill or build request against the worst of them, citing the SCORECARD row; an IGNORED loop is a
   for_owners proposal to switch it off; a lesson with no effect is a rules_retire or a reworded rules_add.
+- The DAYREVIEW lines are yesterday graded ask by ask, written by code: which asks were done, late, not done or
+  had to be said twice, and the cause the record gives. A line that says "handled by code" already has its build
+  request at the front of the queue: never file another for it. For a miss with no such line, propose the ONE change
+  that would have prevented it (a skill for how that kind of job is done, or a build request), citing the DAYREVIEW
+  row. A rule is not a fix for work that did not land. Never close a review with "already waiting on the owners":
+  say what you changed, or say nothing.
 
 Be conservative. One day's chatter rarely justifies more than a few changes. Do not restate what the active
 rules and memory already hold. Never propose anything in the protected core as a rule or fact; put it in
@@ -134,6 +140,13 @@ def prepare(now: datetime | None = None) -> dict | None:
         import scorecard
         for line in scorecard.dream_rows(scorecard.compute(7))[:8]:
             new.append({"ts": core.stamp() if hasattr(core, "stamp") else "", "convo": "", "who": "code", "channel": "scorecard", "text": line})
+    except Exception:  # noqa: BLE001
+        pass
+    # yesterday graded ask by ask, with what the code already did about each miss (dayreview.py, 2026-11-14)
+    try:
+        import dayreview
+        for line in dayreview.dream_rows()[:14]:
+            new.append({"ts": core.stamp(), "convo": "", "who": "code", "channel": "dayreview", "text": line})
     except Exception:  # noqa: BLE001
         pass
     refs = {}

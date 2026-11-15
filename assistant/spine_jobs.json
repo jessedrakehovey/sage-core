@@ -383,6 +383,22 @@
    "_what": "keep the conversational agent's loop alive (assistant/agent: chat channels -> read-only brain -> SUGGEST writers -> reply; also fires the agent's own schedules every minute). Starts it detached if it is not running; exits at once when it is"
   },
   {
+   "name": "day-review",
+   "cmd": [
+    "python",
+    "assistant/agent/dayreview.py",
+    "run"
+   ],
+   "every_min": 1440,
+   "window": [
+    6,
+    7
+   ],
+   "timeout_s": 300,
+   "_what": "the day graded ask by ask (assistant/agent/dayreview.py, 2026-11-14): every ask an owner typed yesterday is done, late, open, not done, unanswered or said twice, with the cause the outcome ledger wrote; the worst three become build requests ranked first in the build queue, a review-filed fix nobody started is moved up, and a standing problem seen three runs in a row is acted on instead of noted again. Zero-LLM; says nothing in chat; runs before the nightly review so its lines are in that review's packet",
+   "expect": "RESULT DAYREVIEW"
+  },
+  {
    "name": "agent-dream",
    "cmd": [
     "python",

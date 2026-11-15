@@ -43,17 +43,38 @@ LEARN_DIR = Path(os.environ.get("ASSISTANT_LEARNINGS") or (ROOT / "learnings"))
 FMT = "%Y-%m-%dT%H:%M:%S"
 IGNORED_BELOW = 0.10
 DEAD_DAYS = 7
+LOOP_MIN_EVER = 5        # a source that posted fewer cards than this was a one-off (a test, a session), never a loop
+LOOP_FORGET_DAYS = 30    # a loop silent this long was already said to be dead; it is not said again every week
 REPEAT = re.compile(r"\b(again|still|didn'?t|did not|never|you (told|said)|where is|nothing happened|not working|fail(ed|ure)?|wrong|no card)\b", re.I)
 SKIP_OPTS = re.compile(r"^\s*(skip|drop|dismiss|ignore|not now|later|remind me|leave it|never mind|cancel|no\b)", re.I)
+# The causes the ledger already writes in a row's last check, most specific first (2026-11-14: 51 of 61 failures in
+# a week were classed "other" while every one of them carried its cause in words, so the review had nothing to act on).
 _FAILURE_CLASSES_BASE = [
-    ("credential", r"sign(ed)? out|password|login|credential|token|not configured|no login|re-?auth"),
-    ("timeout", r"time(d)? out|timeout|unverified"),
+    ("never started", r"not started yet|not picked up|never ran|nobody picked"),
+    ("left to the owner", r"portal line gave|gave the owner the steps|only (?:you|the owner) can"),
+    ("sign-in", r"sign(?:ed)?[- ]?(?:in|out)\b|log(?:ged)?[- ]?in\b|login|verify[- ]it|password|credential|token|not configured|re-?auth|verification code|captcha|two[- ]factor|2fa"),
+    ("own rule in the way", r"my rules? says?|rules say|my setup holds|set aside for|held for (?:you|the owner)|not allowed to|i'?m not allowed"),
+    ("file", r"upload|\bfiles?\b|doesn'?t exist|does not exist|not on \w+\.com|attach|no such"),
+    ("no evidence", r"wrote no evidence|no evidence|no deed|claim with no"),
+    ("timeout", r"time(?:d)? out|timeout|past its \d+ min clock|no answer|unverified"),
     ("connector", None),   # filled lazily with crm.name()
-    ("browser", r"browser|click|element|snapshot|doer|page"),
+    ("browser", r"browser|debug port|click|element|snapshot|doer|\bpage\b|\btab\b"),
     ("phone", r"phone|outbox|\back\b|imessage|\btext\b"),
-    ("refused", r"refus|forbid|not allowed|policy|blank"),
-    ("model-claimed", r"no deed|claim with no|said"),
+    ("refused", r"refus|forbid|policy|blank"),
+    ("model-claimed", r"\bsaid\b"),
 ]
+# A row closed with one of these is not a failure: the work reached the owner another way, or an owner switched the
+# notice off. They used to count against "confirmed landed" (12 of 76 rows in the week of 2026-11-14).
+QUIET_CLOSE = re.compile(r"^closed quietly\b", re.I)
+
+
+def quiet_close(detail: str) -> bool:
+    return bool(QUIET_CLOSE.search(str(detail or "").strip()))
+
+
+def _apos(s) -> str:
+    """A phone types curly apostrophes (the right single quote, U+2019); every pattern here is written with straight ones."""
+    return str(s or "").replace(chr(0x2019), "'").replace(chr(0x2018), "'")
 
 
 def _failure_classes():
@@ -67,16 +88,21 @@ FAILURE_CLASSES = _failure_classes()
 
 
 def _ts(s) -> float:
-    try:
-        return time.mktime(time.strptime(str(s)[:19], FMT))
-    except (TypeError, ValueError):
-        return 0.0
+    """Seconds since the epoch for a ledger stamp. The transcript stamps minutes only ("2026-11-10 10:56"): read as
+    0.0 until 2026-11-14, which is why "lines where you had to repeat" said 0 four weeks running."""
+    t = str(s or "").replace(" ", "T")[:19]
+    for fmt in (FMT, "%Y-%m-%dT%H:%M"):
+        try:
+            return time.mktime(time.strptime(t if fmt == FMT else t[:16], fmt))
+        except (TypeError, ValueError):
+            continue
+    return 0.0
 
 
 def _classify(detail: str, kind: str = "") -> str:
     if kind == "said":
         return "model-claimed"
-    d = str(detail or "")
+    d = _apos(detail)
     for name, rx in _failure_classes():
         if re.search(rx, d, re.I):
             return name
@@ -96,14 +122,17 @@ def _outcome_metrics(since: float) -> tuple:
             said += 1
             classes["model-claimed"] = classes.get("model-claimed", 0) + 1
             continue
-        m = kinds.setdefault(k, {"claimed": 0, "verified": 0, "failed": 0, "unverified": 0, "abandoned": 0, "retries": 0, "_mins": []})
+        m = kinds.setdefault(k, {"claimed": 0, "verified": 0, "failed": 0, "unverified": 0, "abandoned": 0, "retries": 0, "settled": 0, "_mins": []})
+        det = str((r.get("checks") or [{}])[-1].get("detail") or "")
+        if st in ("failed", "abandoned") and quiet_close(det):
+            m["settled"] += 1                       # reached the owner another way: neither kept nor failed
+            continue
         m[st if st in m else "claimed"] += 1
         if (r.get("evidence") or {}).get("retry_ticket"):
             m["retries"] += 1
         if st == "verified" and r.get("closed"):
             m["_mins"].append(max(0.0, (_ts(r["closed"]) - _ts(r.get("created"))) / 60))
         if st in ("failed", "abandoned"):
-            det = str((r.get("checks") or [{}])[-1].get("detail") or "")
             c = _classify(det, k)
             classes[c] = classes.get(c, 0) + 1
     for k, m in kinds.items():
@@ -152,7 +181,7 @@ def _repeat_asks(since: float) -> int:
                 continue
             if str(r.get("who") or "").lower() in ("sage", "card", "code", "") or _ts(str(r.get("ts") or "").replace(" ", "T")) < since:
                 continue
-            if REPEAT.search(str(r.get("text") or "")) and not str(r.get("text") or "").startswith("["):
+            if REPEAT.search(_apos(r.get("text"))) and not str(r.get("text") or "").startswith("["):
                 n += 1
         return n
     except OSError:
@@ -196,7 +225,7 @@ def _loops(since: float, history_days: int = 60) -> dict:
             row["discarded"] += 1
     now = time.time()
     for src, row in out.items():
-        if row["ever"] and now - row["last"] > DEAD_DAYS * 86400 and row["generated"] == 0:
+        if row["ever"] >= LOOP_MIN_EVER and DEAD_DAYS * 86400 < now - row["last"] <= LOOP_FORGET_DAYS * 86400 and row["generated"] == 0:
             row["verdict"] = "DEAD"
         elif row["generated"] >= 5 and row["acted"] / row["generated"] < IGNORED_BELOW:
             row["verdict"] = "IGNORED"

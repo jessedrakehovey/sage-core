@@ -48,12 +48,12 @@ NEW_PORT = req("Wiki/Personal/Build request Port from Other agent - chat agent r
 ALL = [NEW_OWN, NEW_PORT, MID_OWN, OLD_PORT, OLD_OWN]
 
 got = [r["key"] for r in builder.pick(ALL, 2)]
-check("oldest first, not path order; one slot is the oldest port request",
-      got == [OLD_OWN["key"], OLD_PORT["key"]], str(got))
+check("oldest first, not path order; the oldest port request rides as one extra slot",
+      got == [OLD_OWN["key"], MID_OWN["key"], OLD_PORT["key"]], str(got))
 got = [r["key"] for r in builder.pick([NEW_OWN, MID_OWN, OLD_OWN], 2)]
 check("no port request open: the two oldest", got == [OLD_OWN["key"], MID_OWN["key"]], str(got))
 got = [r["key"] for r in builder.pick(ALL, 2, first=NEW_OWN["key"])]
-check("an owner's ask in chat is first, the port slot stays", got == [NEW_OWN["key"], OLD_PORT["key"]], str(got))
+check("an owner's ask in chat is first, the port slot stays", got == [NEW_OWN["key"], OLD_OWN["key"], OLD_PORT["key"]], str(got))
 got = [r["key"] for r in builder.pick([NEW_PORT, OLD_PORT, OLD_OWN], 2)]
 check("port requests are oldest-first among themselves and never take both slots",
       got == [OLD_OWN["key"], OLD_PORT["key"]], str(got))
@@ -62,8 +62,22 @@ check("only port requests open: both slots are theirs, oldest first", got == [OL
 got = [r["key"] for r in builder.pick(ALL, 1)]
 check("a one-slot run takes the oldest request; no slot is reserved", got == [OLD_OWN["key"]], str(got))
 got = [r["key"] for r in builder.pick(ALL, 3)]
-check("three slots: two oldest plus the oldest port (already among them) and the next oldest",
-      got == [OLD_OWN["key"], OLD_PORT["key"], MID_OWN["key"]], str(got))
+check("three slots of real work, oldest first, plus the oldest port",
+      got == [OLD_OWN["key"], MID_OWN["key"], NEW_OWN["key"], OLD_PORT["key"]], str(got))
+import dayreview  # noqa: E402
+dayreview.prioritize(NEW_OWN["key"], 100, "a fault that came back")
+dayreview.prioritize(MID_OWN["key"], 60, "an ask that did not land")
+got = [r["key"] for r in builder.pick(ALL, 2)]
+check("what the review ranked goes first, highest score first, whatever its age",
+      got == [NEW_OWN["key"], MID_OWN["key"], OLD_PORT["key"]], str(got))
+dayreview.prioritize(NEW_PORT["key"], 80, "a ranked port is real work")
+got = [r["key"] for r in builder.pick(ALL, 2)]
+check("a ranked port takes a real slot by its score; the extra slot stays the oldest unranked port",
+      got == [NEW_OWN["key"], NEW_PORT["key"], OLD_PORT["key"]], str(got))
+core.save(dayreview.PRIORITY, {})
+fresh = req("Wiki/Personal/Build request Gamma today.md", time.time() - 3600)
+got = [r["key"] for r in builder.pick([OLD_OWN, fresh], 1)]
+check("a request untouched for weeks waits behind a fresh one", got == [fresh["key"]], str(got))
 check("pick of nothing is nothing", builder.pick([], 2) == [])
 
 # ---------------------------------------------------------------- collect(): the wiki notes carry their age
@@ -82,7 +96,8 @@ try:
           keys == [f"Wiki/Personal/{names[1]}", f"Wiki/Personal/{names[2]}", f"Wiki/Personal/{names[0]}"], str(keys))
     check("every wiki request carries its age", all(r.get("ts") for r in reqs))
     got = [r["key"] for r in builder.pick(reqs, 2)]
-    check("pick on collected notes: oldest own note, then the port note", got == [f"Wiki/Personal/{names[1]}", f"Wiki/Personal/{names[2]}"], str(got))
+    check("pick on collected notes: both own notes, oldest first, then the port note as the extra slot",
+          got == [f"Wiki/Personal/{names[1]}", f"Wiki/Personal/{names[0]}", f"Wiki/Personal/{names[2]}"], str(got))
 finally:
     for p in paths:
         try:

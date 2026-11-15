@@ -303,6 +303,12 @@ def _rules() -> list:
     return [r for r in (load_json(state / "rules.json", {}) or {}).get("rules") or [] if isinstance(r, dict) and r.get("active", True)]
 
 
+_CARD_NOISE = {"am", "pm", "wait", "waiting", "card", "cards"}
+_LEAD_DROPPED = re.compile(r"\b(?:is|as|already) a dropped lead\b|\btapped ['\"‘“]?drop the lead\b", re.I)
+# ticket kinds a sensor makes by itself (a quiet or cold lead, an overdue task, a missed reply window, a follow-up step)
+_SENSOR_KIND = re.compile(r"(?:_stale|_cold|_overdue|_outstanding|_breach)$|^followup$")
+
+
 def _owner_closed(t: dict, facts: list, rules: list) -> str:
     """Why an owner already closed this ask ('' = he did not): a Skip / Drop tap on its own card, or, made after the
     ask, a standing rule ('never bring up ...', 'stop following up on ...') or a memory line ('tapped Skip', 'is
@@ -317,15 +323,26 @@ def _owner_closed(t: dict, facts: list, rules: list) -> str:
                 pass
     words, _ = _subject(f"{t.get('title', '')} {t.get('summary', '')}")
     asked = _local_stamp(t.get("created"))
+    # A ticket a sensor made (a quiet lead, a follow-up step) is newer than every close by construction, so a memory
+    # line "she is a dropped lead" from three weeks earlier never applied to this week's "lead quiet 16d" ticket and a
+    # dropped lead was offered a check-in again (2026-11-14). For those tickets, and only for a memory line that says
+    # in so many words that the lead was dropped, the line's age does not matter. Everything else is as it was: a
+    # wider pattern here closed 25 live leads on one broad standing rule when tried against the real store.
+    own_ask = not _SENSOR_KIND.search(str(t.get("kind") or ""))
     for kind, items in (("memory", facts), ("a standing rule", rules)):
         for c in items:
             text = str(c.get("fact") or c.get("rule") or "")
-            if not _OWNER_CLOSED.search(f"{text} {c.get('why') or ''}") or str(c.get("added") or "9") < asked:
+            dropped = kind == "memory" and not own_ask and bool(_LEAD_DROPPED.search(text))
+            if not dropped and (not _OWNER_CLOSED.search(f"{text} {c.get('why') or ''}") or str(c.get("added") or "9") < asked):
                 continue                   # not a closing line, or older than the ask (a fresh ask overrides it)
             # every name in the line (capitalised words not starting a sentence; else the fact's subject) is in the ask,
             # and so is one plain word of the matter: a Skip on 'Erin and Kit' does not close '19 cold leads'
             names = (_subject(re.sub(r"(^|[.!?:]\s+)\S+", r"\1", text))[1] - _CALENDAR) or (_subject(c.get("subject"))[1] - _CALENDAR)
             ws, caps = _subject(text)
+            if dropped:
+                # a memory line that quotes the card ("the 'Waiting 5d' card posted at 3:03 PM") carries capitalised
+                # words that are nobody's name; they are not asked of the ticket
+                names = names - _CARD_NOISE
             if names and names <= words and (ws - caps - names - _CLOSING_WORDS) & words:
                 return f"the owner closed it ({kind}: {text[:80]})"
     return ""

@@ -97,6 +97,7 @@ FLAKY_RERUNS = 1           # a suite that fails after the change is run once mor
 MAX_ATTEMPTS = 2
 RUNS_PER_DAY = 4
 MIN_GAP_MIN = 60
+STALE_REQ_DAYS = 21        # an unranked request untouched this long waits behind everything fresher
 TEST_GLOB = "assistant/tests/test_*.py"
 TURN_TIMEOUT_S = 45 * 60
 TEST_TIMEOUT_S = 300
@@ -713,13 +714,39 @@ def pick(reqs: list, max_n: int = 2, first: str = "") -> list:
     faster than the builder clears them (max_n per run, RUNS_PER_DAY runs), so without the reserved slot the
     relay's requests never got a turn (2026-10-30: 30 open, none attempted, while the upgrades they carried
     were already live in the other agent)."""
-    reqs = sorted(reqs, key=lambda r: (0 if r["key"] == first else 1, r.get("ts", 0.0), r["key"]))
-    chosen = reqs[:max_n]
-    if max_n >= 2 and not any(_PORT.search(r["title"]) for r in chosen):
-        port = next((r for r in reqs if _PORT.search(r["title"])), None)
-        if port:
-            keep = [r for r in chosen if r["key"] == first] or chosen[:1]
-            chosen = keep + [r for r in chosen if r not in keep][:max(0, max_n - len(keep) - 1)] + [port]
+    # 2026-11-14: ranked, not just aged. Three hundred requests were open, oldest first, with one of every two slots
+    # given to a port; a fix the nightly review asked for waited behind all of them (25 never started in a week) and a
+    # fault that came back six nights running was never built. Now: `first`; then what the review ranked
+    # (dayreview.prioritize: a recurring fault, the day's worst asks, a fix that slipped); then an owner's own ask;
+    # then the rest, oldest first, with anything untouched for STALE_REQ_DAYS last. Ports keep their turn as ONE EXTRA
+    # slot a run, so the relay still moves and never costs a slot of real work.
+    try:
+        import dayreview
+        rank = {k: int(v.get("score") or 0) for k, v in dayreview.priorities().items()}
+    except Exception:  # noqa: BLE001
+        rank = {}
+    cut = time.time() - STALE_REQ_DAYS * 86400
+
+    def _tier(r: dict) -> int:
+        if r["key"] == first:
+            return 0
+        if rank.get(r["key"]):
+            return 1
+        if float(r.get("ts") or 0.0) < cut:
+            return 4
+        try:
+            return 2 if owner_asked(r) else 3
+        except Exception:  # noqa: BLE001
+            return 3
+
+    reqs = sorted(reqs, key=lambda r: (_tier(r), -rank.get(r["key"], 0), r.get("ts", 0.0), r["key"]))
+    ports = [r for r in reqs if _PORT.search(r["title"]) and r["key"] != first and not rank.get(r["key"])]
+    work = [r for r in reqs if r not in ports]
+    if not work:
+        return ports[:max_n]
+    chosen = work[:max_n]
+    if max_n >= 2 and ports:
+        chosen = chosen + [min(ports, key=lambda r: (r.get("ts", 0.0), r["key"]))]
     return chosen
 
 

@@ -68,6 +68,8 @@ SPINE_FAILS = 3
 GAP_STALL_H = 6
 BUILD_UNLANDED_MIN = 60
 REESCALATE_H = 24
+RECUR_DAYS = 7               # the same symptom back inside this window was never fixed, whatever closed its last card
+STALE_CLOSE_DAYS = 14        # a "Waiting Nd" item this old is closed, not worked: its moment has passed
 KEEP_DAYS = 30
 MAX_TIMEOUT_S = 900
 LIMIT = re.compile(r"(session|usage|rate|weekly|daily|hourly|monthly|opus|sonnet) limit|hit your (?:\w+ )?limit|limit reached|too many requests", re.I)
@@ -786,6 +788,27 @@ def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
         # a stalled ticket's "Waiting Nd" card (a system card since 2026-11-09): its recommended button is "Hand it to
         # Sage", a tap on the card itself (cards._act_on_sentinel mints the operator ticket), so the card is answered
         # and the finding clears; it used to wait an hour with nothing pressed and file a build (card q52050f15f98a)
+        waited = re.search(r"\bWaiting (\d+)d\b", str(data.get("header") or ""))
+        if waited and int(waited.group(1)) >= STALE_CLOSE_DAYS:
+            # an owner, 2026-11-14: "it continues working on old asks that are not relevant to what it should be doing
+            # at the moment". A text from 32 days ago and an ask from 21 days ago were handed to Sage to work. Past
+            # STALE_CLOSE_DAYS the item is closed by code, with a line in the work log, and nobody works it.
+            if dry:
+                return {"what": "would close it as too old to work", "ok": True}
+            try:
+                sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+                import sentinels
+                ids = list(act.get("close") or []) or [str(data.get("sentinel_key")).split(":", 1)[1]]
+                r = sentinels.act({"close": ids}, by="reflex")
+                try:
+                    import worklog
+                    worklog.add(f"Closed without working it (waited {waited.group(1)} days): {_short(data.get('header'), 90)}",
+                                lane=str(data.get("lane") or ""), by="reflex", kind="stale")
+                except Exception:  # noqa: BLE001
+                    pass
+                return {"what": f"closed it without working it (waited {waited.group(1)} days): {_short(r, 60)}", "ok": True}
+            except Exception as e:  # noqa: BLE001
+                return {"what": f"could not close it: {type(e).__name__}: {str(e)[:100]}", "ok": False}
         if dry:
             return {"what": "would hand it to Sage", "ok": True}
         try:
@@ -801,7 +824,7 @@ def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
             return {"what": "handed it to Sage from its card", "ok": True}
         return {"what": f"could not hand it to Sage: {_short(r.get('reason'), 100)}", "ok": False}
     runnable = any(act.get(k) for k in ("spine_job", "task", "drain", "cmd"))
-    if step == 0 and runnable:
+    if step == 0 and runnable and not f.get("recurring"):      # a fault that came back: its button already failed to hold
         if dry:
             return {"what": "would press its button", "ok": True}
         try:
@@ -814,11 +837,18 @@ def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
     if dry:
         return {"what": "would file a build request", "ok": True, "final": True}
     title = f"Fix: {_short(data.get('header'), 50)}"
-    body = ("The system card below stayed open on Mission Control after its own button was pressed by the reflex (or it had none). "
+    if f.get("recurring"):
+        # its own request, named for the symptom: the general title matched a request filed weeks earlier for another
+        # suite, so every night's failure was "already filed" and never built
+        title = _short(f"Fix: {symptom(f).split(':')[-1].replace('selftest-', '')} keeps coming back ({_short(data.get('header'), 40)})", 88)
+    body = ((f"THIS CAME BACK {int(f.get('returned') or 0)} TIME(S) IN A WEEK: an earlier fix did not hold, or none was made. " if f.get("recurring") else "")
+            + "The system card below stayed open on Mission Control after its own button was pressed by the reflex (or it had none). "
             f"Card {data.get('qid')}, finding `{data.get('sentinel_key') or '-'}`, lane {data.get('lane')}.\n\n> " + _short(data.get("question"), 500)
             + "\n\nFind the cause in the job, sensor or test it names and fix it so the finding clears by itself; "
             "a test encodes the failing path.")
     key = _file_build(f, title, body)
+    if key and f.get("recurring"):
+        _rank(key, f)
     return {"what": f"filed the build request" + (f": {key}" if key else " (one is open already)"), "ok": bool(key), "build": key, "final": True}
 
 
@@ -954,6 +984,60 @@ def escalate(f: dict, dry: bool) -> str:
     return "note"
 
 
+# ------------------------------------------------------------------ "fixed" means the symptom is gone
+_DATED = re.compile(r":\d{4}-\d{2}-\d{2}$")
+
+
+def symptom(f: dict) -> str:
+    """What is wrong, without the card or the night it was seen on: every night's 'A nightly self-test failed' card
+    for one suite is one symptom. '' for a one-off (a stalled ticket's Waiting card is that ticket's alone)."""
+    data = f.get("data") or {}
+    sk = str(data.get("sentinel_key") or "")
+    if f.get("kind") == "system_card":
+        if sk.startswith("staged:"):
+            return ""
+        if sk:
+            return _DATED.sub("", sk)
+        return "card:" + re.sub(r"\d+", "N", str(data.get("header") or "")).strip().lower()
+    return str(f.get("key") or "")
+
+
+def _came_back(d: dict, f: dict, now: float) -> int:
+    """A new finding whose symptom was seen inside RECUR_DAYS: the earlier 'fixed' was a card closing, not the fault
+    going away (2026-11-14: one failing self-test was 'fixed' six mornings running, each time by filing the same build
+    request, and counted as six faults caught and fixed). The earlier rows stop counting as fixed.
+    -> how many times it has come back (0 = first sight, or a second card for a fault that is still open)."""
+    sym = symptom(f)
+    if not sym:
+        return 0
+    seen = d.setdefault("symptoms", {})
+    cur = seen.get(sym) or {}
+    fresh = bool(cur) and now - float(cur.get("last") or 0) <= RECUR_DAYS * 86400
+    twin = any(k != f["key"] and not x.get("fixed") and symptom(x) == sym for k, x in (d.get("findings") or {}).items())
+    back = int(cur.get("back") or 0) if fresh else 0
+    if fresh and not twin:
+        back += 1
+        old = set(cur.get("keys") or [])
+        for s in d.get("stats") or []:
+            if s.get("key") in old and s.get("outcome") == "fixed":
+                s["outcome"] = "came_back"
+    keys = list(dict.fromkeys((list(cur.get("keys") or []) if fresh else []) + [f["key"]]))[-12:]
+    seen[sym] = {"last": now, "back": back, "keys": keys}
+    cut = now - KEEP_DAYS * 86400
+    d["symptoms"] = {k: v for k, v in seen.items() if float(v.get("last") or 0) >= cut}
+    return back if (fresh and not twin) else 0
+
+
+def _rank(key: str, f: dict) -> None:
+    """A fault that came back goes to the front of the build queue (dayreview.prioritize; builder.pick reads it)."""
+    try:
+        import dayreview
+        dayreview.prioritize(key, dayreview.SCORE["recurring"] + int(f.get("returned") or 0),
+                             f"came back {int(f.get('returned') or 0)} time(s) in a week: {_short(f.get('what'), 120)}")
+    except Exception as e:  # noqa: BLE001
+        _log(f"rank failed for {key}: {type(e).__name__}: {str(e)[:100]}")
+
+
 # ------------------------------------------------------------------ the tick
 def in_hand(key: str) -> bool:
     f = (_load().get("findings") or {}).get(str(key)) or {}
@@ -983,6 +1067,11 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
         d["findings"][f["key"]] = {**f, "first": now, "first_when": core.stamp(), "last_seen": now, "step": 0, "fixes": [], "fixed": None, "escalated": None}
         out["found"] += 1
         _log(f"found {f['key']}: {f['what']}")
+        back = _came_back(d, f, now)
+        if back:
+            d["findings"][f["key"]].update(returned=back, recurring=True)
+            d["stats"].append({"ts": now, "key": f["key"], "kind": f.get("kind"), "outcome": "recurred", "minutes": 0, "steps": 0})
+            _log(f"{f['key']} is {symptom(f)} again ({back} time(s) in {RECUR_DAYS} days): the last fix did not hold")
     for key, f in list(d["findings"].items()):
         if f.get("fixed"):
             continue
@@ -990,6 +1079,8 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
             continue
         if key not in keys:
             f["fixed"], f["fixed_when"] = now, core.stamp()
+            if symptom(f) in (d.get("symptoms") or {}):
+                d["symptoms"][symptom(f)]["last"] = now
             mins = (now - float(f.get("first") or now)) / 60
             d["stats"].append({"ts": now, "key": key, "kind": f.get("kind"), "outcome": "fixed", "minutes": round(mins, 1), "steps": len(f.get("fixes") or [])})
             out["fixed"] += 1
@@ -998,9 +1089,9 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
                 _note(f"REFLEX fixed {key} in {mins:.0f} min: " + "; ".join(_short(x.get("what"), 80) for x in f.get("fixes") or []))
             continue
         out["open"] += 1
-        tries = [x for x in f.get("fixes") or [] if "hand it to Sage" in str(x.get("what") or "") or str(x.get("what") or "").startswith("handed it")]
+        tries = [x for x in f.get("fixes") or [] if "hand it to Sage" in str(x.get("what") or "") or str(x.get("what") or "").startswith(("handed it", "closed it"))]
         if f.get("kind") == "system_card" and str((f.get("data") or {}).get("sentinel_key") or "").startswith("staged:") \
-                and len(tries) < 2 and not any(str(x.get("what") or "").startswith("handed it") for x in tries):
+                and len(tries) < 2 and not any(str(x.get("what") or "").startswith(("handed it", "closed it")) for x in tries):
             # a "Waiting Nd" card gets its hand-off tap before anything else, even one escalated before the tap existed
             # (card q52050f15f98a, 2026-11-11); two failed taps and it takes the ordinary road (a build request)
             r = fix_system_card(dict(f, step=0), d, dry)
@@ -1080,10 +1171,12 @@ def stats(days: int = 7) -> dict:
     fixed = [s for s in rows if s.get("outcome") == "fixed"]
     in_hour = [s for s in fixed if float(s.get("minutes") or 0) <= VERIFY_MIN]
     esc = [s for s in rows if s.get("outcome") == "escalated"]
+    back = [s for s in rows if s.get("outcome") == "came_back"]
     open_ = [f for f in _load()["findings"].values() if not f.get("fixed")]
     found = len({s["key"] for s in rows} | {f["key"] for f in open_ if float(f.get("first") or 0) >= cut})
     pct = round(100.0 * len(in_hour) / found) if found else None
-    return {"found": found, "fixed_in_hour": len(in_hour), "fixed_later": len(fixed) - len(in_hour), "escalated": len(esc), "open": len(open_), "pct_in_hour": pct}
+    return {"found": found, "fixed_in_hour": len(in_hour), "fixed_later": len(fixed) - len(in_hour), "escalated": len(esc), "open": len(open_),
+            "pct_in_hour": pct, "came_back": len(back)}
 
 
 def scorecard_bit(days: int = 7) -> str:
@@ -1091,7 +1184,8 @@ def scorecard_bit(days: int = 7) -> str:
     if not s["found"]:
         return ""
     return (f"{s['found']} fault{'s' if s['found'] != 1 else ''} I caught myself, {s['fixed_in_hour']} fixed within the hour"
-            + (f", {s['fixed_later']} later" if s["fixed_later"] else "") + (f", {s['escalated']} needed you" if s["escalated"] else "")
+            + (f", {s['fixed_later']} later" if s["fixed_later"] else "") + (f", {s['came_back']} came back" if s.get("came_back") else "")
+            + (f", {s['escalated']} needed you" if s["escalated"] else "")
             + (f", {s['open']} in hand" if s["open"] else ""))
 
 

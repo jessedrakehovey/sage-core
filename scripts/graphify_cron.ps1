@@ -50,6 +50,20 @@ function Get-OrgPython {
 }
 $py = Get-OrgPython
 
+function Get-GraphifyPython {
+    # The rebuild needs the graphify package, which the interpreter org.json names may not carry (2026-11-14: the
+    # job failed every run with "No module named 'graphify'" because the semantic venv lacks it). Take the first
+    # interpreter that can import it; fall back to $py so the failure is still logged by the rebuild itself.
+    foreach ($c in @($py, 'python', 'py')) {
+        try {
+            $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & $c -c 'import graphify' 2>&1 | Out-Null } finally { $ErrorActionPreference = $old }
+            if ($LASTEXITCODE -eq 0) { return $c }
+        } catch {}
+    }
+    return $py
+}
+
 function Notify-MissionControl($text) {
     # Route to Mission Control (assistant/data/cards.jsonl). Never throws.
     # Telegram was removed 2026-10-04; Mission Control is the only channel.
@@ -97,7 +111,7 @@ try {
         $env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'
         $rb = & {
             $ErrorActionPreference = 'Continue'
-            & $py (Join-Path $root 'scripts\graphify_rebuild.py') 'Wiki/Operations' 2>&1
+            & (Get-GraphifyPython) (Join-Path $root 'scripts\graphify_rebuild.py') 'Wiki/Operations' 2>&1
         }
         $rb | ForEach-Object { Log "  rebuild: $_" }
         if ($LASTEXITCODE -eq 0) { $rebuilt = $true } else { Log "  rebuild: exit $LASTEXITCODE" }

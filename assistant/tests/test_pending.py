@@ -85,9 +85,14 @@ check("latch: an expired ask is not filed again", not any("Catalina" in e["text"
 posted = pending.surface()
 live = {c["id"]: c for c in cards._live()}
 qs = [c["questions"][0] for c in live.values()]
-check("surface: cards go up, at most MAX_OPEN, never for the builder's own requests",
-      0 < len(posted) <= pending.MAX_OPEN and not any(kinds.get(k) == "build" for k in posted)
-      and all(q.get("pending_key") for q in qs))
+kinds_now = {e["key"]: e["kind"] for e in pending.entries()}
+state_now = core.load(pending.CARDS, {})
+check("surface: only a protected rule is a card, at most MAX_OPEN, never for the builder's own requests",
+      0 < len(qs) <= pending.MAX_OPEN and not any(kinds_now.get(k) == "build" for k in posted)
+      and all(q.get("pending_key") for q in qs) and all(kinds_now.get(q["pending_key"]) == "rule" for q in qs))
+check("surface: a review's question and a rule retirement are idea lines, never cards (2026-11-09)",
+      any(kinds_now.get(k) == "ask" for k in posted) and any(kinds_now.get(k) == "retire" for k in posted)
+      and all(state_now.get(k, {}).get("idea") for k in posted if kinds_now.get(k) in ("ask", "retire")))
 check("surface: every card has an action button marked Recommended",
       all(any("(Recommended)" in o["label"] for o in q["options"]) for q in qs))
 check("surface: a second tick posts nothing new while those are open", pending.surface() == [])
@@ -140,20 +145,19 @@ ret_key = next(e["key"] for e in pending.entries() if e["kind"] == "retire")
 check("tap: an unknown button is refused, nothing closes", not pending.answer(ret_key, "Banana")["ok"]
       and ret_key in [e["key"] for e in pending.entries()])
 
-# the sweep hands a tap on a pending card to pending.answer
-c = next(c for c in cards._live() if c["questions"][0]["pending_key"] == ret_key) if any(
-    c["questions"][0]["pending_key"] == ret_key for c in cards._live()) else None
-if c is None:
-    core.save(pending.CARDS, {})
-    for x in cards._live():
-        cards._retire(x, "superseded")
-    pending.surface()
-    c = next(c for c in cards._live() if c["questions"][0]["pending_key"] == ret_key)
-cards.answer(c["id"], pending.KEEP)
+# the sweep hands a tap on a pending card to pending.answer (a protected rule is the kind that is still a card)
+core.pend("rule", "Never text a couple before nine in the morning", "dream [t4]", "sage-dream")
+sw_key = next(e["key"] for e in pending.entries() if e["kind"] == "rule")
+core.save(pending.CARDS, {})
+for x in cards._live():
+    cards._retire(x, "superseded")
+pending.surface()
+c = next(c for c in cards._live() if c["questions"][0]["pending_key"] == sw_key)
+cards.answer(c["id"], pending.DROP)
 cards.UNDO_S = 0
 cards.sweep()
 check("sweep: a tap on a queue card is done by code (the entry closes, no operator ticket)",
-      ret_key not in [e["key"] for e in pending.entries()])
+      sw_key not in [e["key"] for e in pending.entries()])
 
 check("the section keeps its headings", all(h in SUGG.read_text(encoding="utf-8") for h in ("## Pending", "## Applied automatically", "## Dismissed")))
 

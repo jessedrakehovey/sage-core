@@ -346,6 +346,8 @@ def surface(dry: bool = False) -> list:
         c = st.get(e["key"]) or {}
         if _card_open(c):
             continue
+        if c.get("idea"):
+            continue                # already an idea line under the digest: said once, not suggested again every tick
         if c.get("qid") and (int(c.get("posts", 0)) >= MAX_POSTS or now - float(c.get("ts", 0)) < REPOST_AFTER_S):
             continue
         card = card_for(e)
