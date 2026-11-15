@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+4d351db",
+  "version": "2026.11.14+762f248",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T21:29:48"
+  "synced": "2026-11-14T21:32:32"
  },
  "modules": {
   "money": {
@@ -227,7 +227,7 @@
   "assistant/doer/egress.py": "ef7484f7970cbcdfd2d7a6a23521c3b286018af38287fc1ed13f51f03a891ff9",
   "assistant/doer/learn.py": "51a4522d95a29517308d0f91b9d9c80caadcf77886f5b0597331655b272301a1",
   "assistant/doer/leftopen.py": "c1cd7d75355eb8481261ee93b38b3d878b9906b3c4f8cd46e8a1dfb26a8bda44",
-  "assistant/doer/livecard.py": "79f464e013c903ea62b614d2098ab5227160698b40d3994af8d9891c892f5637",
+  "assistant/doer/livecard.py": "5cd527054ab0186a97bf77e053a326448fd23bdff4f24236b1f119b55b06f7e5",
   "assistant/doer/login_fill.py": "220d7a9f5bf4fc781575e17ffe605c6f0a7c8465d67b68856ea71d9f02a258c4",
   "assistant/doer/notes.py": "e80b11c06d055f713a7c1953f1b4e09c6f0c9ded0e440146688a0d42f9c8e88f",
   "assistant/doer/policy.json": "181da6f398e1cc1ff80329b7d36256ee9a8c10a941aa091b7831957947de7462",
@@ -343,7 +343,7 @@
   "assistant/scripts/setup_creds.py": "89467e5c627a1a72e55ddc9b141ba0886c2a1a497c2b6175a961921e9b51d31d",
   "assistant/scripts/setup_page.py": "862fd723e68453b809d89bec7abbcc62cd779eb353de675d9be5090cf8c3e965",
   "assistant/scripts/sheet_fix.py": "fdb6847ecc2d8df41567cf33b079f7890f732e713bcce26cec60fd65f8cee21a",
-  "assistant/scripts/shots.py": "49c00bbd0750e40adb0a25a25b562a475e899f03bf11dafebdb28ff16ccf8e4e",
+  "assistant/scripts/shots.py": "a6dc8d38915bb2c7f81c594e02c57011987278b2def06cf1b06fa8e70e79c7ec",
   "assistant/scripts/shots_setup.py": "3a67fb0e2fc484144225ed6e205efa3480be65f7a299b116b908e62df7fe3d4a",
   "assistant/scripts/spine.ps1": "0cf1575168a2d1fcb0386cba0aec3fe75a77d2a00a1023b2a53fef2daae73c6b",
   "assistant/scripts/spine.py": "6a0334e11d0bac97613ae7e72ff77465bc3a550624b0670760451d236714b46b",
@@ -449,7 +449,7 @@
   "assistant/tests/test_learn.py": "fbf67061a3a42235957a1e3ef4182eb86e8d3cc7ec5298ad18fbd14cd563825b",
   "assistant/tests/test_left_open.py": "daba25093752a60f1f3cbd7143ed43ad78a3aa07a5232399718f05959466bd60",
   "assistant/tests/test_lifecycle.py": "7bdacb9a630425a64302f7a05a439f51a28fcbc81ca5041da1a553d827a784ed",
-  "assistant/tests/test_live_card.py": "f35f73a7cf11ae04c54a4dc7238715132574def51a0e69e16c9eb5c232e1c101",
+  "assistant/tests/test_live_card.py": "9bc4ee78bfeb1df4aafb756b35607868decd1bccb5640e15d78d759c223a383f",
   "assistant/tests/test_mail_arm.py": "841cfdbfc79032d35242c43781bcbefdf4765d9edb60d6724426212a7825f5d5",
   "assistant/tests/test_mail_attach.py": "96051f8dbd6ae16310700660f69bdfcdb9d29ad98bba42dac01c2208a825dc95",
   "assistant/tests/test_mail_rules.py": "0faca9fab327112e1755dbd4ff2812a26f1c79d8b9f3c71c6b2aed461adbdbaa",

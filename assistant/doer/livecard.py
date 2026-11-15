@@ -315,20 +315,20 @@ def capture(t: dict, out_path: Path) -> bool:
 def _shot(t: dict, st: dict, force: bool = False) -> str:
     """Take and host a fresh picture when one is due; -> the url to show (the last one when not due)."""
     now = time.time()
-    if not force and now - float(st.get("shot_at") or 0) < SHOT_EVERY_S:
+    if not force and now - float(st.get("shot_try") or st.get("shot_at") or 0) < SHOT_EVERY_S:
         return str(st.get("shot_url") or "")
+    st["shot_try"] = now
     tid = str(t.get("id") or "")
     path = OUT / tid / "live.jpg"
     if not capture(t, path):
         return str(st.get("shot_url") or "")
-    st["shot_at"] = now
     try:
         import shots
         url = shots.publish(path) if shots.enabled() else ""
     except Exception:  # noqa: BLE001
         url = ""
-    if url:
-        st["shot_url"] = url
+    if url:                         # the time on the card is the picture's own; a failed upload keeps the last one
+        st["shot_url"], st["shot_at"] = url, now
     return str(st.get("shot_url") or "")
 
 
@@ -392,7 +392,7 @@ def body(t: dict, st: dict) -> dict:
         foot.append("It is in front now: Control PC shows it.")
     if st.get("stopping"):
         foot.append("Stopping at the next step.")
-    if st.get("shot_at"):
+    if st.get("shot_at") and st.get("shot_url"):     # never "Picture from" over a card that shows none
         foot.append(f"Picture from {_clock(st['shot_at'])}.")
     if btns or foot:
         w = ([{"buttonList": {"buttons": btns}}] if btns else []) + \

@@ -176,6 +176,21 @@ def shrink(path: Path, max_width: int = MAX_WIDTH) -> tuple:
         return data, ("image/png" if path.suffix.lower() == ".png" else "image/jpeg")
 
 
+def _retry(call, tries: int = 2):
+    """Run one Drive call, once more after a timeout or a dropped connection (never after a refusal)."""
+    for i in range(tries):
+        try:
+            return call()
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or i == tries - 1:
+                raise
+        except (TimeoutError, urllib.error.URLError, ConnectionError, OSError):
+            if i == tries - 1:
+                raise
+        _log(f"drive call retried after a stall (try {i + 2})")
+    return {}
+
+
 def publish(path, ttl_s: int | None = None) -> str:
     """Host one picture; -> its card url, or '' when hosting is off, not set up, or failed. Never raises."""
     p = Path(path)
@@ -193,16 +208,18 @@ def publish(path, ttl_s: int | None = None) -> str:
         b = "shot-boundary-" + os.urandom(6).hex()
         body = (f"--{b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode() + meta
                 + f"\r\n--{b}\r\nContent-Type: {mime}\r\n\r\n".encode() + data + f"\r\n--{b}--".encode())
-        r = _api(UPLOAD, body, "POST", f"multipart/related; boundary={b}", timeout=60)
+        # Drive stalls now and then (a read that never answers, 2026-11-04..14): a short timeout and a second try
+        # land the picture in seconds where one long wait used to lose it and leave the card without one.
+        r = _retry(lambda: _api(UPLOAD, body, "POST", f"multipart/related; boundary={b}", timeout=25))
         fid = str(r.get("id") or "")
         if not fid:
             return ""
-        _api(f"{DRIVE}/files/{fid}/permissions?supportsAllDrives=true",
-             json.dumps({"role": "reader", "type": "anyone"}).encode("utf-8"), "POST")
-        st = _state()
+        st = _state()                                # indexed before sharing, so the sweep removes it either way
         files = st.setdefault("files", {})
         files[fid] = {"exp": time.time() + ttl, "src": p.name}
         _save(st)
+        _retry(lambda: _api(f"{DRIVE}/files/{fid}/permissions?supportsAllDrives=true",
+                            json.dumps({"role": "reader", "type": "anyone"}).encode("utf-8"), "POST", timeout=15))
         return image_url(fid)
     except Exception as e:  # noqa: BLE001
         _log(f"publish failed for {p.name}: {type(e).__name__}: {str(e)[:160]}")

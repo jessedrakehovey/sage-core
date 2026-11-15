@@ -111,6 +111,22 @@ idx = json.loads(Path(os.environ["SHOTS_INDEX"]).read_text(encoding="utf-8"))
 check("shots: the hosted file is indexed with its lifetime", "FILE123" in idx["files"] and idx["files"]["FILE123"]["exp"] > time.time())
 check("shots: sweep leaves a live file alone, deletes a dead one", shots.sweep() == 0 and shots.sweep(now=time.time() + 120) == 1
       and any(c == ("DELETE", "https://www.googleapis.com/drive/v3/files/FILE123?supportsAllDrives=true") for c in calls))
+_stalls = {"n": 1}
+
+
+def stall_once_api(url, body=None, method="", content_type="application/json", timeout=30):
+    if "upload/drive" in url and _stalls["n"]:
+        _stalls["n"] -= 1
+        raise TimeoutError("The read operation timed out")
+    return fake_api(url, body, method, content_type, timeout)
+
+
+shots._api = stall_once_api
+check("shots: one Drive stall on the upload is retried, so the picture still lands (2026-11-14: card showed none)",
+      shots.publish(png) == "https://lh3.googleusercontent.com/d/FILE123" and _stalls["n"] == 0)
+_stalls["n"] = 9
+check("shots: an upload that keeps stalling -> no url, never raises", shots.publish(png) == "")
+shots._api = fake_api
 shots._cfg = lambda: {"backend": "off"}
 check("shots: backend off -> no url, status says so", shots.publish(png) == "" and shots.status()["ok"] is False)
 shots._cfg = lambda: {"backend": "drive", "drive_name": "Nowhere", "folder_id": "", "ttl_s": 60}
@@ -174,6 +190,15 @@ check("live card: a fresh picture is left alone by the expiry", livecard.expire_
 check("live card: a picture past its lifetime is taken off the card in place (no broken image left standing)",
       livecard.expire_pictures(ttl_s=600, now=time.time() + 700) == 1 and not any("image" in w for w in widgets(ch.patched[-1][1]))
       and "Picture from" not in json.dumps(ch.patched[-1][1]) and livecard.expire_pictures(ttl_s=600, now=time.time() + 700) == 0)
+_real_publish = shots.publish
+shots.publish = lambda path, ttl_s=None: ""
+_st = {"shot_url": "", "shot_at": 0}
+livecard._shot(t, _st, force=True)
+_bp = livecard.body(t, dict(_st, state="running", shot_at=time.time()))
+check("live card: a picture whose upload failed leaves no 'Picture from' time and retries on the next beat",
+      _st["shot_url"] == "" and not _st["shot_at"] and _st.get("shot_try")
+      and "Picture from" not in json.dumps(_bp))
+shots.publish = _real_publish
 import browser as _browser  # noqa: E402
 _browser.show_on_screen = lambda: (True, "maximized on the main monitor")
 livecard.start(t, "again")
