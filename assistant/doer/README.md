@@ -482,3 +482,59 @@ else runs until `browser_handle_dialog` answers it; errors are Playwright's own 
 jobs' one; `browser_mcp.py --check` says whether it can serve) and falls back to the Node package only when none can
 and Node is installed. `config.json -> doer.browser_server: "node"` forces the old server. Test:
 `assistant/tests/test_browser_mcp.py`.
+
+## One browser that stays up: background, foreground, the agent's own cursor (2026-11-14)
+
+The owner: "I need it to fully support working in background and foreground modes. Seamlessly work with Sage and stop
+relaunching browsers when running new scripts. I don't like seeing browsers open and close over and over", and "a
+smooth cursor control ... as a second cursor so the pc can be used by user at same time".
+
+**It stays up.** Every job used to start the browser and quit it at the end, asking for it on screen while it was
+hidden quit it and started another, and the hourly sign-in check opened a second Chrome on the same profile. Now
+`browser.close_browser()` PARKS the one browser (one blank tab, out of sight) and the next job, script or check
+attaches to the same process; `open_browser()` never restarts it to move its window. It really quits only on
+`browser.py --close` / `close_browser(quit=True)`, or after every job again with `config.json -> doer.keep_open: false`.
+"Is it running" therefore no longer means "is it busy": `browser.in_use()` (a browser job is running, or a page is
+held for an owner) is the question to ask, and a caller that is not the running job never parks or quits under it.
+
+**Two places, switched by moving the window.** FOREGROUND: on the main monitor, maximized, in front
+(`show_on_screen()`, `--front`). BACKGROUND: off the screen and, on Windows, without a taskbar button
+(`send_to_back()`, `--back`). `doer.mode`: `auto` (in front unless someone used the PC within `clear_screen_idle_s`;
+the 2026-11-06 rule), `background` (never in front by itself; Control PC and a sign-in still show it), `foreground`
+(always). Without `doer.mode`, the older `in_front` decides (true = auto, false = background).
+
+What was measured on this PC before any of it was written (2026-11-14):
+
+- Nothing the browser does in the background takes the keyboard: attaching, loading a page, a click, a new tab,
+  switching tabs, removing or restoring the taskbar button. A browser STARTING does. So the start that remains (once,
+  not once a job) hands the keyboard straight back to the window that had it (`_give_back_focus`).
+- A window hidden outright is NOT a safe background: a picture of its page timed out in one of two tries. A window off
+  the screen without a taskbar button (the tool-window style, `_taskbar`) took every picture and every snapshot. That
+  is why the background is the second, not the first.
+- Attaching to the browser that is up is faster than starting one (the test checks it).
+
+**The agent's own cursor** (`browser_mcp.py`; `doer.cursor: {"on": true, "color": "#rrggbb", "label": ""}`, the label
+defaults to the agent's name). A pointer with the agent's name is drawn in the page and glides to each element before
+the click, the typing or the hover lands, with a ring on the click. It is a second cursor in the full sense: the
+browser's input is made inside the browser, so the PC's mouse and keyboard are never moved or taken. Only the drawing
+glides; the real pointer event lands straight on the target (a real pointer dragged across a page opens every hover
+menu on the way and covers the target). Off the screen it jumps instead of gliding, so a background job loses no
+time. It is hidden from the accessibility tree (the snapshot never shows it), lives in a closed shadow root, takes no
+click, and is in every picture of the page.
+
+Also in `browser_mcp.py`: a pop-up window a page opens while the agent's window is in the background is put there too;
+a picture that hangs on a page's web fonts ("waiting for fonts to load") is taken straight from the browser instead;
+`filename` on snapshot / find / console / evaluate and `scale` on a screenshot, as the Node server had.
+
+Against the Node server it replaces (its own tool list, read 2026-11-14): 25 tools there, 18 here. The 18 are every
+tool the doer is allowed. Of the other 7, three are on the doer's deny list (run code, file upload, network request)
+and four were never on its allow list (close, drop, emulate media, network requests). Still missing on purpose:
+`isolatedContext` on tabs (the doer works in the one signed-in profile) and webp pictures.
+
+Not changed: a connector lane that keeps a browser profile of its own (an organization's CRM scripts, on the system
+Chrome) still opens and closes that browser for its own keepalive, off the screen. The Playwright Python package is still what
+drives the browser; what was replaced is the Node tool server in front of it.
+
+Tests: `test_browser_stay_up.py` (a throwaway browser: parks, re-attaches to the same process, works in the
+background, quits only when told; the foreground round trip with `SAGE_TEST_FRONT=1`), `test_browser_mcp.py` (the
+cursor's glide sampled mid-way from a second connection), `test_left_open.py`.

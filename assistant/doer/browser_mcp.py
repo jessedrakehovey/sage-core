@@ -14,6 +14,16 @@ arbitrary Playwright code, file upload, raw network requests, installing a brows
 Elements are addressed by the `[ref=e12]` marks of the page snapshot (Playwright's own `aria_snapshot(mode="ai")` +
 its `aria-ref=` selector), or by a plain selector. `target` is the current name of that argument, `ref` the older
 one; both are taken. stdout carries protocol lines only; everything else goes to stderr.
+
+The agent's own cursor (2026-11-14; `--cursor off` to leave it out). The owner: "a smooth cursor control ... and if
+possible as a second cursor so the pc can be used by user at same time". A pointer with the agent's name is drawn IN
+THE PAGE and glides to each element before the click, the typing or the hover lands there, with a ring on the click.
+It is a second cursor in the full sense: the browser's input is made inside the browser, so the PC's own mouse and
+keyboard are never moved or taken, in front or in the background. What glides is the drawing; the real pointer event
+still lands straight on the target (a real pointer dragged across the page opens every hover menu on the way and
+covers the target). Off the screen nobody is watching, so the cursor jumps instead of gliding and a job loses no time;
+it is still in every picture of the page, at the place the agent last touched. It is hidden from the accessibility
+tree, so the snapshot never shows it, and it lives in a closed shadow root, so a page's styles cannot reach it.
 """
 from __future__ import annotations
 
@@ -30,10 +40,74 @@ ACTION_MS = 5000            # one click / type / hover (the Node server's defaul
 NAV_MS = 60000
 SNAP_MAX = 60000            # characters of snapshot returned inline; the rest is cut with a note
 REF = re.compile(r"^(?:f\d+)?e\d+$")
+GLIDE_MIN_MS, GLIDE_MAX_MS = 220, 650   # one glide of the cursor, by how far it goes
+COLOR = re.compile(r"^#[0-9a-fA-F]{3,8}$")
+
+# The cursor, as one function the page runs: build it once per document (DOM calls and style properties only: no
+# innerHTML, no style text, so a strict content policy or Trusted Types cannot refuse it), then move it.
+# args: {x, y, fx, fy, ms, label, color, pulse}; returns the milliseconds the glide will take (0 = it jumped).
+CURSOR_JS = r"""(a) => {
+  if (window.top !== window) return 0;
+  let c = window.__agentCursor;
+  if (!c || !c.host.isConnected) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const host = document.createElement('div');
+    host.setAttribute('aria-hidden', 'true');
+    host.setAttribute('data-agent-cursor', '');
+    const hs = host.style;
+    hs.position = 'fixed'; hs.left = '0'; hs.top = '0'; hs.width = '0'; hs.height = '0';
+    hs.zIndex = String(Math.pow(2, 31) - 1); hs.pointerEvents = 'none';   // the top layer (the number spelled out reads as a phone number to core_sync)
+    const root = host.attachShadow({mode: 'closed'});
+    const wrap = document.createElement('div');
+    const ws = wrap.style;
+    ws.position = 'absolute'; ws.left = '0'; ws.top = '0'; ws.pointerEvents = 'none'; ws.willChange = 'transform';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', '26'); svg.setAttribute('height', '26'); svg.setAttribute('viewBox', '0 0 26 26');
+    svg.style.display = 'block'; svg.style.overflow = 'visible';
+    svg.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,.35))';
+    const arrow = document.createElementNS(NS, 'path');
+    arrow.setAttribute('d', 'M4 2 L4 20.5 L8.9 16.2 L12.2 23.6 L15.3 22.2 L12.1 15 L18.8 15 Z');
+    arrow.setAttribute('stroke', '#ffffff'); arrow.setAttribute('stroke-width', '1.6'); arrow.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(arrow);
+    const tag = document.createElement('div');
+    const ts = tag.style;
+    ts.position = 'absolute'; ts.left = '17px'; ts.top = '19px'; ts.padding = '2px 8px'; ts.borderRadius = '10px';
+    ts.font = '600 11px/15px system-ui, -apple-system, "Segoe UI", sans-serif'; ts.color = '#ffffff'; ts.whiteSpace = 'nowrap';
+    ts.boxShadow = '0 1px 3px rgba(0,0,0,.3)'; ts.letterSpacing = '.01em';
+    const ring = document.createElement('div');
+    const rs = ring.style;
+    rs.position = 'absolute'; rs.left = '-12px'; rs.top = '-14px'; rs.width = '32px'; rs.height = '32px';
+    rs.borderRadius = '50%'; rs.borderStyle = 'solid'; rs.borderWidth = '2px'; rs.opacity = '0'; rs.boxSizing = 'border-box';
+    wrap.appendChild(ring); wrap.appendChild(svg); wrap.appendChild(tag);
+    root.appendChild(wrap);
+    (document.documentElement || document.body).appendChild(host);
+    c = {host, wrap, arrow, tag, ring, x: null, y: null};
+    try { Object.defineProperty(window, '__agentCursor', {value: c, configurable: true, enumerable: false, writable: true}); }
+    catch (e) { window.__agentCursor = c; }
+  }
+  const color = a.color || '#2f6fed';
+  c.arrow.setAttribute('fill', color);
+  c.tag.style.background = color;
+  c.ring.style.borderColor = color;
+  c.tag.textContent = a.label || '';
+  c.tag.style.display = a.label ? 'block' : 'none';
+  const place = (x, y) => { c.wrap.style.transform = 'translate(' + (x - 4) + 'px,' + (y - 2) + 'px)'; c.x = x; c.y = y; };
+  if (a.pulse) {
+    if (c.ring.animate) c.ring.animate([{opacity: .85, transform: 'scale(.35)'}, {opacity: 0, transform: 'scale(1.5)'}], {duration: 420, easing: 'ease-out'});
+    return 0;
+  }
+  if (c.x === null) { c.wrap.style.transition = 'none'; place(a.fx, a.fy); void c.wrap.offsetWidth; }
+  const seen = document.visibilityState === 'visible' && window.screenX > -10000 && window.screenY > -10000;
+  const ms = seen ? Math.max(0, a.ms | 0) : 0;
+  c.wrap.style.transition = ms ? 'transform ' + ms + 'ms cubic-bezier(.22,.61,.36,1)' : 'none';
+  place(a.x, a.y);
+  return ms;
+}"""
 LEVELS = ["debug", "info", "warning", "error"]
 
 _EL = {"type": "string", "description": "Human-readable element description"}
 _TG = {"type": "string", "description": "Exact target element reference from the page snapshot, or a unique element selector"}
+_FN = {"type": "string", "description": "Save the result to this file in the job's own folder instead of returning it"}
 
 
 def _schema(props: dict | None = None, required: list | None = None) -> dict:
@@ -46,7 +120,7 @@ TOOLS = [
     ("browser_snapshot", "Capture accessibility snapshot of the current page, this is better than screenshot",
      _schema({"depth": {"type": "number", "description": "Limit the depth of the snapshot tree"},
               "boxes": {"type": "boolean", "description": "Include each element's bounding box"},
-              "target": _TG})),
+              "target": _TG, "filename": _FN})),
     ("browser_click", "Perform click on a web page",
      _schema({"element": _EL, "target": _TG, "doubleClick": {"type": "boolean"},
               "button": {"type": "string", "enum": ["left", "right", "middle"]},
@@ -71,7 +145,8 @@ TOOLS = [
      _schema({"time": {"type": "number", "description": "Seconds, at most 30"}, "text": {"type": "string"}, "textGone": {"type": "string"}})),
     ("browser_take_screenshot", "Take a screenshot of the current page. Use browser_snapshot for actions.",
      _schema({"type": {"type": "string", "enum": ["png", "jpeg"]}, "filename": {"type": "string"},
-              "element": _EL, "target": _TG, "fullPage": {"type": "boolean"}})),
+              "element": _EL, "target": _TG, "fullPage": {"type": "boolean"},
+              "scale": {"type": "string", "enum": ["css", "device"], "description": "css (default): sized in CSS pixels; device: the screen's own pixels"}})),
     ("browser_tabs", "List, create, close, or select a browser tab.",
      _schema({"action": {"type": "string", "enum": ["list", "new", "close", "select"]}, "index": {"type": "number"},
               "url": {"type": "string"}}, ["action"])),
@@ -81,16 +156,16 @@ TOOLS = [
                      "the matching lines with a little context, cheaper than the whole snapshot",
      _schema({"text": {"type": "string", "description": "Plain text (case-insensitive)"},
               "regex": {"type": "string", "description": "A regular expression; /pattern/i for flags"},
-              "maxResults": {"type": "number"}})),
+              "maxResults": {"type": "number"}, "filename": _FN})),
     ("browser_console_messages", "Returns console messages",
-     _schema({"level": {"type": "string", "enum": ["error", "warning", "info", "debug"]}, "all": {"type": "boolean"}})),
+     _schema({"level": {"type": "string", "enum": ["error", "warning", "info", "debug"]}, "all": {"type": "boolean"}, "filename": _FN})),
     ("browser_resize", "Resize the browser window",
      _schema({"width": {"type": "number"}, "height": {"type": "number"}}, ["width", "height"])),
     ("browser_drag", "Perform drag and drop between two elements",
      _schema({"startElement": _EL, "startTarget": _TG, "endElement": _EL, "endTarget": _TG}, ["startTarget", "endTarget"])),
     ("browser_evaluate", "Evaluate JavaScript expression on page or element",
      _schema({"function": {"type": "string", "description": "() => { /* code */ } or (element) => { /* code */ } when a target is given"},
-              "element": _EL, "target": _TG}, ["function"])),
+              "element": _EL, "target": _TG, "filename": _FN}, ["function"])),
 ]
 
 
@@ -139,8 +214,11 @@ def clip(snap: str, limit: int = SNAP_MAX) -> str:
 class Browser:
     """One attachment to the doer's browser. Connects on the first tool call; re-attaches if the link dropped."""
 
-    def __init__(self, cdp: str, out_dir: Path):
+    def __init__(self, cdp: str, out_dir: Path, cursor: bool = True, label: str = "", color: str = ""):
         self.cdp, self.out = cdp, out_dir
+        self.cursor, self.label = bool(cursor), str(label or "")[:24]
+        self.color = color if COLOR.match(color or "") else ""
+        self.at: dict = {}                               # where the cursor was last, per page: id(page) -> (x, y)
         self.pw = self.browser = self.ctx = self.page = None
         self.dialog = None
         self.console: list[tuple[int, str, str]] = []     # (navigation count, level, text)
@@ -180,7 +258,10 @@ class Browser:
     def _wire(self, page) -> None:
         if id(page) in self._wired:
             return
+        first = bool(self._wired)
         self._wired.add(id(page))
+        if first and self.ctx is not None:
+            self._tuck(page)
         page.on("dialog", self._on_dialog)
         page.on("console", lambda m: self._on_console(m))
         page.on("framenavigated", lambda f, p=page: self._on_nav(f, p))
@@ -202,6 +283,84 @@ class Browser:
                 self.navs += 1
         except Exception:  # noqa: BLE001
             pass
+
+    def _tuck(self, page) -> None:
+        """A window a page opened by itself (a pop-up) while the agent's own window is in the background goes to the
+        background too, instead of landing in front of whoever is at the PC."""
+        try:
+            main = next((p for p in self.ctx.pages if p is not page and not p.is_closed()), None)
+            if main is None:
+                return
+            def bounds(pg):
+                cs = self.ctx.new_cdp_session(pg)
+                try:
+                    wid = cs.send("Browser.getWindowForTarget")["windowId"]
+                    return cs, wid, cs.send("Browser.getWindowBounds", {"windowId": wid})["bounds"]
+                except Exception:  # noqa: BLE001
+                    cs.detach()
+                    raise
+            cs0, wid0, b0 = bounds(main)
+            cs0.detach()
+            if int(b0.get("left", 0)) > -10000:
+                return                                   # the agent's window is on screen: a pop-up belongs there too
+            cs1, wid1, b1 = bounds(page)
+            try:
+                if wid1 != wid0 and int(b1.get("left", 0)) > -10000:
+                    cs1.send("Browser.setWindowBounds", {"windowId": wid1, "bounds": {"windowState": "normal"}})
+                    cs1.send("Browser.setWindowBounds", {"windowId": wid1, "bounds": {"left": -32000, "top": -32000}})
+                    log("a pop-up window was put in the background with the rest")
+            finally:
+                cs1.detach()
+        except Exception as e:  # noqa: BLE001
+            log(f"tuck: {type(e).__name__}")
+
+    # ---- the agent's own cursor ------------------------------------------------------------------------------
+    def _cursor(self, args: dict) -> int:
+        try:
+            return int(self.page.evaluate(CURSOR_JS, {"label": self.label, "color": self.color, **args}) or 0)
+        except Exception:  # noqa: BLE001 - a page mid-navigation, a document that refuses scripts: the work goes on
+            return 0
+
+    def glide(self, loc) -> None:
+        """Move the agent's cursor to the middle of an element, smoothly when someone can see it. Never the reason an
+        action fails: an element that is not there yet is the action's own error to report, in Playwright's words."""
+        if not self.cursor:
+            return
+        try:
+            box = loc.bounding_box(timeout=1200)
+            if not box:
+                return
+            vp = self.page.viewport_size or {}
+            w, h = vp.get("width") or 1280, vp.get("height") or 800
+            if not (0 <= box["y"] + box["height"] / 2 <= h and 0 <= box["x"] + box["width"] / 2 <= w):
+                loc.scroll_into_view_if_needed(timeout=1500)
+                box = loc.bounding_box(timeout=1200) or box
+            x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            fx, fy = self.at.get(id(self.page)) or (w * 0.5, h * 0.42)
+            dist = ((x - fx) ** 2 + (y - fy) ** 2) ** 0.5
+            ms = int(min(GLIDE_MAX_MS, max(GLIDE_MIN_MS, 160 + dist * 0.5))) if dist > 3 else 0
+            took = self._cursor({"x": x, "y": y, "fx": fx, "fy": fy, "ms": ms})
+            self.at[id(self.page)] = (x, y)
+            if took > 0:
+                time.sleep(took / 1000.0 + 0.04)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def pulse(self) -> None:
+        if self.cursor and self.at.get(id(self.page)):
+            self._cursor({"pulse": True})
+
+    def _save(self, a: dict, text: str, ext: str = "md"):
+        """`filename` given: the result goes to that file inside the job's own folder (whatever path was asked) and
+        the tool answers with where it is. -> the answer, or None when no file was asked for."""
+        fn = str(a.get("filename") or "").strip()
+        if not fn:
+            return None
+        name = Path(fn).name or f"result.{ext}"
+        self.out.mkdir(parents=True, exist_ok=True)
+        dst = self.out / name
+        dst.write_text(text, encoding="utf-8")
+        return _text(f"saved: {dst.as_posix()} ({len(text)} characters)")
 
     # ---- helpers ---------------------------------------------------------------------------------------------
     def loc(self, a: dict, key: str = "target", old: str = "ref"):
@@ -290,19 +449,23 @@ class Browser:
         return _text(self.state())
 
     def t_snapshot(self, a):
-        return _text(f"### Page\n- Page URL: {self.page.url}\n- Page Title: {self._title()}\n### Snapshot\n```yaml\n"
-                     + clip(self.snapshot(a)) + "\n```")
+        snap = self.snapshot(a)
+        return self._save(a, snap, "yml") or _text(
+            f"### Page\n- Page URL: {self.page.url}\n- Page Title: {self._title()}\n### Snapshot\n```yaml\n" + clip(snap) + "\n```")
 
     def t_click(self, a):
         kw = {"timeout": ACTION_MS, "button": a.get("button") or "left"}
         if a.get("modifiers"):
             kw["modifiers"] = list(a["modifiers"])
         loc = self.loc(a)
+        self.glide(loc)
         (loc.dblclick if a.get("doubleClick") else loc.click)(**kw)
+        self.pulse()
         return _text(self.state())
 
     def t_type(self, a):
         loc, text = self.loc(a), str(a.get("text") or "")
+        self.glide(loc)
         if a.get("slowly"):
             loc.press_sequentially(text, timeout=max(ACTION_MS, 80 * len(text) + ACTION_MS))
         else:
@@ -317,6 +480,7 @@ class Browser:
             raise ToolError("fields is required")
         for f in fields:
             loc, kind, val = self.loc(f), str(f.get("type") or "textbox"), str(f.get("value") or "")
+            self.glide(loc)
             if kind in ("checkbox", "radio"):
                 loc.set_checked(val.strip().lower() == "true", timeout=ACTION_MS)
             elif kind == "combobox":
@@ -328,6 +492,7 @@ class Browser:
     def t_select_option(self, a):
         vals = [str(v) for v in (a.get("values") or [])]
         loc = self.loc(a)
+        self.glide(loc)
         try:
             loc.select_option(vals, timeout=ACTION_MS)
         except Exception:  # noqa: BLE001 - the values were the options' visible text, not their value attributes
@@ -342,7 +507,9 @@ class Browser:
         return _text(self.state())
 
     def t_hover(self, a):
-        self.loc(a).hover(timeout=ACTION_MS)
+        loc = self.loc(a)
+        self.glide(loc)
+        loc.hover(timeout=ACTION_MS)
         return _text(self.state())
 
     def t_wait_for(self, a):
@@ -370,12 +537,43 @@ class Browser:
         name = Path(fn).name if fn else f"page-{time.strftime('%Y%m%dT%H%M%S')}.{'jpg' if kind == 'jpeg' else 'png'}"
         self.out.mkdir(parents=True, exist_ok=True)
         dst = self.out / name                              # always inside the job's own folder, whatever path was asked
-        kw = {"path": str(dst), "type": kind, "timeout": 20000}
-        if a.get("target") or a.get("ref"):
-            self.loc(a).screenshot(**kw)
-        else:
-            self.page.screenshot(full_page=bool(a.get("fullPage")), **kw)
+        kw = {"path": str(dst), "type": kind, "timeout": 8000, "scale": "device" if a.get("scale") == "device" else "css"}
+        loc = self.loc(a) if (a.get("target") or a.get("ref")) else None
+        try:
+            if loc is not None:
+                loc.screenshot(**kw)
+            else:
+                self.page.screenshot(full_page=bool(a.get("fullPage")), **kw)
+        except Exception as e:  # noqa: BLE001
+            # Playwright waits for the page's web fonts before it takes a picture, and on some sites they never
+            # settle ("waiting for fonts to load", then a timeout: seen on a live site 2026-11-14). The browser itself
+            # takes the picture at once; ask it directly rather than fail the step.
+            if "Timeout" not in type(e).__name__ and "imeout" not in str(e):
+                raise
+            self._raw_shot(dst, kind, bool(a.get("fullPage")), loc)
         return _text(f"screenshot saved: {dst.as_posix()}")
+
+    def _raw_shot(self, dst: Path, kind: str, full: bool, loc=None) -> None:
+        import base64
+        params = {"format": kind, "captureBeyondViewport": bool(full)}
+        if kind == "jpeg":
+            params["quality"] = 85
+        if loc is not None:
+            box = loc.bounding_box(timeout=3000)
+            if not box:
+                raise ToolError("the element to picture is not on the page")
+            params["clip"] = {"x": box["x"], "y": box["y"], "width": max(1, box["width"]), "height": max(1, box["height"]), "scale": 1}
+        cs = self.ctx.new_cdp_session(self.page)
+        try:
+            data = cs.send("Page.captureScreenshot", params).get("data") or ""
+        finally:
+            try:
+                cs.detach()
+            except Exception:  # noqa: BLE001
+                pass
+        if not data:
+            raise ToolError("the browser returned no picture")
+        dst.write_bytes(base64.b64decode(data))
 
     def t_tabs(self, a):
         act = str(a.get("action") or "list")
@@ -414,21 +612,25 @@ class Browser:
         return _text("dialog " + ("accepted" if a.get("accept") else "dismissed") + "\n" + self.state())
 
     def t_find(self, a):
-        return _text(find_in_snapshot(self.snapshot(), str(a.get("text") or ""), str(a.get("regex") or ""),
-                                      int(a.get("maxResults") or 0)))
+        got = find_in_snapshot(self.snapshot(), str(a.get("text") or ""), str(a.get("regex") or ""), int(a.get("maxResults") or 0))
+        return self._save(a, got) or _text(got)
 
     def t_console_messages(self, a):
         floor = LEVELS.index(a.get("level") if a.get("level") in LEVELS else "info")
         rows = [f"[{lvl.upper()}] {txt}" for nav, lvl, txt in self.console
                 if LEVELS.index(lvl) >= floor and (a.get("all") or nav == self.navs)]
-        return _text("\n".join(rows) if rows else "no console messages")
+        body = "\n".join(rows) if rows else "no console messages"
+        return self._save(a, body, "log") or _text(body)
 
     def t_resize(self, a):
         self.page.set_viewport_size({"width": int(a["width"]), "height": int(a["height"])})
         return _text(f"resized to {int(a['width'])}x{int(a['height'])}")
 
     def t_drag(self, a):
-        self.loc(a, "startTarget", "startRef").drag_to(self.loc(a, "endTarget", "endRef"), timeout=ACTION_MS)
+        src, dst = self.loc(a, "startTarget", "startRef"), self.loc(a, "endTarget", "endRef")
+        self.glide(src)
+        src.drag_to(dst, timeout=ACTION_MS)
+        self.glide(dst)
         return _text(self.state())
 
     def t_evaluate(self, a):
@@ -440,7 +642,8 @@ class Browser:
             body = json.dumps(res, indent=1, ensure_ascii=False, default=str)
         except Exception:  # noqa: BLE001
             body = str(res)
-        return _text("### Result\n" + (body if body is not None else "undefined") + "\n" + self.state(with_snapshot=False))
+        body = body if body is not None else "undefined"
+        return self._save(a, body, "json") or _text("### Result\n" + body + "\n" + self.state(with_snapshot=False))
 
     def close(self) -> None:
         try:                                   # detach only: the browser is the doer's, never ours to close
@@ -527,6 +730,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cdp-endpoint", default="")
     ap.add_argument("--output-dir", default=".")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--cursor", choices=["on", "off"], default="on", help="draw the agent's own cursor in the page")
+    ap.add_argument("--cursor-label", default="", help="the name on the cursor (the agent's)")
+    ap.add_argument("--cursor-color", default="", help="#rrggbb")
     ns = ap.parse_args(argv)
     if ns.check:
         ok, why = check()
@@ -534,7 +740,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if ok else 1
     if not ns.cdp_endpoint:
         ap.error("--cdp-endpoint is required")
-    br = Browser(ns.cdp_endpoint, Path(ns.output_dir))
+    br = Browser(ns.cdp_endpoint, Path(ns.output_dir), cursor=ns.cursor == "on", label=ns.cursor_label, color=ns.cursor_color)
     try:
         serve(br)
     finally:
