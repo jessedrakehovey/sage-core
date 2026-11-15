@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+6436873",
+  "version": "2026.11.14+4972b92",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T18:09:52"
+  "synced": "2026-11-14T18:13:57"
  },
  "modules": {
   "money": {
@@ -367,7 +367,7 @@
   "assistant/scripts/triage_next.py": "0079d333ea7b5110efc293de3988a8f50b8d834f0a541215093c9b1b3cd4b706",
   "assistant/scripts/vault_chat.py": "9bb44c2cfa4eadafbab73d9833a1202bb5371b0c1d1d46fa4435c67764b37cba",
   "assistant/scripts/whois.py": "70555dab07b52282f0040c62ce20aed0a73ec8c57f0a9a1129177d8ea73fe16c",
-  "assistant/serve.json": "3e3af5df754e9747337395a38942bb51db512290dec82d3eca710de730caf73a",
+  "assistant/serve.json": "81554776dedbc15975b2c2a999f3f90b0213bf45a2770de8f94c6204b716f2bc",
   "assistant/setup_skill/sage-setup/SKILL.md": "4edd65191edbd2d9db6ad828d9b9e2f0453d6b51c6ab0a9a14b1d2797447ca22",
   "assistant/setup_skill/sage-setup/bootstrap.ps1": "6e4d5720972d2286030c7d533667788992a1c4508966602d6cf4a18c8729836d",
   "assistant/setup_skill/sage-setup/bootstrap.sh": "6b0d3a6842386ba2e040ffb486a846b075bb41c64c1061f59afdee7bc432cfea",
