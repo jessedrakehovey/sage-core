@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+740730a",
+  "version": "2026.11.15+aa1525f",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T11:15:35"
+  "synced": "2026-11-15T11:16:53"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "eb3529fa1bc305267ef5bd5f74f33b6e4d46de13b0cd2945fabbfc29209fa97a",
+  "assistant/README.md": "052f839323eeb085d19bb9ce2094fab43ddff384d5c0ee1ac630d7d76e2e811f",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "402d97aba11ca9ab84bdd9eeb9c87b8f4d548b760f6f6f7dd9c58dc42a4dd330",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -289,7 +289,7 @@
   "assistant/scripts/dashboard.py": "f9091de12ff40e4d426e71c4d4a5c2b1736dfdbb682521ce3715aa6880d7cc6f",
   "assistant/scripts/deadman.ps1": "32f6b22bc9d3a3be95bb1a0187c86de327bfe34503d211f130624153f0a63ea5",
   "assistant/scripts/deadman.py": "94053f7413ca6ce922b6e6c2fd7e7ae9a2bd888701ab26ae2c426a4c067ba983",
-  "assistant/scripts/decision_keys.py": "b93619e189df9eff30057145029ab485586f94a79a866df726812b3d96969077",
+  "assistant/scripts/decision_keys.py": "7916429add865e6d25607793cf3663217b5e8f472f46358b694c83aa57c28b91",
   "assistant/scripts/digest.py": "7d4a973537e2690fb3d477093dd6b598f1f7231a92ac945bcf28774483fd9746",
   "assistant/scripts/draft_lint.py": "b321397bbcf19a2bf8492c509041291b9dc8a94f059045ad1627947bf0032498",
   "assistant/scripts/drain.py": "a8a3127da49b2673244144b958be7bb94ea68dc62c6319d7fb0d07f795b3e174",
@@ -483,7 +483,7 @@
   "assistant/tests/test_regression_packets.py": "0261b3b227c363a2551902f9e86d760921b30728e4a4c84474e560d373816fca",
   "assistant/tests/test_relay.py": "b8b4d656a64b1823042c4217c8ec4e41fd547f047c965dbba5969f89d5a57576",
   "assistant/tests/test_remote_desktop.py": "dc0846366aefc6f89c4d5cf63d36aa44cbe133fba2fd82cacebf883e1c1f71d4",
-  "assistant/tests/test_repeat_asks.py": "eef650a5ab60164cbb5a6c1f1cfa321edeb3a67b356add88b9424ffe811fbb65",
+  "assistant/tests/test_repeat_asks.py": "15da7c11b301781867b0d6a31255b5fdbc277a2ef0d149d0323808ad287eefcb",
   "assistant/tests/test_rulings.py": "c7129cfacfbe98fd5dca17e6cce3fcdcd578c81eeb4e4465e39f69bf771dac38",
   "assistant/tests/test_sage_core.py": "d0106d5c4a4f35d70ced05d2cc9e10ed30086cb6b1836599963c5e1880844223",
   "assistant/tests/test_sagefix.py": "c7573e10f3f6b9bede7cb2c819e2afcd9af255db73c42bee504d0b0f7acf7e7d",

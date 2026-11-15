@@ -163,5 +163,18 @@ cards.answer(r["qid"], "Send (Recommended)")
 r = post(decision("Arden nudge", "Blake Northcott has not answered yet. Want me to draft a follow-up?"))
 check("a nudge offer after an approved message to him -> ALREADY_ANSWERED", not r.get("posted") and "ALREADY_ANSWERED" in r.get("reason", ""), r)
 
+# --- 7. the RESEND card the mint guard asks for ("a second message needs a card that says RESEND") ----
+# is not a re-ask of the text that went (ported from the property OS 2026-11-15)
+rs = text_card("Hollis resend", "+15550783878", UPSIDE + " !")
+rs["question"] += "\n\n" + cards.RESEND_MARK
+rs["exec"]["resend"] = True
+r = post(rs)
+check("the RESEND card after the send -> posts, not ALREADY_ANSWERED", r.get("posted"), r)
+if r.get("qid"):
+    cards.answer(r["qid"], "Skip")
+rs["exec"]["resend"] = False
+r = post(rs)
+check("...the same card without the resend flag is still ALREADY_ANSWERED", not r.get("posted") and "ALREADY_ANSWERED" in r.get("reason", ""), r)
+
 print(f"\n{'ALL OK' if not FAILS else str(len(FAILS)) + ' FAILED'}")
 sys.exit(1 if FAILS else 0)

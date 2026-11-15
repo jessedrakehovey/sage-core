@@ -277,6 +277,10 @@ def _check_exec(q, ex, ents, live, cards_mod) -> dict | None:
             return {"qid": c["id"], "reason": f"DUPLICATE_SUBJECT: card {c['id']} ({cq.get('header')!r}) already holds a {kind} draft "
                                                f"to {_who(ents & entities(cq))} saying the same thing. One message, one card: post a new version with "
                                                f"--replaces {c['id']} so it replaces that one."}
+    # the RESEND card the send guard asks for (exec.resend + the [RESEND] marker, cards._resend_ok) is not a
+    # re-ask of the message that went: it is the owner's second send (2026-11-15, ported from the property OS)
+    if getattr(cards_mod, "_resend_ok", lambda _q: False)(q):
+        return None
     try:
         import exec_store as es
         mine = es._outbound_target(kind, ex.get("payload") or {})

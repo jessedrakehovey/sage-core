@@ -83,7 +83,7 @@ Traffic is low, so nothing loops. Three tiers:
    `subject`/entities) or answered in the last 20 h (`ALREADY_ANSWERED`, quoting his answer) is refused. The same holds by PERSON
    whatever the header (`scripts/decision_keys.py`, 2026-10-19: an open card about that lead/couple, a Drop still standing until
    the CRM moves, a nudge offer within 3 days of an approved message, the same draft already open or already sent to that
-   number/address); the CRM sensor leaves dropped leads out of its tickets. Tests: `tests/test_repeat_asks.py`. Dead connections are
+   number/address; a RESEND card, exec.resend + the `[RESEND]` marker the mint guard asks for, is not a re-ask, 2026-11-15); the CRM sensor leaves dropped leads out of its tickets. Tests: `tests/test_repeat_asks.py`. Dead connections are
    carded BY CODE (`sentinels._conn_card` -> `cards.connection_card`: Set it up now / Leave it off / Something else; the
    sweep's `_act_on_setup` carries the tap out: connect.py's chat steps or setup_actions' recipe, said in chat; a connection with a chat setup gets "Say 'set up plaid' in chat" (`setup.chat.say`) and a
    detail with no command line or item id, 2026-10-18). The connection is checked once more right before its card (live -> no
