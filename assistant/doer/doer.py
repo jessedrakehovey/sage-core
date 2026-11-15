@@ -936,8 +936,37 @@ def same_page_block(tid: str) -> str:
             "- Once you are in, finish EVERY part of the job in this same session before your last line.\n")
 
 
-def _held_note(tid: str) -> str:
-    """The prompt line for a job that starts while another job's page is held open for an owner."""
+def _base_url(url: str) -> str:
+    return str(url or "").split("#", 1)[0].split("?", 1)[0].rstrip("/")
+
+
+def _named_tabs(t: dict | None) -> list:
+    """Open tabs whose address the job's own words name (2026-11-14, gap g-e894b3: "Use the ALREADY OPEN tab with
+    https://jobs.ashbyhq.com/... Do NOT reload it"). The owner pointing at a tab is their word to work in it, held or not."""
+    lo = _leftopen()
+    p = (t or {}).get("payload") or {}
+    text = str(p.get("text") or (t or {}).get("summary") or (t or {}).get("title") or "")
+    if not lo or "://" not in text:
+        return []
+    out = []
+    for pg in (lo._pages() or []):
+        base = _base_url(pg.get("url") or "")
+        if "://" in base and not base.startswith(("about:", "chrome:", "devtools:")) and base in text:
+            out.append(pg)
+    return out
+
+
+def _held_note(tid: str, t: dict | None = None) -> str:
+    """The prompt line for a job that starts while another job's page is held open for an owner; a tab the job's own
+    words name by its address is the one to work in (never reloaded)."""
+    named = _named_tabs(t)
+    if named:
+        urls = ", ".join(str(pg.get("url") or "") for pg in named)
+        return ("\n## THE OWNER NAMED AN OPEN TAB\nThe owner asked you to work in a tab that is already open in this browser "
+                f"({urls}). First `browser_tabs`: select THAT tab by its address (the newest one if the same address is open "
+                "more than once, unless the task says which), then `browser_snapshot`. Do NOT `browser_navigate`, reload, go back "
+                "or open the address in a new tab: what is already filled in or uploaded there lives only in that tab. Leave "
+                "fields the task says not to touch as they are, and never navigate, type in or close any other held tab.\n")
     lo = _leftopen()
     if not (lo and lo.holding(tid)) and not browser.waiting(except_tid=tid):
         return ""
@@ -946,8 +975,16 @@ def _held_note(tid: str) -> str:
             "click, type in or close the other tab.\n")
 
 
-def _fresh_tab() -> None:
-    """A tab of the job's own in front, when another job's page is held open (the turn must not land on that one)."""
+def _fresh_tab(t: dict | None = None) -> None:
+    """A tab of the job's own in front, when another job's page is held open (the turn must not land on that one);
+    the tab the job's words name (_named_tabs) is brought in front instead."""
+    named = _named_tabs(t)
+    if named:
+        try:
+            urllib.request.urlopen(browser.cdp_url() + "/json/activate/" + str(named[-1].get("id")), timeout=5).read()
+        except Exception as e:  # noqa: BLE001
+            log(f"named tab activate failed: {type(e).__name__}")
+        return
     if not browser.held_tabs():
         return
     try:
@@ -996,7 +1033,7 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | No
     sid = _session_get(tid) if follow_up else ""
     prompt = follow_up if sid else build_prompt(t, resume_block=standing_block(_standing(t)) + follow_up)
     if not dry:
-        prompt += _held_note(tid)
+        prompt += _held_note(tid, t)
     if dry:
         print(prompt)
         return "DRY_RUN_OK"
@@ -1014,7 +1051,7 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | No
         deliver(t, f"I could not open my browser for {job_line(t) or 'this job'}: {e}")
         return f"ERROR {e}"
     started = time.time()
-    _fresh_tab()
+    _fresh_tab(t)
     _live("start", t, "Opening the browser")
     set_status(t, ("signing in and carrying on" if follow_up.startswith("## SIGNED IN") else "switching to another sign-in method") if follow_up
                else "working in the browser", "starting")

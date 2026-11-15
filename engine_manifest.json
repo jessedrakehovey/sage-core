@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+163f7ec",
+  "version": "2026.11.15+4f2c833",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T09:32:29"
+  "synced": "2026-11-15T11:14:09"
  },
  "modules": {
   "money": {
@@ -216,7 +216,7 @@
   "assistant/config.json": "8078bf860ca4fe271cb846d5bdfd6df873b24c3bab27574fa3269eea73c09a95",
   "assistant/connections.json": "6caa0807606fc54b1f19e71ac7ee61eb97607c2996ad3e8c3e36e9ce89b6f302",
   "assistant/core_sync.py": "c071f35e3ccee79590c2c0777f898a02aa643e52e47b1f82aeb590468a4ecacc",
-  "assistant/doer/README.md": "797a5c2908354b88eeefbd7e3e638097a3cb8b23aa689e1e8599d605460cbd55",
+  "assistant/doer/README.md": "82bb380146179e89c53d2b15347c67362a850b3e98360d918348e20471bd6507",
   "assistant/doer/browser.py": "47ca964c00eaa84c34f41e4766f06c8637f1f6779d93be9b19028f08c6b14088",
   "assistant/doer/browser_mcp.py": "7357f636cb62a906519677da6bf2c7a8069790701d09e19e6d8b406793d38e9d",
   "assistant/doer/click_guard.py": "f92f0e81a93daf0cbd1523cb6c9188e583634f2f53c46ac584ab004b65a3fedc",
@@ -224,7 +224,7 @@
   "assistant/doer/computer_policy.json": "8ce249978f51907026cb5de1c8b2d5ed518253cfe59dfa403e4177ac0599e99f",
   "assistant/doer/computer_policy.py": "40fc80a3ef74eefb0c0400ea30258818038fb10a512763da97e45b4a6d2de10f",
   "assistant/doer/computer_prompt.md": "a6120ffa23cea9a032efd312807e87b75d272e13bb1f637793de166b51441b6f",
-  "assistant/doer/doer.py": "ae50cafca3353cb403919585d855f4d6b5c0948ca48bbc5bf502eb49c4bf7e71",
+  "assistant/doer/doer.py": "a3906810302bee6de2072f056362064f766576881372469b05ffd1ac349829d2",
   "assistant/doer/egress.py": "ef7484f7970cbcdfd2d7a6a23521c3b286018af38287fc1ed13f51f03a891ff9",
   "assistant/doer/learn.py": "51a4522d95a29517308d0f91b9d9c80caadcf77886f5b0597331655b272301a1",
   "assistant/doer/leftopen.py": "e97dfb8660d62f5fa4a8d4deeb556d83e91544eed8515d642b33cd654c27d49b",
@@ -407,7 +407,7 @@
   "assistant/tests/test_builder_order.py": "cc763c2e718d3868bdc6425ece768fae9c00ec9014c24d307152e54d5a70ecd0",
   "assistant/tests/test_builder_verify.py": "f16933b5d2d125fbd08d736dc8d37d0e65db193515e64d409cf45a2bd642b0bb",
   "assistant/tests/test_burst.py": "8ecbd9b8a57e012921ad892d9f2ae7d22cf4e09238972a4e0241bddb676faeae",
-  "assistant/tests/test_capability.py": "770adee179e814ba3c80c5f83031a8f92d01806b76e4ed8c8082b70fdf3bb808",
+  "assistant/tests/test_capability.py": "8b5c946485a82f61f7e0e70315ae364b08ce97afd5eacfb52d9d8dcc11d7b25f",
   "assistant/tests/test_capacity.py": "cc545627a22adfcbc383a92c3424dc332ccb1c08f2756be2ad3ee6ae18d15eac",
   "assistant/tests/test_cards_digest.py": "d8b4a4b1cfd242f29430d1471bcf76068ce99f47a05ee4c0eae1c96822594ddb",
   "assistant/tests/test_cards_exec.py": "b6e1d162bb3cc74298785e0c24d31b0add4a740708de942eca9b2eb37835285d",

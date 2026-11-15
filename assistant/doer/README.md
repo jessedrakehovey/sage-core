@@ -149,7 +149,9 @@ presented in chat."
 - **While a page is held** (`data/doer/left_open.json`, `browser.held_tabs`): `browser.close_browser()` refuses to quit
   (`force=True` is Do later), `prune_tabs` never closes the held tab, `open_browser(show=True)` moves the window instead of
   restarting over it, and a new job gets a fresh tab in front plus a prompt block telling it never to touch the held one;
-  at its end only its own tabs close. A held page settles by itself when its tab is gone (the owner finished and closed it),
+  at its end only its own tabs close. A job whose own words name an open tab by its address ("use the ALREADY OPEN tab
+  with https://...") works in THAT tab instead (`doer._named_tabs`: brought in front, never reloaded; 2026-11-14, a job
+  application whose resume was already uploaded there). A held page settles by itself when its tab is gone (the owner finished and closed it),
   when its job runs again, when the job is over, or when the browser went down (then it waits for the next slot).
 - Not covered yet: a captcha AT A SIGN-IN still ends on the sign-in card (I'll sign in myself / Stop): the browser closes
   and "I'll sign in myself" reopens it in front; no Do later there. The hand-off checkpoint already leaves its page open

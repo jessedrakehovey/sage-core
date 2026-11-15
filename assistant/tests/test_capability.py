@@ -1888,4 +1888,44 @@ bridge.handle({"channel": "local", "person": owner1, "text": "Hello?", "convo": 
 ok(cap._load()["gaps"]["g-hello"]["status"] == "done" and len(NOTES) == n0 and len(KICKS) == k0,
    "the replayed 'Hello?' closes its gap and files no second build")
 
+# ---------------------------------------------------------------- 27. "use the ALREADY OPEN tab" works in that tab (gap g-e894b3)
+# the owner, 2026-11-14 20:52: his own job application, the resume already uploaded in an open Ashby tab. The job was told to
+# keep off every held tab, so it filled nothing and handed him the form. A tab the job's words name is the one to work in.
+APPLY_URL = "https://jobs.ashbyhq.com/example/7b025695-ca2a-476c-9558-cfd1714b7d4b/application"
+APPLY_ASK = ("owner1 example's own day-job application, personal lane (he asked for it in chat and gave permission today; allowed by "
+             "his standing rule). Use ONLY jobs.ashbyhq.com; never open example.com or any example sign-in, and close any tab "
+             "that redirects there. Use the ALREADY OPEN tab with " + APPLY_URL + ' ("User Experience Designer", the newest tab where '
+             "owner1_example_Resume_example_UX.pdf already shows under Resume). Do NOT reload it, do not start over, do not touch "
+             "the resume field, and leave the two older application tabs alone. Fill the phone and address fields.")
+
+
+def fake_run_apply(prompt, resume="", model="", timeout=600):
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["do"] = gmcp.call("do", {"lane": "personal", "text": APPLY_ASK})
+    return {"ok": True, "session": "S27", "text": "I'm filling it in the open tab now, without reloading it."}
+
+
+brain._run_claude = fake_run_apply
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": APPLY_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/apply", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and APPLY_URL in str((x.get("payload") or {}).get("text"))]
+ok(str(seen["do"]).startswith("accepted") and tix and "DO IT YOURSELF" not in out and "filled nothing" not in out
+   and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, "the open-tab application ask becomes a browser job, no can't line, no build")
+import doer as _doer  # noqa: E402
+import leftopen as _lo  # noqa: E402
+_tabs = [{"id": "OLD1", "url": APPLY_URL.replace("7b02", "aaaa"), "type": "page"},
+         {"id": "NEW1", "url": APPLY_URL, "type": "page"}]
+_real_pages, _real_load = _lo._pages, _lo._load
+_lo._pages = lambda: list(_tabs)
+_lo._load = lambda: {"0" * 16: {"state": "open", "target": "NEW1", "url": APPLY_URL}}   # the tab is held for the owner
+note = _doer._held_note(tix[-1]["id"], tix[-1])
+ok("THE OWNER NAMED AN OPEN TAB" in note and APPLY_URL in note and "A TAB IS HELD FOR THE OWNER" not in note
+   and "reload" in note and "aaaa" not in note, "the job is told to work in the named tab, not to keep off it")
+ok(_doer._named_tabs({"payload": {"text": "Look up the library hours"}}) == [] and "THE OWNER NAMED" not in
+   _doer._held_note("1" * 16, {"payload": {"text": "Look up the library hours"}}), "a job that names no tab still keeps off the held one")
+_lo._pages, _lo._load = _real_pages, _real_load
+
 print(f"\nall {N} checks passed")
