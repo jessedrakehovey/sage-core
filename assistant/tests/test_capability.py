@@ -1771,6 +1771,58 @@ _dp = (ROOT / "doer" / "prompt.md").read_text(encoding="utf-8")
 ok("employer's own careers site" in _dp and "no password field" in _dp, "the doer applies past a job board's login and signs in on a card")
 
 
+# ---------------------------------------------------------------- 39. "I gave you permission. Apply to example" (daily review, 2026-11-15)
+# 2026-11-14: the first run stopped because the opening named only the Jobvite board and the link had moved to Ashby; the
+# next two were refused at the Resume field because the job named its tailored copy as career\out\<name>.docx "plus a PDF
+# next to it" (a relative path and a sibling, made during the job), and the doer only took full paths. Driven here: the
+# brain's deed, the doer's opening for the moved board, then the doer's file step on the tailored PDF.
+APPLY_ASK = "I gave you permission. Apply to example"
+BASE39 = _cv_dir / "owner1_example_Resume.docx"
+BASE39.write_bytes(b"PK base resume")
+AF_JOB = ("owner1 example's own day-job application, personal lane (\"I gave you permission. Apply to example\"). example's public "
+          "careers board has moved from Jobvite to Ashby: use only jobs.ashbyhq.com. Application form: "
+          "https://jobs.ashbyhq.com/example/7b025695-ca2a-476c-9558-cfd1714b7d4b/application\n"
+          f"1) Make a tailored copy of his resume. Base file: {BASE39}. New copy: career\\out\\owner1_example_Resume_example_UX.docx "
+          "plus a PDF next to it. 2) Fill the form and attach the tailored PDF. Stop before Submit.")
+
+
+def fake_run_af(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["af_do"] = gmcp.call("do", {"lane": "personal", "text": AF_JOB})
+    return {"ok": True, "session": "S39", "text": "I'm filling the example application on its Ashby board now; the Submit stays yours."}
+
+
+brain._run_claude = fake_run_af
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": APPLY_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/af39", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "jobs.ashbyhq.com/example" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen.get("af_do")).startswith("accepted") and tix, f"'{APPLY_ASK}': ONE browser job ({str(seen.get('af_do'))[:80]})")
+ok("DO IT YOURSELF" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0, f"no hand-over line, no build filed: {out!r}")
+_bp39 = _doer38.build_prompt(tix[-1])
+ok("jobs.ashbyhq.com/example" in _bp39 and "since the board moved" in _bp39,
+   "the doer's opening for the owner's own example job search covers the board it moved to (Ashby), not only Jobvite")
+_t39 = tix[-1]
+ok(_doer38.owner_files(_t39) == [str(BASE39.resolve())], "before the copy is made, only the base resume is named and on disk")
+UX39 = _cv_dir / "owner1_example_Resume_example_UX.pdf"           # what the job's own step 1 writes
+(_cv_dir / "owner1_example_Resume_example_UX.docx").write_bytes(b"PK tailored")
+UX39.write_bytes(b"%PDF tailored")
+ok(str(UX39.resolve()) in _doer38.owner_files(_t39), "the tailored PDF 'next to' the relative copy the job names counts as named")
+_ups39 = []
+_r0, _a0 = _upload38.run, _doer38.browser.active_page
+_upload38.run = lambda file, url="", match="", clicks=None, **k: _ups39.append((file, match, clicks)) or {"state": "done", "file": file, "page": match}
+_doer38.browser.active_page = lambda pages=None, focus=None: {"url": "https://jobs.ashbyhq.com/example/7b025695-ca2a-476c-9558-cfd1714b7d4b/application"}
+_line39 = _doer38.upload_step(_t39, f"{UX39} | Upload File")
+_bad39 = _doer38.upload_step(_t39, f"{_cv_dir / 'taxes.pdf'} | Upload File")
+_upload38.run, _doer38.browser.active_page = _r0, _a0
+ok(_line39.startswith("UPLOADED owner1_example_Resume_example_UX.pdf") and len(_ups39) == 1 and _ups39[0][0] == str(UX39.resolve()),
+   f"the doer gives the tailored PDF to the Ashby Resume field by code: {_line39}")
+ok(_bad39.startswith("FAILED"), f"a file the job does not name is still refused: {_bad39}")
+
+
 # ---------------------------------------------------------------- a bare "Hello?" is a nudge, never a build
 # the owner, 2026-11-14 19:51 (gap g-59f66e): "Hello?" was answered with an earlier job's status, "the owner Beach final for
 # Kingsmere: I couldn't get into Dropbox on the web", and that "couldn't" was filed as a build titled 'Hello'.

@@ -325,7 +325,9 @@ Resolve was closed). Three things changed:
   ONLY when the job's own text names the path and it exists, then resumes the same session ("## FILE GIVEN", up to
   `doer.uploads_max` = 3). The deny list is unchanged: the model still never chooses a file. The prompt also sends it past a
   job board's login to the employer's own careers site, and treats a password-less sign-in box as a login (sign-in card).
-  Tests: `test_doer.py` (upload), `test_capability.py` section 38.
+  "Named" also covers a relative path in the job text (read under the folders its full paths sit in) and a named
+  document's same-name copy of another document type beside it, e.g. the tailored resume's PDF the job made (2026-11-15).
+  Tests: `test_doer.py` (upload), `test_capability.py` sections 38-39.
 - **The learn bug.** `import learn` in `doer.py` / `computer.py` resolved to
   `assistant/scripts/learn.py` (the corrections ledger) whenever that was already loaded, so every
   run since 10-12 logged `learn failed: AttributeError` and recorded nothing. `doer._learn()` loads

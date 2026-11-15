@@ -478,14 +478,28 @@ UPLOADED = ("## FILE GIVEN\n{line}\nYou are in the same browser and on the same 
             "button that opens the file picker, else stop with DOER_BLOCKED naming the field.\n")
 
 
+# "I gave you permission. Apply to example" (2026-11-14): the job named its new copy as career\out\<name>.docx "plus a
+# PDF next to it", made during the job, and two runs were refused at the Resume field. A relative path the ask writes is
+# read under the folders its full paths sit in, and a named document's own copy beside it (same name, another document
+# type) counts as named; nothing else does.
+_REL = re.compile(r'(?<![\w:\\/])(?:[\w.\-]+[\\/])+[\w.\-]+\.[A-Za-z0-9]{1,5}\b')
+_DOC_TYPES = (".pdf", ".docx", ".doc", ".odt", ".rtf", ".txt")
+
+
 def owner_files(t: dict) -> list:
     """The files on this PC the owner's ask names (payload.text) that exist, as resolved paths."""
     text = str((t.get("payload") or {}).get("text") or t.get("summary") or "")
+    full = [Path(m.strip()) for m in _PATH.findall(text)]
+    bases = list(dict.fromkeys(a for f in full for a in f.parents if len(a.parts) > 1))
+    named = full + [b / r for r in _REL.findall(text) for b in bases]
+    named += [f.with_suffix(x) for f in list(named) if f.suffix.lower() in _DOC_TYPES for x in _DOC_TYPES]
     out = []
-    for m in _PATH.findall(text):
-        f = Path(m.strip())
-        if f.is_file() and str(f.resolve()) not in out:
-            out.append(str(f.resolve()))
+    for f in named:
+        try:
+            if f.is_file() and str(f.resolve()) not in out:
+                out.append(str(f.resolve()))
+        except OSError:
+            continue
     return out
 
 
