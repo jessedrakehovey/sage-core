@@ -88,8 +88,9 @@ srv = cfg["mcpServers"][doer.MCP]
 flat = json.dumps(cfg)
 check("the doer starts its browser tools with Python, not npx", "npx" not in flat and "@playwright" not in flat and srv["args"][0].endswith("browser_mcp.py"), flat)
 check("the config carries the browser's address and the job's folder", "--cdp-endpoint" in srv["args"] and "--output-dir" in srv["args"])
-check("the config turns the agent's cursor on, with a name on it", "--cursor" in srv["args"] and srv["args"][srv["args"].index("--cursor") + 1] == "on"
-      and "--cursor-label" in srv["args"] and srv["args"][srv["args"].index("--cursor-label") + 1].strip() != "")
+_lab = str(((doer.CFG.get("cursor") or {}) if isinstance(doer.CFG.get("cursor"), dict) else {}).get("label") or "").strip()
+check("the config turns the agent's cursor on; no name on it unless doer.cursor.label is set", "--cursor" in srv["args"]
+      and srv["args"][srv["args"].index("--cursor") + 1] == "on" and (("--cursor-label" in srv["args"]) == bool(_lab)))
 check("the server's interpreter exists", Path(srv["command"]).exists(), srv["command"])
 
 # ---- 3. live ----------------------------------------------------------------------------------------------------

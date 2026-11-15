@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+edf2ab3",
+  "version": "2026.11.15+4ef96e3",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T08:54:50"
+  "synced": "2026-11-15T08:55:44"
  },
  "modules": {
   "money": {
@@ -218,7 +218,7 @@
   "assistant/core_sync.py": "c071f35e3ccee79590c2c0777f898a02aa643e52e47b1f82aeb590468a4ecacc",
   "assistant/doer/README.md": "75b13777eeec2cfd88a083a19e2869d624e7d8f88007761a286c3e1484dceb80",
   "assistant/doer/browser.py": "47ca964c00eaa84c34f41e4766f06c8637f1f6779d93be9b19028f08c6b14088",
-  "assistant/doer/browser_mcp.py": "c5416f83eb9da270a49edd75a4ff6dcad4a4b22fd5f01970288383c12b334f24",
+  "assistant/doer/browser_mcp.py": "7357f636cb62a906519677da6bf2c7a8069790701d09e19e6d8b406793d38e9d",
   "assistant/doer/click_guard.py": "f92f0e81a93daf0cbd1523cb6c9188e583634f2f53c46ac584ab004b65a3fedc",
   "assistant/doer/computer.py": "17416208259386f1365d052272b493719212054867e39b2d712dbdd180108acc",
   "assistant/doer/computer_policy.json": "8ce249978f51907026cb5de1c8b2d5ed518253cfe59dfa403e4177ac0599e99f",

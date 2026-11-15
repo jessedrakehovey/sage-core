@@ -16,8 +16,8 @@ its `aria-ref=` selector), or by a plain selector. `target` is the current name 
 one; both are taken. stdout carries protocol lines only; everything else goes to stderr.
 
 The agent's own cursor (2026-11-14; `--cursor off` to leave it out). The owner: "a smooth cursor control ... and if
-possible as a second cursor so the pc can be used by user at same time". A pointer with the agent's name is drawn IN
-THE PAGE and glides to each element before the click, the typing or the hover lands there, with a ring on the click.
+possible as a second cursor so the pc can be used by user at same time". A pointer (plain; `--cursor-label` puts a
+name on it) is drawn IN THE PAGE and glides to each element before the click, the typing or the hover lands there, with a ring on the click.
 It is a second cursor in the full sense: the browser's input is made inside the browser, so the PC's own mouse and
 keyboard are never moved or taken, in front or in the background. What glides is the drawing; the real pointer event
 still lands straight on the target (a real pointer dragged across the page opens every hover menu on the way and
@@ -731,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--output-dir", default=".")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--cursor", choices=["on", "off"], default="on", help="draw the agent's own cursor in the page")
-    ap.add_argument("--cursor-label", default="", help="the name on the cursor (the agent's)")
+    ap.add_argument("--cursor-label", default="", help="a name on the cursor (none by default)")
     ap.add_argument("--cursor-color", default="", help="#rrggbb")
     ns = ap.parse_args(argv)
     if ns.check:
