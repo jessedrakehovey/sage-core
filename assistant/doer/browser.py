@@ -345,7 +345,7 @@ def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
     show = bool(show) or front_default
     exe = chrome_exe()
     if not exe:
-        raise RuntimeError("no Chromium found: `npx playwright install chromium` or set doer.chrome in assistant/config.json")
+        raise RuntimeError("no Chromium found: `python -m playwright install chromium` or set doer.chrome in assistant/config.json")
     PROFILE.mkdir(parents=True, exist_ok=True)
     lease = _lease()
     _keep_session_cookies()

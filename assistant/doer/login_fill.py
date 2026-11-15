@@ -336,10 +336,9 @@ def fill_page(page, url: str, code: str = "", learn: bool = True) -> str:
     if otp_el and not _visible(page, PASS_SEL):
         used["otp_sel"] = otp_sel
         if otp_uri:
-            import pyotp
+            import totp                      # the engine's own (standard library); pyotp is no longer needed
             try:
-                totp = pyotp.parse_uri(otp_uri) if otp_uri.startswith("otpauth://") else pyotp.TOTP(otp_uri)
-                otp_el.fill(totp.now())
+                otp_el.fill(totp.now(otp_uri))
             except Exception as e:  # noqa: BLE001
                 return f"FAILED TOTP could not be generated ({type(e).__name__})"
             _submit(page, otp_el, pb.get("submit_sel", ""))

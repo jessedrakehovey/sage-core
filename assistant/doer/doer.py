@@ -311,12 +311,38 @@ def build_prompt(t: dict, resume_block: str = "") -> str:
             .replace("{{", "{").replace("}}", "}"))
 
 
+def _browser_server(out_dir: Path) -> dict:
+    """What serves the turn's browser tools. The engine's own browser_mcp.py (Python + the Playwright package the jobs
+    already need: no Node, nothing fetched at run time; 2026-11-14) on the first interpreter that can run it: this
+    one, else the jobs' one. The Node package (`npx @playwright/mcp`, what every run used before) only when
+    config.json -> doer.browser_server says "node", or when no interpreter here can serve and Node is installed."""
+    import shutil
+    tail = ["--cdp-endpoint", browser.cdp_url(), "--output-dir", str(out_dir)]
+    node = {"command": "npx", "args": ["-y", "@playwright/mcp@latest"] + tail}
+    if str(CFG.get("browser_server") or "python").lower() == "node":
+        return node
+    script = str(HERE / "browser_mcp.py")
+    try:
+        from alib import VENV_PY
+        cands = [sys.executable, str(VENV_PY)]
+    except Exception:  # noqa: BLE001
+        cands = [sys.executable]
+    for py in dict.fromkeys(cands):
+        try:
+            if Path(py).exists() and subprocess.run([py, script, "--check"], capture_output=True, timeout=60,
+                                                    creationflags=NO_WINDOW).returncode == 0:
+                return {"command": py, "args": [script] + tail}
+        except Exception:  # noqa: BLE001
+            continue
+    if shutil.which("npx"):
+        log("browser_mcp cannot run on this interpreter (playwright missing or too old); using the Node package")
+        return node
+    return {"command": sys.executable, "args": [script] + tail}      # its own start-up error names the fix
+
+
 def _mcp_config(out_dir: Path) -> Path:
     f = out_dir / "mcp.json"
-    f.write_text(json.dumps({"mcpServers": {MCP: {"command": "npx", "args": ["-y", "@playwright/mcp@latest",
-                                                                             "--cdp-endpoint", browser.cdp_url(),
-                                                                             "--output-dir", str(out_dir)]}}}, indent=1),
-                 encoding="utf-8")
+    f.write_text(json.dumps({"mcpServers": {MCP: _browser_server(out_dir)}}, indent=1), encoding="utf-8")
     return f
 
 

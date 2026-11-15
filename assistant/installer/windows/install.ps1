@@ -1,7 +1,7 @@
 # install.ps1 - everything a Sage agent needs on a Windows PC, with no terminal knowledge and no git (sage-core, 2026-10-28).
 # Run by SageSetup.exe (Inno Setup, SageSetup.iss) after it has copied the engine release next to this file; also runs by hand:
 #   powershell -ExecutionPolicy Bypass -File install.ps1 [-Root "$env:LOCALAPPDATA\Sage"] [-EngineZip <zip>] [-ReleaseJson <json>] [-ReleaseUrl <url>]
-#                                                        [-SkipClaude] [-SkipBrowser] [-NoLaunch]
+#                                                        [-Bundle <folder>] [-PythonOnly] [-SkipClaude] [-SkipBrowser] [-NoLaunch]
 # What it puts under -Root (per user, no admin):
 #   python\     the python.org embeddable Python 3.11 + pip + assistant/requirements.txt (private to Sage; the system's Python is never touched)
 #   engine\     the engine release (engine_manifest.json, assistant/, scripts/, Schema/, .claude/)
@@ -10,11 +10,18 @@
 # (%USERPROFILE%\.local\bin\claude.exe; skipped when a `claude` is already on this machine). The organization's own folder is
 # made afterwards by the setup page (welcome.py), never here; this script touches no organization data and stores no token.
 # Idempotent: every step is skipped when its result is already there; re-run it until it ends with "ready".
+# -Bundle (default: a `bundle` folder next to this file, which SageSetup.exe carries when build.ps1 ran with -Bundle;
+# 2026-11-14): Python, pip, every package and the browser come out of that folder and nothing is fetched for them:
+#   bundle\python-<version>-embed-amd64.zip   bundle\get-pip.py   bundle\wheels\*.whl   bundle\ms-playwright\chromium-*\
+# The one thing still fetched is the Claude Code CLI, from its maker (it is not ours to hand out, and it needs the
+# internet to work at all). Without a bundle every step downloads as before.
 param(
     [string]$Root = "",
     [string]$EngineZip = "",
     [string]$ReleaseJson = "",
     [string]$ReleaseUrl = "",
+    [string]$Bundle = "",
+    [switch]$PythonOnly,      # stop once the private Python and pip are in place (build.ps1 picks the bundle's packages with it)
     [switch]$SkipClaude,
     [switch]$SkipBrowser,
     [switch]$NoLaunch
@@ -46,14 +53,20 @@ New-Item -ItemType Directory -Force -Path $Root -ErrorAction Stop | Out-Null
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $EngineZip) { $EngineZip = (Get-ChildItem -Path $here -Filter 'sage-core-*.zip' -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
 if (-not $ReleaseJson -and $EngineZip) { $cand = Join-Path (Split-Path -Parent $EngineZip) 'release.json'; if (Test-Path $cand) { $ReleaseJson = $cand } }
+if (-not $Bundle) { $cand = Join-Path $here 'bundle'; if (Test-Path $cand) { $Bundle = $cand } }
+if ($Bundle -and -not (Test-Path $Bundle)) { throw "no bundle folder at $Bundle" }
+$wheels = if ($Bundle -and (Test-Path (Join-Path $Bundle 'wheels'))) { Join-Path $Bundle 'wheels' } else { '' }
 Say "root $Root"
+if ($Bundle) { Say "bundle $Bundle (nothing is downloaded for Python, the packages or the browser)" }
 
 # ---- 1. Python (embeddable, private) ----------------------------------------------------------------------------
 $pyDir = Join-Path $Root 'python'
 $py = Join-Path $pyDir 'python.exe'
 if (-not (Test-Path $py)) {
     $zip = Join-Path $Root "python-$PyVersion-embed-amd64.zip"
-    if (-not (Test-Path $zip) -or (Sha256 $zip) -ne $PySha) { Download $PyUrl $zip }
+    $bz = if ($Bundle) { Join-Path $Bundle "python-$PyVersion-embed-amd64.zip" } else { '' }
+    if ($bz -and (Test-Path $bz)) { Copy-Item $bz $zip -Force -ErrorAction Stop }
+    elseif (-not (Test-Path $zip) -or (Sha256 $zip) -ne $PySha) { Download $PyUrl $zip }
     if ((Sha256 $zip) -ne $PySha) { throw "the Python download does not match its published checksum; stopping" }
     Say "unpacking Python $PyVersion"
     if (Test-Path $pyDir) { Remove-Item $pyDir -Recurse -Force }
@@ -71,13 +84,20 @@ if ($pth) {
 }
 if (-not (PyOk "import pip")) {
     $gp = Join-Path $Root 'get-pip.py'
-    Download $GetPip $gp
-    Say "installing pip"
-    & $py $gp --no-warn-script-location --quiet
+    $bgp = if ($Bundle) { Join-Path $Bundle 'get-pip.py' } else { '' }
+    if ($bgp -and (Test-Path $bgp) -and $wheels) {
+        Say "installing pip (from the bundle)"
+        & $py $bgp --no-warn-script-location --quiet --no-index --find-links $wheels
+    } else {
+        Download $GetPip $gp
+        Say "installing pip"
+        & $py $gp --no-warn-script-location --quiet
+    }
     if ($LASTEXITCODE -ne 0) { throw "pip did not install" }
-    Remove-Item $gp -Force
+    if (Test-Path $gp) { Remove-Item $gp -Force }
 }
 Say ("python: " + (& $py --version))
+if ($PythonOnly) { Say "python ready: $py"; exit 0 }
 
 # ---- 2. The engine release ---------------------------------------------------------------------------------------
 $engineDir = Join-Path $Root 'engine'
@@ -107,15 +127,38 @@ if (-not (Test-Path (Join-Path $engineDir 'assistant\sage.py'))) { throw "the ar
 
 # ---- 3. Python packages + the browser ---------------------------------------------------------------------------
 $req = Join-Path $engineDir 'assistant\requirements.txt'
-if (-not (PyOk "import keyring, playwright, pykeepass, google.auth, requests, cryptography")) {
-    Say "installing the Python packages (a minute or two)"
-    & $py -m pip install --quiet --no-warn-script-location --disable-pip-version-check -r $req
+if (-not (PyOk "import keyring, playwright, pykeepass, google.auth, requests, cryptography, tzdata")) {
+    if ($wheels) {
+        Say "installing the Python packages (from the bundle)"
+        & $py -m pip install --quiet --no-warn-script-location --disable-pip-version-check --no-index --find-links $wheels -r $req
+    } else {
+        Say "installing the Python packages (a minute or two)"
+        & $py -m pip install --quiet --no-warn-script-location --disable-pip-version-check -r $req
+    }
     if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt failed" }
 } else { Say "python packages present" }
 if (-not $SkipBrowser) {
-    Say "installing the Playwright Chromium browser (one-time download; skipped when present)"
-    & $py -m playwright install chromium
-    if ($LASTEXITCODE -ne 0) { Say "WARN: the browser did not install; the setup page's checks will say so (re-run later)" }
+    $bb = if ($Bundle) { Join-Path $Bundle 'ms-playwright' } else { '' }
+    if ($bb -and (Test-Path $bb)) {
+        # the bundled browser folders, copied where Playwright and doer/browser.py look; one already there is left alone
+        $pwHome = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWRIGHT_BROWSERS_PATH } else { Join-Path $env:LOCALAPPDATA 'ms-playwright' }
+        New-Item -ItemType Directory -Force -Path $pwHome -ErrorAction Stop | Out-Null
+        foreach ($d in (Get-ChildItem -Path $bb -Directory)) {
+            $dst = Join-Path $pwHome $d.Name
+            if (Test-Path $dst) { Say "browser $($d.Name) present"; continue }
+            Say "copying the browser $($d.Name) (from the bundle)"
+            $part = "$dst.part"
+            if (Test-Path $part) { Remove-Item $part -Recurse -Force }
+            Copy-Item -Path $d.FullName -Destination $part -Recurse -Force -ErrorAction Stop
+            Rename-Item -Path $part -NewName $d.Name -ErrorAction Stop
+        }
+        # the installer's own copy is spent once it is in place (a bundle elsewhere, a build folder, is never touched)
+        if ($bb.StartsWith($Root, [StringComparison]::OrdinalIgnoreCase)) { Remove-Item $bb -Recurse -Force -ErrorAction SilentlyContinue }
+    } else {
+        Say "installing the Playwright Chromium browser (one-time download; skipped when present)"
+        & $py -m playwright install chromium
+        if ($LASTEXITCODE -ne 0) { Say "WARN: the browser did not install; the setup page's checks will say so (re-run later)" }
+    }
 }
 
 # ---- 4. The Claude Code CLI (native build; no Node) ----------------------------------------------------------------

@@ -20,7 +20,10 @@ Build it (needs Inno Setup 6, a user install: `winget install JRSoftware.InnoSet
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File assistant\installer\windows\build.ps1 -ReleaseUrl https://<host>/<path>
+powershell -ExecutionPolicy Bypass -File assistant\installer\windows\build.ps1 -ReleaseUrl https://<host>/<path> -Bundle   # carries everything
 ```
+
+**`-Bundle` (2026-11-14): one file, nothing fetched but the Claude CLI.** Without it `SageSetup.exe` is a few MB and downloads Python, the packages and the browser while it installs. With it they ride inside the installer (`dist\bundle\`: the embeddable Python zip checked against the pin in `install.ps1`, `get-pip.py`, every wheel, the Playwright browser folders) and `install.ps1` installs from that folder with pip's index switched off. The build proves the bundle before it ships: it unpacks the bundled Python, lets THAT Python pick the wheels (the build machine's own Python reads the "only below 3.12" conditions for itself and leaves wheels out), installs from the bundle into a scratch folder, and has that install fetch the browser, so it is the build the bundled Playwright expects. The Claude Code CLI is the one piece still fetched at install time, from its maker: it is not ours to hand out, and it needs the internet to work at all. `install.ps1 -Bundle <folder>` does the same by hand; `-PythonOnly` stops after Python and pip.
 
 `build.ps1` runs `assistant/release.py build` (the zip + `release.json` into `dist/`) and `ISCC` on `SageSetup.iss`; the result is `dist\SageSetup.exe`. `-ReleaseUrl` is where the release files will be served from and is written into the installer so every organization it installs knows where to look for updates; it defaults to the checkout's GitHub origin as `.../releases/latest/download` (the engine itself carries no account name). Publishing is one command from the engine checkout, with the GitHub CLI signed in:
 

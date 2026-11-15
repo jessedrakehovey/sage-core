@@ -411,9 +411,18 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
     p = _which("git")
     add("git", "ok" if p else "warn", (_ver([p, "--version"]) or p) if p else "not installed (only a git-clone install updates by git; the installer and `sage update` do not need it)",
         "install Git (git-scm.com) if you work from a clone")
+    # the browser tools of a browser job: the engine's own server (doer/browser_mcp.py) on the jobs' interpreter. Before
+    # 2026-11-14 every browser job fetched a Node package through npx, so a machine without Node had no browser hands
+    # while this table called Node "not needed".
+    bm = ROOT / "assistant" / "doer" / "browser_mcp.py"
+    r = subprocess.run([py, str(bm), "--check"], capture_output=True, text=True, timeout=60) if Path(py).exists() and bm.exists() else None
+    bt_ok = bool(r and r.returncode == 0)
     p = _which("node")
-    add("node", "ok" if p else ("info" if c else "warn"), (_ver([p, "--version"]) or p) if p else ("not needed: the Claude CLI here is the native build" if c else "not installed (only the npm build of the Claude CLI needs it)"),
-        "install Node LTS (nodejs.org) only for `npm install -g @anthropic-ai/claude-code`")
+    add("browser tools", "ok" if bt_ok else ("warn" if p else "fail"),
+        f"the engine's own (doer/browser_mcp.py) in {py}" if bt_ok else ((r.stdout.strip() if r else "doer/browser_mcp.py or the interpreter is missing")[-160:] + ("; browser jobs fall back to the Node package" if p else "")),
+        f'"{py}" -m pip install -U -r assistant/requirements.txt')
+    add("node", "ok" if p else "info", (_ver([p, "--version"]) or p) if p else "not installed, not needed (the Claude CLI's native build and the engine's own browser tools run without it)",
+        "nothing to do; Node is only for the npm build of the Claude CLI")
     g = _which("gcloud")
     add("gcloud", "ok" if g else "info", (_ver([g, "--version"]) or g) if g else "not installed (optional: the Google steps work from the console links in agent/GOOGLE_SETUP.md)",
         "install the Google Cloud CLI (cloud.google.com/sdk) and run `gcloud auth login` as the owner, or follow the console links")

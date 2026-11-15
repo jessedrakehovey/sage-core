@@ -1,9 +1,8 @@
 # The Python packages the engine's jobs need in the interpreter org.json -> python names (sage doctor checks them).
 # Everything else in assistant/ is standard library.
 keyring>=25
-playwright>=1.50
+playwright>=1.62   # the doer's own browser tool server (doer/browser_mcp.py) needs the snapshot with element references
 pykeepass>=4.1
-pyotp>=2.9
 google-auth>=2.30
 google-auth-oauthlib>=1.2
 requests>=2.32

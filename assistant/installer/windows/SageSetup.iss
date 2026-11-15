@@ -44,6 +44,12 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "install.ps1"; DestDir: "{app}\bootstrap"; Flags: ignoreversion
 Source: "{#Dist}\{#Zip}"; DestDir: "{app}\bootstrap"; Flags: ignoreversion
 Source: "{#Dist}\release.json"; DestDir: "{app}\bootstrap"; Flags: ignoreversion
+; build.ps1 -Bundle (2026-11-14): Python, pip, every package and the browser ride inside the installer, and install.ps1
+; (which looks for a `bundle` folder next to itself) downloads none of them. Without /DBundle the installer stays small
+; and fetches them at install time, as before.
+#ifdef Bundle
+Source: "{#Bundle}\*"; DestDir: "{app}\bootstrap\bundle"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bootstrap\install.ps1"" -Root ""{app}"" -EngineZip ""{app}\bootstrap\{#Zip}"" -ReleaseJson ""{app}\bootstrap\release.json"" -ReleaseUrl ""{#ReleaseUrl}"" -NoLaunch"; StatusMsg: "Installing Python, the browser and the Claude CLI (a few minutes; downloads)..."; Flags: waituntilterminated

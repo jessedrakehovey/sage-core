@@ -21,13 +21,15 @@ SLUG=$(echo "$ORG" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-
 
 if [[ "$(uname)" == "Darwin" ]]; then
   have brew || say "Homebrew missing (brew.sh); installing the rest needs it"
-  for pkg in git python@3.11 node; do have "${pkg%%@*}" || { say "brew install $pkg"; brew install "$pkg"; }; done
-  have gcloud || { say "brew install google-cloud-sdk"; brew install --cask google-cloud-sdk || true; }
+  have git || { say "brew install git"; brew install git; }
+  have python3 || { say "brew install python@3.11"; brew install python@3.11; }
 else
-  have git && have python3 && have node || { say "apt install git python3 python3-venv nodejs npm"; sudo apt-get update -qq && sudo apt-get install -y -qq git python3 python3-venv nodejs npm; }
-  have gcloud || say "gcloud: see cloud.google.com/sdk/docs/install (optional until the Google step)"
+  have git && have python3 || { say "apt install git python3 python3-venv curl"; sudo apt-get update -qq && sudo apt-get install -y -qq git python3 python3-venv curl; }
 fi
-have claude || { say "npm install -g @anthropic-ai/claude-code"; npm install -g @anthropic-ai/claude-code; }
+# the Claude Code CLI by its own native installer: no Node (2026-11-14). Node and the Google Cloud CLI are no longer
+# installed: the engine's browser tools are its own (doer/browser_mcp.py) and the Google steps work from console links.
+have claude || [[ -x "$HOME/.local/bin/claude" ]] || { say "installing the Claude Code CLI (its native installer)"; curl -fsSL https://claude.ai/install.sh | bash; }
+export PATH="$HOME/.local/bin:$PATH"
 
 ENGINE_DIR="$ENGINE"
 if [[ "$ENGINE" =~ ^(https?://|git@) ]]; then

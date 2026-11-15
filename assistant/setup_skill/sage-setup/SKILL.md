@@ -1,6 +1,6 @@
 ---
 name: sage-setup
-description: Stand up a Sage agent for an organization on this computer, from nothing - a co-pilot install. Claude installs what is missing (git, Python, Node, Playwright, gcloud, the Claude Code CLI), gets the sage-core engine, creates the organization's pack, starts the supervisor and Mission Control, walks the owner through the Google Workspace clicks that are theirs alone, then hands off to Discovery and Training in chat. Trigger phrases - "set up Sage", "install Sage", "sage setup", "I want my own Sage", "new Sage agent for <org>", "/sage-setup".
+description: Stand up a Sage agent for an organization on this computer, from nothing - a co-pilot install. Claude installs what is missing (git, Python, Playwright, the Claude Code CLI), gets the sage-core engine, creates the organization's pack, starts the supervisor and Mission Control, walks the owner through the Google Workspace clicks that are theirs alone, then hands off to Discovery and Training in chat. Trigger phrases - "set up Sage", "install Sage", "sage setup", "I want my own Sage", "new Sage agent for <org>", "/sage-setup".
 ---
 
 # sage-setup: a Sage agent for this organization, from a bare machine
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File "<this skill folder>\bootstrap.ps1" -Or
 bash "<this skill folder>/bootstrap.sh" --org "<Org>" --agent "<Agent>" --owner "Name:email" --engine "<folder or git url>" --out "<pack folder>"
 ```
 
-It installs git, Python 3.11+, Node LTS, the Claude Code CLI, gcloud (winget / brew / apt), makes the venv
+It installs git, Python 3.11+ (winget / brew / apt) and the Claude Code CLI (its native installer; no Node), makes the venv
 `~/.venvs/<org-slug>-sage` with `assistant/requirements.txt`, installs the Playwright Chromium browser, clones or
 copies the engine, runs `new_org.py` (the pack), writes the venv into the pack's `assistant/org.json -> python`,
 and ends with `python assistant/sage.py doctor --no-probe`. Read the doctor table. Every FAIL has a fix line.
@@ -78,8 +78,8 @@ Mission Control, answer the first card (the smoke test), show the owner `python 
 
 ## 4. Google, in this order
 
-Follow `assistant/agent/GOOGLE_SETUP.md` in the pack (generic copy). Use `gcloud` for projects, APIs, the
-service account and Pub/Sub; give the owner one link per click that is theirs:
+Follow `assistant/agent/GOOGLE_SETUP.md` in the pack (generic copy). Where `gcloud` is already on the machine, use it for projects, APIs, the
+service account and Pub/Sub; where it is not, do not install it: the same steps work from the console links. Give the owner one link per click that is theirs:
 
 1. Workspace confirmed (or signing up; continue meanwhile).
 2. Cloud project for mail + calendar; APIs enabled; the OAuth consent screen (owner: the sign-in and consent);

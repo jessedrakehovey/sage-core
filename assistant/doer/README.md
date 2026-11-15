@@ -13,6 +13,7 @@ task, drives one shared browser, and exits. Zero tokens when nothing waits.
                                                      |
                  doer.py --tick: claims ONE agent_run ticket, opens the browser (browser.py),
                  runs one `claude -p` turn with prompt.md + the private playwright-doer MCP
+                 (browser_mcp.py, the engine's own server since 2026-11-14: Python, no Node)
                                                      |
         tier A/B: does it, DOER_DONE  ->  ticket done, result posted in the owner's chat
         tier C:  fills everything, screenshots the review page, report.py checkpoint
@@ -456,3 +457,19 @@ Tests: test_doer (blocked, no result, `_owner_only`), test_voice (the `progress`
 Remote Desktop connection, never "Watch my PC"); the live card's picture and `front_page_ws` are of the **focused tab**
 (`browser.active_page`); the computer lane may write the organization's **Wiki** and `apps/shoot-day/weddings` without
 a card (tier B).
+
+## The browser tools are the engine's own (`browser_mcp.py`, 2026-11-14)
+
+Every run used to start its browser tools with `npx -y @playwright/mcp@latest`: Node had to be installed, and each run
+depended on fetching whatever "latest" was that day. `browser_mcp.py` replaces it: a stdio tool server in Python
+(standard library for the protocol, the Playwright package the jobs already need for the browser) that attaches to the
+doer's running browser on its debugging port and serves the same tool names under the same server name
+(`playwright-doer`), so `ALLOWED` / `DENIED`, the gate baseline, `click_guard.py`, `egress.py` and `prompt.md` are
+unchanged. The denied tools (running arbitrary code, file upload, raw network requests, installing a browser) do not
+exist in it at all. Elements are addressed by the snapshot's `[ref=e12]` marks (`target`, or the older `ref`) or by a
+selector; a screenshot always lands inside the job's own folder; a dialog that an action opens is reported and nothing
+else runs until `browser_handle_dialog` answers it; errors are Playwright's own words, so `click_guard.py` still sees
+"waiting for element to be visible, enabled and stable". `doer._browser_server` picks the interpreter (this one, else the
+jobs' one; `browser_mcp.py --check` says whether it can serve) and falls back to the Node package only when none can
+and Node is installed. `config.json -> doer.browser_server: "node"` forces the old server. Test:
+`assistant/tests/test_browser_mcp.py`.

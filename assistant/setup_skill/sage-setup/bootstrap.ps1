@@ -1,6 +1,6 @@
 # bootstrap.ps1 - a Sage agent from a bare Windows machine (sage-setup skill). Idempotent: re-run until doctor is clean.
 #   powershell -ExecutionPolicy Bypass -File bootstrap.ps1 -Org "Acme Bakery" -Agent Pip -Owner "Ana Ruiz:ana@acme.test" -Engine <folder|git url> -Out "C:\Users\me\Documents\Acme OS"
-# Installs (winget) what is missing: Git, Python 3.11, Node LTS, Google Cloud CLI; then the Claude Code CLI (npm),
+# Installs (winget) what is missing: Git, Python 3.11; then the Claude Code CLI (its native installer, no Node),
 # a venv with assistant/requirements.txt, the Playwright Chromium browser, the engine, the pack. Never touches tokens:
 # the owner mints the Claude token themselves (SKILL.md step 2).
 param(
@@ -28,11 +28,16 @@ if (-not $Out) { $Out = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 
 if (-not $SkipInstalls) {
     if (-not (Have git)) { Winget 'Git.Git' 'Git' }
     if (-not (Have python)) { Winget 'Python.Python.3.11' 'Python 3.11' }
-    if (-not (Have node)) { Winget 'OpenJS.NodeJS.LTS' 'Node LTS' }
-    if (-not (Have gcloud)) { Winget 'Google.CloudSDK' 'Google Cloud CLI' }
-    if (-not (Have claude)) { Say "installing the Claude Code CLI ..."; npm install -g @anthropic-ai/claude-code | Out-Null }
+    # the Claude Code CLI by its own native installer: no Node (2026-11-14). Node and the Google Cloud CLI are no longer
+    # installed: the engine's browser tools are its own (doer/browser_mcp.py) and the Google steps work from console links.
+    $claudeExe = Join-Path $env:USERPROFILE '.local\bin\claude.exe'
+    if (-not (Have claude) -and -not (Test-Path $claudeExe)) {
+        Say "installing the Claude Code CLI (its native installer) ..."
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex" | Out-Null
+        $env:Path = (Join-Path $env:USERPROFILE '.local\bin') + ';' + $env:Path
+    }
 }
-foreach ($c in @('git', 'python', 'node', 'npm')) { if (-not (Have $c)) { throw "$c is still not on PATH; open a new terminal and re-run" } }
+foreach ($c in @('git', 'python')) { if (-not (Have $c)) { throw "$c is still not on PATH; open a new terminal and re-run" } }
 
 # the engine: a folder (copied as-is) or a git URL (cloned) into ~/sage-core
 $engineDir = $Engine

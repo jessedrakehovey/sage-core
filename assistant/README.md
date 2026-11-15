@@ -1409,7 +1409,7 @@ every command below, update, modules):
   `-WindowStyle Hidden`, a browser `show=False`. The builder's rules say so; `test_sage_core.py` checks the runners.
   Never `DETACHED_PROCESS` for a python child (2026-10-28): a venv launcher then has no console and the real python
   opens a visible one; detached starts use `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` (`test_sage_core.py` scans).
-- **`sage.py`: the one command.** `doctor` (Python, packages in the jobs' interpreter, Playwright browsers, git, node,
+- **`sage.py`: the one command.** `doctor` (Python, packages in the jobs' interpreter, Playwright browsers, the engine's own browser tools, git, node,
   gcloud, the Claude CLI, the token in User scope and no stray API key, a headless probe skipped inside a session
   with the reason, Mission Control, serve, secrets folder, Google, Chat, buttons mode, disk; `--json`, `--fix`),
   `serve` (ONE process: `assistant/serve.json` = spine, spine-long, probe, deadman, Mission Control keepalive,
@@ -1488,7 +1488,8 @@ every command below, update, modules):
   answered in the card's own thread, for a machine with no public HTTPS path for taps. This organization keeps buttons.
 - **The `sage-setup` skill** (`assistant/setup_skill/sage-setup/`: SKILL.md, `bootstrap.ps1`, `bootstrap.sh`;
   installed at `~/.claude/skills/sage-setup` by `sage install-skill`): a co-pilot install from a bare machine. Claude
-  installs what is missing (winget / brew / apt: git, Python, Node, gcloud; npm: the Claude CLI), makes the venv from
+  installs what is missing (winget / brew / apt: git, Python; the Claude CLI by its native installer; no Node, no gcloud
+  since 2026-11-14), makes the venv from
   `assistant/requirements.txt`, gets the engine (folder or git URL), creates the pack, runs doctor; the OWNER mints
   the Claude token (`claude setup-token`, User env var, never shipped with the skill), does every Google sign-in,
   consent and IAM grant; then serve, install-startup, Google in order, Discovery, Training, shadow week, go-live.
@@ -1905,3 +1906,25 @@ path that is neither hard nor a tap, whoever filed the request; `TAP_PATHS` is o
 credentials, people.json, card_ingest and Memory/; the test gate and check_gates remain the "breaks nothing" check.
 Tests: `test_live_card` (active page, idle guard), `test_agent` (find / update / undo, both unschedule shapes),
 `test_computer` (wiki = B), `test_builder_verify` (dream-filed builds auto-approved).
+
+## What a Sage agent needs from outside (2026-11-14)
+
+the owner: "How much of sage core depends on downloading other software? Can we ... make it our own self contained?" The
+engine is the organization's own code and almost all standard library. What it needs that it does not carry:
+
+| Piece | Why | Where it comes from |
+|---|---|---|
+| Python 3.11 | runs everything | private copy under `%LOCALAPPDATA%\Sage\python` (installer); inside the installer with `build.ps1 -Bundle` |
+| The Claude Code CLI | every model turn | its maker's native installer, always fetched (not ours to hand out; needs the internet to work at all) |
+| A Chromium browser | the browser hands | Playwright's build; inside the installer with `-Bundle` |
+| `assistant/requirements.txt` | keyring, playwright, pykeepass, google-auth (+ its requests / cryptography), tzdata; trafilatura and ddgs optional | pip; inside the installer with `-Bundle` |
+
+No longer needed: **Node** (browser jobs fetched `@playwright/mcp` through npx on every run, so a machine without Node
+had no browser hands while doctor called Node "not needed"; the tools are now `doer/browser_mcp.py`, the engine's own
+server on the Playwright Python package, same tool names, so the allow / deny lists, `click_guard.py`, `egress.py` and
+`prompt.md` did not change; `config.json -> doer.browser_server: "node"` puts the old one back), **gcloud** (never
+required; the setup scripts no longer install it, the skill uses it only where it already is), **pyotp**
+(`doer/totp.py`, RFC 6238 in the standard library). Honest limits: the Playwright Python package carries its own
+private Node program inside it, so "no Node" means none to install and none fetched, not that none exists on disk;
+keyring and pykeepass stay because they guard the secrets and the login vault. Tests: `test_browser_mcp.py` (every
+tool over the wire against a throwaway browser), `test_totp.py` (the RFC's published values). Doctor row: `browser tools`.
