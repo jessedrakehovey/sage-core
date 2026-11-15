@@ -1,4 +1,4 @@
-# sage-core 2026.11.14+5a45562
+# sage-core 2026.11.15+9de1035
 
 The engine of a Sage agent: the code, generic prompts, generic skills and templates, with nothing of any
 organization in it. An organization is a separate folder (its *pack*) made from this engine by
@@ -17,8 +17,10 @@ Three ways onto a machine, one update path (`assistant/installer/README.md` has 
    is one click: it shows each step as it installs a private Python, this engine as a release, the browser and the Claude
    Code CLI under `%LOCALAPPDATA%\Sage`, then **the Sage app opens in a window of its own** (`assistant/app.py`, no
    browser tab): the organization's name, what to call the agent, the owners; it creates the pack, checks the computer
-   (one tap fixes what the install could not finish), signs in to Claude in a window that closes by itself, shows the
-   Google steps, starts the agent. The Start-menu entry opens the same app: the agent's home from then on.
+   (one tap fixes what the install could not finish), signs in to Claude in a window that closes by itself, connects
+   Google with one sign-in (`assistant/google_connect.py`: the project, the services, the agent's identity and key;
+   the relay script and the Chat app's page are guided, with a Copy button per value), starts the agent. The
+   Start-menu entry opens the same app: the agent's home from then on.
 2. **A git clone:** `python assistant/new_org.py "<Org>" --agent <Name> --owner "Full Name:email" --out <folder>`,
    then `python assistant/sage.py doctor` and `serve` in that folder (`sage welcome` opens the same setup page).
 3. **The copilot skill** (`/sage-setup` in Claude Code) for a guided install; it ends in the same pack.

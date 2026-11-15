@@ -189,6 +189,30 @@ nothing on record said which approaches were dead; the back-tax upload was re-qu
 Tests: `tests/test_projects.py` (56 checks, scratch stores). Generic: the module names no organization, person or service
 (the test checks its code lines); `templates/prompt.generic.md` carries the same deed line as `prompt.md`.
 
+## The daily review: the day graded ask by ask, and a review that acts (dayreview.py, 2026-11-14)
+
+An owner asked whether the agent checks itself daily for what it could have done better, and said it did not seem
+good enough. It did check (a review of its own chats every few hours, the reflex every ten minutes, a weekly
+scorecard) and the checking changed little. What the stores showed, and what changed:
+
+| What was wrong | What it is now |
+|---|---|
+| Nothing graded the owners' own asks; the review read the chat as prose | `dayreview.grade(day)`: every ask an owner typed is **done / late / open / not done / no answer / repeated**, with the cause the outcome ledger wrote. A complaint belongs to the ask just before it, a quiet close is not a failure, and one job that fails three times in an afternoon is one miss |
+| Causes were written down and never read: 51 of 61 failures a week were "other" | `scorecard._classify` reads them: never started, left to the owner, sign-in, own rule in the way, file, no evidence, timeout, browser. Quiet closes are `settled`, neither kept nor failed. Minute-only chat stamps parse, so "had to repeat" is counted (it read 0 for four weeks) |
+| A fix the review asked for went to the back of a queue of 300, oldest first; 25 were never started in a week | `dayreview.prioritize(key, score)` ranks the build queue and `builder.pick` reads it: an owner's ask in chat, then what the review ranked (a fault that came back 100, an ask said twice 80, an ask that did not land 60, a standing cause 50, a slipped fix 40), then an owner's own asks, then the rest oldest first, anything untouched for three weeks last. Ports ride as ONE EXTRA slot a run and never cost a slot of real work |
+| "Fixed" meant a card closed: one failing self-test was fixed six mornings running | `reflex.symptom()` is the fault without the card or the night. The same symptom back inside `RECUR_DAYS` (7) is `recurred`; the earlier rows become `came_back` and stop counting as fixed; its build request is named for the symptom and ranked first |
+| The same finding came back every pass and was answered "already waiting on the owners" | A standing problem (a cause three or more failures share, a loop nobody acts on) seen `STREAK` (3) runs in a row is filed as ONE ranked build request with the evidence. The nightly review reads `DAYREVIEW` lines and is told a rule is not a fix |
+| Old asks were worked weeks later | A "Waiting Nd" item at `STALE_CLOSE_DAYS` (14) or more is closed by code with a work-log line, never handed on. A ticket a sensor made is closed by an older memory line that says in so many words the lead was dropped; an owner's own fresh ask still overrides it |
+
+The job is `day-review` in `spine_jobs.json`, once a day before the nightly review. It says nothing in chat; the
+record is `data/agent/dayreview.jsonl` and one work-log line. Only an owner can clear a sign-in or a step left to
+them, so those are graded and counted and never filed as a code fix.
+
+    python assistant/agent/dayreview.py status            # yesterday's grade, the causes, what was acted on, the queue's top
+    python assistant/agent/dayreview.py grade --day YYYY-MM-DD
+    python assistant/agent/dayreview.py run --dry-run
+    python assistant/tests/test_dayreview.py
+
 ## The reflex: it notices it is failing and changes course by code, within the hour (2026-10-27)
 
 the owner, 2026-10-27: "Sage was unable to do most of what I asked it today in both google spaces. I need sage to be able to
