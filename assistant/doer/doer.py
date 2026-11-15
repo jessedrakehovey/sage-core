@@ -319,6 +319,16 @@ def _browser_server(out_dir: Path) -> dict:
     import shutil
     tail = ["--cdp-endpoint", browser.cdp_url(), "--output-dir", str(out_dir)]
     node = {"command": "npx", "args": ["-y", "@playwright/mcp@latest"] + tail}
+    # the agent's own cursor in the page (browser_mcp.py): config.json -> doer.cursor {"on": true, "color": "#rrggbb",
+    # "label": ""}; the label defaults to the agent's name. The Node package has no such thing and is not passed it.
+    cur = CFG.get("cursor") if isinstance(CFG.get("cursor"), dict) else {}
+    try:
+        label = str(cur.get("label") or _agent_name())
+    except Exception:  # noqa: BLE001
+        label = str(cur.get("label") or "")
+    own = tail + ["--cursor", "on" if cur.get("on", True) else "off", "--cursor-label", label]
+    if cur.get("color"):
+        own += ["--cursor-color", str(cur["color"])]
     if str(CFG.get("browser_server") or "python").lower() == "node":
         return node
     script = str(HERE / "browser_mcp.py")
@@ -331,13 +341,13 @@ def _browser_server(out_dir: Path) -> dict:
         try:
             if Path(py).exists() and subprocess.run([py, script, "--check"], capture_output=True, timeout=60,
                                                     creationflags=NO_WINDOW).returncode == 0:
-                return {"command": py, "args": [script] + tail}
+                return {"command": py, "args": [script] + own}
         except Exception:  # noqa: BLE001
             continue
     if shutil.which("npx"):
         log("browser_mcp cannot run on this interpreter (playwright missing or too old); using the Node package")
         return node
-    return {"command": sys.executable, "args": [script] + tail}      # its own start-up error names the fix
+    return {"command": sys.executable, "args": [script] + own}       # its own start-up error names the fix
 
 
 def _mcp_config(out_dir: Path) -> Path:

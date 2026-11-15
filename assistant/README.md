@@ -1951,3 +1951,11 @@ required; the setup scripts no longer install it, the skill uses it only where i
 private Node program inside it, so "no Node" means none to install and none fetched, not that none exists on disk;
 keyring and pykeepass stay because they guard the secrets and the login vault. Tests: `test_browser_mcp.py` (every
 tool over the wire against a throwaway browser), `test_totp.py` (the RFC's published values). Doctor row: `browser tools`.
+
+## The browser stays up; background and foreground; the agent's cursor (2026-11-14)
+
+`doer/browser.py` no longer quits the browser after a job: it is parked (one blank tab, out of sight) and everything
+attaches to the one that is running. `doer.mode` = auto | background | foreground, switched by moving the window,
+never by a restart; in the background it is off the screen with no taskbar button and takes no keyboard focus.
+`doer/browser_mcp.py` draws the agent's own cursor in the page (a second cursor: the PC's own mouse is never moved).
+Detail, what was measured, and what is not changed: `doer/README.md`, the section of the same name.

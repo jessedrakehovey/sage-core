@@ -21,7 +21,8 @@ someone used the PC in the last few minutes (browser.want_front), and ONE messag
   again in front and posts the same two buttons in the same thread. The owner can say Do later again; each offer is
   one message, nothing is retried by the agent and nothing loops on its own.
 
-While a page is held: browser.close_browser() refuses to quit (force=True is Do later), prune_tabs() keeps the held
+While a page is held: browser.close_browser() does nothing (force=True is Do later: the page closes and, since
+2026-11-14, the browser is put out of sight and stays up rather than quitting), prune_tabs() keeps the held
 tab, and a new job works in a fresh tab and is told never to touch the held one. A held page settles by itself when
 its tab is gone (the owner finished and closed it), when its job runs again, or when the browser went down (then it
 waits for the next slot like a Do later). The words go through voice.gate (one voice, no ids, no internal names) and

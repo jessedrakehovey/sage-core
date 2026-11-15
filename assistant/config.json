@@ -246,6 +246,12 @@
   "runs_per_day_max": 20,
   "profile": "~/.claude/pw-wv-cli-profile",
   "cdp_port": 9333,
+  "mode": "auto",
+  "keep_open": true,
+  "cursor": {
+   "on": true,
+   "color": "#4A5C43"
+  },
   "offscreen": true,
   "in_front": true,
   "clear_screen_idle_s": 300,

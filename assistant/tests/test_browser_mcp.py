@@ -6,6 +6,10 @@
    subprocess, every tool over the wire: navigate, snapshot with references, click by reference, type, fill a form,
    select, press a key, hover, wait, evaluate, find, tabs, a dialog, console messages, resize, a screenshot.
    Skipped (said, not failed) on a machine with no Chromium.
+4. The agent's own cursor: it is in the page after an action, at the middle of the element it touched; it GLIDES there
+   (sampled mid-way from a second connection: many places in between, each further along); it never shows in the
+   snapshot, never takes a click meant for the page, shows in pictures; `--cursor off` leaves the page untouched.
+5. The small arguments the Node server had: `filename` (the result lands in the job's own folder), screenshot `scale`.
    python assistant/tests/test_browser_mcp.py
 """
 import os as _os, tempfile as _tf
@@ -84,6 +88,8 @@ srv = cfg["mcpServers"][doer.MCP]
 flat = json.dumps(cfg)
 check("the doer starts its browser tools with Python, not npx", "npx" not in flat and "@playwright" not in flat and srv["args"][0].endswith("browser_mcp.py"), flat)
 check("the config carries the browser's address and the job's folder", "--cdp-endpoint" in srv["args"] and "--output-dir" in srv["args"])
+check("the config turns the agent's cursor on, with a name on it", "--cursor" in srv["args"] and srv["args"][srv["args"].index("--cursor") + 1] == "on"
+      and "--cursor-label" in srv["args"] and srv["args"][srv["args"].index("--cursor-label") + 1].strip() != "")
 check("the server's interpreter exists", Path(srv["command"]).exists(), srv["command"])
 
 # ---- 3. live ----------------------------------------------------------------------------------------------------
@@ -120,7 +126,8 @@ else:
 <script>console.log('hello from the page'); console.error('a page error');</script>
 </body></html>""", encoding="utf-8")
     out = TMP / "out"
-    srv = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out)],
+    srv = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out),
+                            "--cursor-label", "Pip", "--cursor-color", "#4A5C43"],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NOWIN)
     n = [0]
 
@@ -203,6 +210,98 @@ else:
         check("live: select a tab", not err and "- 0: (current)" in txt, txt)
         txt, err = tool("browser_navigate_back")
         check("live: back", not err, txt[:200])
+        # ---- 4. the agent's own cursor ---------------------------------------------------------------------------
+        big = TMP / "big.html"
+        big.write_text("""<html><head><title>Cursor</title></head><body style="margin:0;height:2400px">
+<button id="a" style="position:absolute;left:40px;top:40px;width:120px;height:40px" onclick="document.title='A'">Alpha</button>
+<button id="b" style="position:absolute;left:900px;top:520px;width:140px;height:44px" onclick="document.title='B'">Bravo</button>
+<button id="far" style="position:absolute;left:300px;top:2000px;width:140px;height:44px" onclick="document.title='FAR'">Far down</button>
+</body></html>""", encoding="utf-8")
+        tool("browser_resize", width=1200, height=800)
+        txt, err = tool("browser_navigate", url=big.as_uri())
+        a_ref, b_ref, far_ref = (ref(txt, p) for p in ('button "Alpha"', 'button "Bravo"', 'button "Far down"'))
+        STATE = ("() => { const c = window.__agentCursor; const h = document.querySelector('[data-agent-cursor]');"
+                 " return c ? {x: c.x, y: c.y, host: !!h, hidden: h && h.getAttribute('aria-hidden'), label: c.tag.textContent,"
+                 " fill: c.arrow.getAttribute('fill'), pe: getComputedStyle(h).pointerEvents} : null }")
+
+        def cursor():
+            t, _e = tool("browser_evaluate", function=STATE)
+            m = re.search(r"### Result\n(.*?)\n### Page", t, re.S)
+            return json.loads(m.group(1)) if m else None
+
+        check("cursor: a page nobody touched yet has none", cursor() is None)
+        txt, err = tool("browser_click", element="Alpha", target=a_ref)
+        c = cursor()
+        check("cursor: after a click it is in the page, at the middle of the button", not err and "Page Title: A" in txt and c
+              and abs(c["x"] - 100) <= 1 and abs(c["y"] - 60) <= 1, str(c))
+        check("cursor: it carries the agent's name and colour", c and c["label"] == "Pip" and c["fill"] == "#4A5C43", str(c))
+        check("cursor: hidden from the accessibility tree and never in the way of a click", c and c["hidden"] == "true" and c["pe"] == "none", str(c))
+        snap, _ = tool("browser_snapshot")
+        check("cursor: the snapshot does not show it", "Pip" not in snap and "agent-cursor" not in snap, snap[:300])
+        txt, _ = tool("browser_evaluate", function="() => { const e = document.elementFromPoint(100, 60); return e && e.id }")
+        check("cursor: what is under it is still the page's own element", '"a"' in txt, txt[:120])
+
+        # the glide, sampled from a second connection while the click is still on its way
+        import browser as _b
+        ws = [t for t in json.loads(urllib.request.urlopen(cdp + "/json/list", timeout=5).read()) if t.get("type") == "page" and "big.html" in t.get("url", "")][0]["webSocketDebuggerUrl"]
+        SAMPLE = ("Runtime.evaluate", {"expression": "(() => { const c = window.__agentCursor; if (!c) return null; const m = new DOMMatrix(getComputedStyle(c.wrap).transform); return [Math.round(m.e), Math.round(m.f)] })()", "returnByValue": True})
+        n[0] += 1
+        srv.stdin.write(json.dumps({"jsonrpc": "2.0", "id": n[0], "method": "tools/call", "params": {"name": "browser_click", "arguments": {"element": "Bravo", "target": b_ref}}}).encode() + b"\n")
+        srv.stdin.flush()
+        seen, t0 = [], time.time()
+        while time.time() - t0 < 0.9:
+            try:
+                v = ((_b._cdp_calls(ws, [SAMPLE])[0] or {}).get("result") or {}).get("value")
+                if v:
+                    seen.append(tuple(v))
+            except Exception:
+                pass
+            time.sleep(0.03)
+        rep = json.loads(srv.stdout.readline().decode("utf-8"))["result"]
+        took = time.time() - t0
+        between = [p for p in dict.fromkeys(seen) if 100 < p[0] + 4 < 968]
+        xs = [p[0] for p in dict.fromkeys(seen)]
+        check("cursor: the click still lands", "Page Title: B" in rep["content"][0]["text"], rep["content"][0]["text"][:160])
+        check("cursor: it glides: several places between the two buttons", len(between) >= 4, f"{len(between)} of {len(seen)} samples: {list(dict.fromkeys(seen))[:12]}")
+        check("cursor: each place is further along than the last", xs == sorted(xs) and len(xs) >= 4, str(xs[:14]))
+        check("cursor: the glide costs well under a second", took < 2.5, f"{took:.2f}s")
+        c = cursor()
+        check("cursor: it ends on the second button", c and abs(c["x"] - 970) <= 1 and abs(c["y"] - 542) <= 1, str(c))
+        txt, err = tool("browser_click", element="Far down", target=far_ref)
+        c = cursor()
+        check("cursor: a target below the fold is scrolled to, and the cursor is on it inside the window", not err and "Page Title: FAR" in txt and c and 0 <= c["y"] <= 800, str(c))
+        txt, err = tool("browser_take_screenshot", filename="with-cursor.png", scale="device")
+        check("cursor: a picture of the page takes without trouble (scale=device)", not err and (out / "with-cursor.png").stat().st_size > 500, txt)
+
+        # ---- 5. filename arguments -----------------------------------------------------------------------------
+        txt, err = tool("browser_snapshot", filename="../snap.yml")
+        check("filename: the snapshot is saved inside the job's folder", not err and (out / "snap.yml").exists() and "Far down" in (out / "snap.yml").read_text(encoding="utf-8") and not (TMP / "snap.yml").exists(), txt)
+        txt, err = tool("browser_evaluate", function="() => ({a: 1})", filename="val.json")
+        check("filename: an evaluate result is saved", not err and json.loads((out / "val.json").read_text(encoding="utf-8")) == {"a": 1}, txt)
+        txt, err = tool("browser_find", text="far", filename="found.md")
+        check("filename: a find result is saved", not err and "Far down" in (out / "found.md").read_text(encoding="utf-8"), txt)
+        txt, err = tool("browser_console_messages", level="info", filename="console.log")
+        check("filename: console messages are saved", not err and (out / "console.log").exists(), txt)
+
+        # --cursor off: a second server on the same browser leaves the page alone
+        off = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out), "--cursor", "off"],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NOWIN)
+
+        def otool(name, **args):
+            off.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}}).encode() + b"\n")
+            off.stdin.flush()
+            r = json.loads(off.stdout.readline().decode("utf-8"))["result"]
+            return r["content"][0]["text"], bool(r.get("isError"))
+
+        try:
+            otool("browser_navigate", url=big.as_uri())
+            t2, e2 = otool("browser_click", target="#a")
+            t3, _ = otool("browser_evaluate", function="() => !!document.querySelector('[data-agent-cursor]')")
+            check("--cursor off: the click lands and nothing is added to the page", not e2 and "Page Title: A" in t2 and "false" in t3.split("### Page")[0], t3[:120])
+        finally:
+            off.stdin.close()
+            off.wait(timeout=10)
+
         txt, err = tool("browser_run_code_unsafe", code="1")
         check("live: a denied tool does not exist", err and "no such tool" in txt, txt)
     finally:

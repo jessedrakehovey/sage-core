@@ -1,5 +1,11 @@
 """browser.py - the doer's ONE browser: a persistent Chromium profile opened with a CDP port.
 
+It STAYS UP (2026-11-14). A job, a script or a sign-in check attaches to the one that is running; when it is done the
+browser is parked (one blank tab, out of sight), never quit, so no window opens and closes around every job. Two
+places it can be, switched by moving the window, never by a restart: the FOREGROUND (on the main monitor, in front)
+and the BACKGROUND (off the screen and, on Windows, without a taskbar button; nothing it does there takes the
+keyboard from a person working). config.json -> doer.mode: auto | background | foreground; doer.keep_open.
+
 Why one shared browser: the model drives pages through the Playwright MCP, and login_fill.py
 types passwords into the SAME pages from a separate process the model cannot see. Both connect
 to this browser over CDP (http://127.0.0.1:<port>). The profile is the wedding `playwright-cli`
@@ -10,7 +16,9 @@ the MCP and the CRM automation from opening the profile at the same time.
   python assistant/doer/browser.py --open          start it (off-screen unless --show), print the CDP url
   python assistant/doer/browser.py --show          start it ON screen for the owner to sign in to a site
   python assistant/doer/browser.py --front         bring the RUNNING browser on screen, maximized, in front (no restart)
-  python assistant/doer/browser.py --close
+  python assistant/doer/browser.py --back          put the RUNNING browser out of sight (no restart; it keeps working there)
+  python assistant/doer/browser.py --park          what a finished job does: one blank tab, out of sight, still up
+  python assistant/doer/browser.py --close         really quit it (jobs no longer do: the browser stays up between them)
   python assistant/doer/browser.py --prune          close every leftover tab but one
   python assistant/doer/browser.py --status
   python assistant/doer/browser.py --probe-profile  one line for the connection check
@@ -60,6 +68,20 @@ NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 # person touched the mouse or keyboard within clear_screen_idle_s; then it stays off-screen (Control PC still shows it).
 IN_FRONT = bool(CFG.get("in_front", True))
 CLEAR_SCREEN_IDLE_S = int(CFG.get("clear_screen_idle_s", 300))
+# ONE browser that stays up (the owner 2026-11-14: "stop relaunching browsers when running new scripts. I don't like seeing
+# browsers open and close over and over"). A job that is done no longer quits it: close_browser() PARKS it (one blank
+# tab, out of sight) and the next job, script or sign-in check attaches to the same one. It quits only when told to
+# (`--close`, close_browser(quit=True)) or with config.json -> doer.keep_open false (the old way: quit after every job).
+KEEP_OPEN = bool(CFG.get("keep_open", True))
+# Where a job's window is: "auto" (in front unless someone is at the PC: the 2026-11-06 rule), "background" (never in
+# front by itself; Control PC and a sign-in still show it), "foreground" (always in front). Without doer.mode the older
+# doer.in_front decides: true = auto, false = background. Either way the switch is a window move, never a restart.
+MODE = str(CFG.get("mode") or ("auto" if IN_FRONT else "background")).lower()
+# In the background the window is not merely off the screen: on Windows it has no taskbar button either (_taskbar). It
+# keeps working there (pages load, clicks land, pictures are taken: measured 2026-11-14) and nothing it does there
+# takes the keyboard from the window a person is typing in.
+HIDE_IN_BACKGROUND = bool(CFG.get("hide_in_background", True))
+JOB_LOCK = STATE.with_name(".doer.lock")           # doer.py's one-job-at-a-time lock: {pid, ts}
 
 
 def idle_seconds() -> float:
@@ -87,8 +109,57 @@ def someone_at_the_pc(within_s: float | None = None) -> bool:
 
 
 def want_front() -> bool:
-    """The default for a job's window: in front, unless someone is at the PC right now or in_front is off."""
-    return IN_FRONT and not someone_at_the_pc()
+    """The default for a job's window, by doer.mode: foreground = in front; background = never; auto = in front
+    unless someone is at the PC right now."""
+    if MODE == "foreground":
+        return True
+    if MODE == "background":
+        return False
+    return not someone_at_the_pc()
+
+
+def _pid_alive(pid) -> bool:
+    try:
+        pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)             # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        ok = k.GetExitCodeProcess(h, ctypes.byref(code))
+        k.CloseHandle(h)
+        return bool(ok) and code.value == 259             # STILL_ACTIVE
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def job_running() -> int:
+    """The pid of the browser job that is running right now (doer.py's lock, held by a live process); 0 when none."""
+    try:
+        st = json.loads(JOB_LOCK.read_text(encoding="utf-8")) if JOB_LOCK.is_file() else {}
+    except Exception:  # noqa: BLE001
+        st = {}
+    pid = int((st or {}).get("pid") or 0) if isinstance(st, dict) else 0
+    return pid if _pid_alive(pid) else 0
+
+
+def in_use() -> bool:
+    """Is someone working in the browser right now? A browser that is merely up is not: it stays up between jobs
+    (KEEP_OPEN), so "is it running" no longer means "is it busy". Busy = a browser job is running, or a page is held
+    open for an owner."""
+    return bool(alive()) and bool(job_running() or held_tabs())
 
 
 def cdp_url() -> str:
@@ -323,24 +394,24 @@ def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
         PORT, _how = ports.claim("cdp", PORT)
     front_default = show is None and want_front()
     if alive():
+        # the one that is up is the one everybody uses: it is never restarted to change where its window is
+        # (until 2026-11-14 asking for it on screen while it was hidden quit it and started a new one)
         st = _state()
-        if show and st.get("offscreen") and held_tabs():
-            try:                                          # a page is held for an owner: move it, never restart over it
-                show_on_screen()
+        if st.get("parked"):
+            st.pop("parked", None)
+            _save_state(st)
+        prune_tabs()
+        if (show or front_default) and st.get("offscreen", True):
+            ok = False
+            try:
+                ok, _detail = show_on_screen()
             except Exception:  # noqa: BLE001
                 pass
-            prune_tabs()
-            return cdp_url()
-        if show and st.get("offscreen"):
-            # on-screen was asked for but it is hidden: restart it visible
-            close_browser()
+            if show and not ok and not held_tabs() and not job_running():
+                close_browser(quit=True)                  # the window would not come on screen: only then, a fresh one
+            else:
+                return cdp_url()
         else:
-            prune_tabs()
-            if front_default and st.get("offscreen"):
-                try:                                      # the default: bring the one that is up in front, no restart
-                    show_on_screen()
-                except Exception:  # noqa: BLE001
-                    pass
             return cdp_url()
     show = bool(show) or front_default
     exe = chrome_exe()
@@ -355,6 +426,7 @@ def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
     if offscreen:
         args += OFFSCREEN
     args.append("about:blank")
+    front_before = _foreground()
     p = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=NO_WINDOW, close_fds=True)
     t0 = time.time()
@@ -363,6 +435,14 @@ def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
             prune_tabs()
             _save_state({"pid": p.pid, "port": PORT, "offscreen": offscreen, "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
                          "lease": bool(lease), "profile": str(PROFILE)})
+            if offscreen:
+                for _ in range(10):                       # the window is a moment behind the port
+                    if _windows(p.pid):
+                        break
+                    time.sleep(0.2)
+                if HIDE_IN_BACKGROUND:
+                    _taskbar(p.pid, False)
+                _give_back_focus(front_before, p.pid)     # a start takes the keyboard; a background start gives it back
             if lease:
                 # the lease lives in THIS process; keep a sidecar pid so --close can release it
                 try:
@@ -376,11 +456,62 @@ def open_browser(show: bool | None = None, wait_s: float = 25.0) -> str:
     raise RuntimeError("the browser did not answer on its CDP port (another Chrome may hold the profile; close it or free the lease)")
 
 
-def close_browser(force: bool = False) -> bool:
-    """Ask the browser to quit (Browser.close over CDP), then make sure its pid is gone. While a page is held open for
-    an owner (held_tabs) it stays up and this returns False; `force` is the owner's Do later (leftopen.later)."""
+def park() -> bool:
+    """A job is done with the browser: it stays up, out of sight, on one blank tab, signed in and ready for the next
+    one. No window closes and none opens. Pages held open for an owner are left exactly as they are (and then the
+    window is not moved either). False when the browser is not running."""
+    if not alive():
+        return False
+    held = held_tabs()
+    try:
+        with urllib.request.urlopen(cdp_url() + "/json/list", timeout=5) as r:
+            pages = [t for t in json.loads(r.read().decode("utf-8", "replace")) if t.get("type") == "page"]
+    except Exception:  # noqa: BLE001
+        pages = []
+    blank = ""
+    try:                                              # the tab that stays: a blank one, so no site sits loaded for hours
+        req = urllib.request.Request(cdp_url() + "/json/new?about:blank", method="PUT")
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            blank = str(json.loads(resp.read().decode("utf-8", "replace")).get("id") or "")
+    except Exception:  # noqa: BLE001
+        pass
+    if blank:
+        for t in pages:
+            if str(t.get("id") or "") in held:
+                continue
+            try:
+                urllib.request.urlopen(cdp_url() + "/json/close/" + t["id"], timeout=5).read()
+            except Exception:  # noqa: BLE001
+                pass
+    else:
+        prune_tabs()
+    if not held:
+        try:
+            send_to_back()
+        except Exception:  # noqa: BLE001
+            pass
+    st = _state()
+    if st:
+        st["parked"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        _save_state(st)
+    return True
+
+
+def close_browser(force: bool = False, quit: bool = False) -> bool:
+    """A caller is done with the browser. With KEEP_OPEN (the default) that PARKS it (park(): stays up, out of sight,
+    one blank tab) and only `quit=True` (`--close`, an owner's word) really ends it; with keep_open off it quits as it
+    always did: Browser.close over CDP, then make sure its pid is gone. While a page is held open for an owner
+    (held_tabs) nothing happens and this returns False; `force` is the owner's Do later (leftopen.later). A caller
+    that is not the running browser job never parks or quits under that job (2026-11-14: a warm-up or a sign-in check
+    that finished mid-job used to quit the job's browser)."""
     if not force and held_tabs() and alive():
         return False
+    if not force and not quit:
+        running = job_running()
+        if running and running != os.getpid():
+            return False
+    if KEEP_OPEN and not quit:
+        return park()
     st = _state()
     ok = False
     if alive():
@@ -484,6 +615,137 @@ def on_main_monitor(bounds: dict, screen: tuple) -> bool:
     return w > 0 and h > 0 and ow * oh >= 0.6 * w * h
 
 
+def _windows(pid: int) -> list:
+    """Windows: the browser's own top-level windows (Chrome's window class, a title, no owner), shown or hidden."""
+    if os.name != "nt" or not pid:
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        found = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def _each(hwnd, _):
+            p = wintypes.DWORD()
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
+            if p.value == pid and u.GetWindowTextLengthW(hwnd) and not u.GetWindow(hwnd, 4):
+                cls = ctypes.create_unicode_buffer(64)
+                u.GetClassNameW(hwnd, cls, 64)
+                if cls.value == "Chrome_WidgetWin_1":
+                    found.append(hwnd)
+            return True
+
+        u.EnumWindows(_each, 0)
+        return found
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _taskbar(pid: int, show: bool) -> int:
+    """Take the browser's windows off the taskbar and out of Alt-Tab (show=False) or put them back (show=True), on
+    Windows, by the tool-window style. The window itself stays a real, painting window: a window that is HIDDEN
+    outright stops painting and a picture of its page can hang (measured 2026-11-14: one of two timed out), while one
+    that is off the screen without a taskbar button took every picture. The change needs the window hidden for an
+    instant; it comes back WITHOUT taking the keyboard (SW_SHOWNOACTIVATE). -> how many windows; 0 off Windows."""
+    hw = _windows(pid)
+    if not hw:
+        return 0
+    import ctypes
+    u = ctypes.windll.user32
+    u.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    u.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    u.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    u.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+    for h in hw:
+        ex = u.GetWindowLongPtrW(h, -20)                              # GWL_EXSTYLE
+        new = ((ex & ~0x80) | 0x40000) if show else ((ex | 0x80) & ~0x40000)   # WS_EX_TOOLWINDOW / WS_EX_APPWINDOW
+        if new != ex:
+            u.ShowWindow(h, 0)
+            u.SetWindowLongPtrW(h, -20, new)
+            u.ShowWindow(h, 4)                                        # SW_SHOWNOACTIVATE
+    return len(hw)
+
+
+def hidden() -> bool:
+    """True when the browser is up and none of its windows has a taskbar button (the background of HIDE_IN_BACKGROUND)."""
+    if os.name != "nt":
+        return False
+    hw = _windows(int(_state().get("pid") or 0))
+    if not hw:
+        return False
+    import ctypes
+    u = ctypes.windll.user32
+    u.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    u.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    return all(u.GetWindowLongPtrW(h, -20) & 0x80 for h in hw)
+
+
+def _foreground() -> int:
+    """Windows: the window a person is typing in right now (0 elsewhere)."""
+    if os.name != "nt":
+        return 0
+    try:
+        import ctypes
+        return int(ctypes.windll.user32.GetForegroundWindow() or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _give_back_focus(prev: int, pid: int) -> bool:
+    """A browser STARTING takes the keyboard from whatever a person was typing in (measured 2026-11-14; nothing it
+    does afterwards in the background does). When ours just did, hand the keyboard back to the window that had it."""
+    if os.name != "nt" or not prev or not pid:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        now = u.GetForegroundWindow()
+        if not now or now == prev:
+            return False
+        p = wintypes.DWORD()
+        u.GetWindowThreadProcessId(now, ctypes.byref(p))
+        if p.value != pid or not u.IsWindow(prev):
+            return False                              # someone else is in front (the person switched): not ours to undo
+        return bool(u.SetForegroundWindow(prev))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def send_to_back() -> tuple:
+    """Put the running browser out of sight WITHOUT a restart: every window off the screen and, on Windows,
+    without a taskbar button. Whatever is open in it stays open and keeps working. -> (ok, detail)."""
+    v = alive()
+    ws = str((v or {}).get("webSocketDebuggerUrl") or "")
+    if not ws:
+        return False, "the browser is not running"
+    try:
+        with urllib.request.urlopen(cdp_url() + "/json/list", timeout=5) as r:
+            pages = [t for t in json.loads(r.read().decode("utf-8", "replace")) if t.get("type") == "page"]
+    except Exception as e:  # noqa: BLE001
+        return False, f"could not list the browser's tabs ({type(e).__name__})"
+    moved = 0
+    try:
+        wins = _cdp_calls(ws, [("Browser.getWindowForTarget", {"targetId": t["id"]}) for t in pages[:30]])
+        wids = sorted({int((w or {}).get("windowId") or 0) for w in wins} - {0})
+        calls = []
+        for wid in wids:
+            calls += [("Browser.setWindowBounds", {"windowId": wid, "bounds": {"windowState": "normal"}}),
+                      ("Browser.setWindowBounds", {"windowId": wid, "bounds": {"left": -32000, "top": -32000}})]
+        if calls:
+            _cdp_calls(ws, calls)
+        moved = len(wids)
+    except (OSError, ValueError) as e:
+        return False, f"could not move the window ({type(e).__name__})"
+    st = _state()
+    hid = _taskbar(int(st.get("pid") or 0), False) if HIDE_IN_BACKGROUND else 0
+    if st:
+        st["offscreen"] = True
+        _save_state(st)
+    return True, f"{moved} window(s) off the screen" + (", no taskbar button" if hid else "")
+
+
 def _raise_window(pid: int) -> str:
     """Windows: maximize the browser's top-level window and put it in front. Best effort; returns
     'minimized' / 'hidden' / '' (fine) from the OS's own read-back."""
@@ -532,6 +794,7 @@ def show_on_screen() -> tuple:
     page = active_page(pages) or pages[0]
     ws = str((alive() or {}).get("webSocketDebuggerUrl") or "")
     sw, sh = _screen()
+    _taskbar(int(_state().get("pid") or 0), True)         # in front it is an ordinary window again, taskbar button and all
     try:
         win = _cdp_calls(ws, [("Browser.getWindowForTarget", {"targetId": page["id"]})])[0]
         wid = int((win or {}).get("windowId") or 0)
@@ -657,7 +920,8 @@ def status() -> dict:
     st = _state()
     return {"up": bool(v), "cdp": cdp_url() if v else "", "browser": (v or {}).get("Browser", ""), "offscreen": st.get("offscreen"),
             "pid": st.get("pid"), "profile": str(PROFILE), "in_front_default": IN_FRONT, "idle_s": round(idle_seconds(), 1),
-            "someone_at_the_pc": someone_at_the_pc()}
+            "someone_at_the_pc": someone_at_the_pc(), "mode": MODE, "keep_open": KEEP_OPEN, "hidden": hidden() if v else False,
+            "in_use": in_use() if v else False, "parked": st.get("parked") if v else None}
 
 
 def probe_profile() -> str:
@@ -676,7 +940,9 @@ def main() -> int:
     ap.add_argument("--open", action="store_true")
     ap.add_argument("--show", action="store_true", help="start on screen so owner1 can sign in to a site")
     ap.add_argument("--front", action="store_true", help="bring the running browser on screen, maximized, in front")
-    ap.add_argument("--close", action="store_true")
+    ap.add_argument("--back", action="store_true", help="put the running browser out of sight, no restart")
+    ap.add_argument("--park", action="store_true", help="one blank tab, out of sight, still up")
+    ap.add_argument("--close", action="store_true", help="really quit the browser")
     ap.add_argument("--prune", action="store_true", help="close every leftover tab but one")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--probe-profile", action="store_true")
@@ -692,8 +958,15 @@ def main() -> int:
         ok, detail = show_on_screen()
         print(("ON_SCREEN " if ok else "NOT_ON_SCREEN ") + detail)
         return 0 if ok else 1
+    if a.back:
+        ok, detail = send_to_back()
+        print(("IN_BACKGROUND " if ok else "NOT_MOVED ") + detail)
+        return 0 if ok else 1
+    if a.park:
+        print("parked" if park() else "not running")
+        return 0
     if a.close:
-        print("closed" if close_browser() else "was not running")
+        print("closed" if close_browser(quit=True) else "was not running")
         return 0
     if a.open or a.show:
         try:
@@ -708,7 +981,7 @@ def main() -> int:
                 while alive():
                     time.sleep(2)
             except KeyboardInterrupt:
-                close_browser()
+                close_browser(quit=True)
         return 0
     print(json.dumps(status(), indent=1))
     return 0

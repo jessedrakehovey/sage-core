@@ -88,7 +88,7 @@ doer._mc_note = lambda text: None
 
 # a stand-in browser: one page up at the step the job stopped on
 PAGE = {"id": "TAB1", "url": "https://city.example/pay/ticket", "type": "page"}
-B = {"up": True, "pages": [dict(PAGE)], "closed": [], "forced": [], "shown": 0, "front": True}
+B = {"up": True, "pages": [dict(PAGE)], "closed": [], "forced": [], "shown": 0, "front": True, "parked": []}
 browser.active_page = lambda pages=None, focus=None: (B["pages"][-1] if B["pages"] and B["up"] else {})
 browser.alive = lambda timeout_s=1.5: ({"Browser": "x"} if B["up"] else None)
 browser.want_front = lambda: B["front"]
@@ -96,6 +96,8 @@ browser.show_on_screen = lambda: (B.__setitem__("shown", B["shown"] + 1) or (Tru
 _real_close = browser.close_browser
 browser._cdp_browser_close = lambda: (B["closed"].append(time.time()), B.__setitem__("up", False)) and True
 browser.prune_tabs = lambda keep=1: 0
+# the browser stays up between jobs (2026-11-14): being done with it parks it (its tabs go, it is put out of sight)
+browser.park = lambda: (B["parked"].append(time.time()), B.__setitem__("pages", [])) and True
 browser.cdp_url = lambda: "http://127.0.0.1:1"
 browser.open_browser = lambda show=None, wait_s=0: B.__setitem__("up", True) or "http://127.0.0.1:1"
 leftopen._pages = lambda: (list(B["pages"]) if B["up"] else None)
@@ -181,14 +183,20 @@ check("a new job is told to keep off the held tab", "A TAB IS HELD FOR THE OWNER
 person = {"key": "owner", "name": "Owner"}
 tap = gchat_events.job_click({}, {"params": {"job": T1, "option": "Do later"}}, person)
 e = leftopen.entry(T1)
-check("Do later (via the Chat tap): the browser quits (forced), the job is held for the next slot",
-      len(B["closed"]) == 1 and not B["up"] and e.get("state") == "later" and e.get("due", 0) > time.time(), json.dumps(e)[:300])
+check("Do later (via the Chat tap): the page closes and the browser is put away, still up (forced), the job is held for the next slot",
+      len(B["parked"]) == 1 and B["pages"] == [] and B["closed"] == [] and B["up"] and e.get("state") == "later" and e.get("due", 0) > time.time(),
+      json.dumps(e)[:300])
 flat = json.dumps(tap)
 check("Do later: the tapped message says when it comes back and has no buttons", "bring it back" in flat and "at 9 AM" in flat
       and "buttonList" not in flat, flat[:400])
 check("Do later: the ticket's note says it is held", "Do later" in str((tickets._load()[T1].get("history") or [{}])[-1].get("note")))
 again = leftopen.later(T1, person)
-check("Do later tapped twice: same answer, nothing closes twice", len(B["closed"]) == 1 and "bring it back" in json.dumps(again))
+check("Do later tapped twice: same answer, nothing closes twice", len(B["parked"]) == 1 and B["closed"] == [] and "bring it back" in json.dumps(again))
+# keep_open off (the old way): a forced close really quits
+browser.KEEP_OPEN = False
+check("keep_open off: a forced close quits the browser as it always did", _real_close(force=True) is True and len(B["closed"]) == 1 and not B["up"])
+browser.KEEP_OPEN = True
+B["up"] = True
 check("Do later on an unknown job -> {} (the tap says the job is not running)", leftopen.later("0" * 16) == {})
 
 # ------------------------------------------------------------------ 7. it comes back at its time, with the same two buttons
