@@ -131,7 +131,13 @@ def build(root: Path, out: Path, version: str = "", notes: list | None = None, u
                 zi = zipfile.ZipInfo(rel.replace("\\", "/"), date_time=(2026, 1, 1, 0, 0, 0))   # reproducible: the content is the identity
                 zi.compress_type = zipfile.ZIP_DEFLATED
                 zi.external_attr = 0o644 << 16
-                z.writestr(zi, p.read_bytes())
+                data = p.read_bytes()
+                if url_base and rel == engine.MANIFEST_NAME:
+                    # the feed rides inside the release: every install it lands on finds the next one (updater.manifest_feed)
+                    m = json.loads(data.decode("utf-8-sig"))
+                    m["engine"] = dict(m.get("engine") or {}, release_url=url_base.rstrip("/"))
+                    data = (json.dumps(m, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
+                z.writestr(zi, data)
                 n += 1
         rec = {"name": NAME, "version": ver, "date": time.strftime("%Y-%m-%d"), "built": time.strftime("%Y-%m-%dT%H:%M:%S"),
                "file": zip_path.name, "sha256": sha256_of(zip_path), "size": zip_path.stat().st_size, "files": n,

@@ -174,6 +174,34 @@ check("sage rollback restores the previous engine file and manifest version, and
 check("rollback leaves no .pre-update litter and the pack file is still untouched", not list(OUT.rglob("*.pre-update")) and (OUT / "assistant" / "config.json").read_bytes() == cfg_before)
 rc, out = run([str(OUT / "assistant" / "updater.py"), "check", "--url", str(dist2)])
 check("after the rollback the feed is 'newer' again", rc == 0 and "(newer)" in out, out[-200:])
+rc, out = run([str(OUT / "assistant" / "updater.py"), "run", "--no-gate", "--url", str(dist2)])
+check("the hourly run does not put a rolled-back release straight back", rc == 0 and "rolled back" in out and (OUT / "assistant" / "catalog.py").read_bytes() == cat_before, out[-200:])
+
+# (e) every install takes every release (2026-11-14): a hand-edited engine file, a blank org.json feed, a same-date rebuild
+e4 = make_engine("four", "2027.01.04+ccccccc")
+dist4 = TMP / "dist4"
+release.build(e4, dist4, notes=["four"], url_base=str(dist4))
+edited = OUT / "assistant" / "ports.py"
+edited.write_text(edited.read_text(encoding="utf-8") + "\n# changed by hand here\n", encoding="utf-8")
+rc, out = run([str(OUT / "assistant" / "updater.py"), "run", "--no-gate", "--url", str(dist4)])
+check("a newer release lands over a hand-edited engine file, the edit kept beside it",
+      rc == 0 and "updated" in out and "changed by hand here" not in edited.read_text(encoding="utf-8")
+      and "changed by hand here" in (OUT / "assistant" / "ports.py.pre-update").read_text(encoding="utf-8"), out[-300:])
+man4 = json.loads((OUT / "engine_manifest.json").read_text(encoding="utf-8"))
+check("the release carries its own feed into the pack's manifest", man4["engine"].get("release_url") == str(dist4), str(man4["engine"])[:200])
+check("org.json has no feed, the updater still finds one (from the release it runs)",
+      json.loads((OUT / "assistant" / "org.json").read_text(encoding="utf-8")).get("engine_release_url") == ""
+      and json.loads(run([str(OUT / "assistant" / "updater.py"), "status"])[1]).get("release_url") == str(dist4))
+e5 = make_engine("five", "2027.01.04+ddddddd")
+dist5 = TMP / "dist5"
+release.build(e5, dist5, notes=["five"])
+rc, out = run([str(OUT / "assistant" / "updater.py"), "run", "--no-gate", "--url", str(dist5)])
+check("another build of the same date is applied without --force",
+      rc == 0 and "updated" in out and json.loads((OUT / "engine_manifest.json").read_text(encoding="utf-8"))["engine"]["version"] == "2027.01.04+ddddddd", out[-200:])
+rc, out = run([str(OUT / "assistant" / "updater.py"), "run", "--no-gate", "--url", str(dist2)])
+check("an older release still waits for --force", rc == 0 and "older" in out, out[-200:])
+eu = [j for j in json.loads((ROOT / "serve.json").read_text(encoding="utf-8"))["jobs"] if j["name"] == "engine-update"]
+check("engine-update runs every hour on every install, no window", eu and eu[0]["every_min"] == 60 and not eu[0].get("window"), str(eu)[:200])
 rc, out = run([str(OUT / "assistant" / "sage.py"), "doctor", "--json", "--no-probe"])
 try:
     rows = {r["check"]: r for r in json.loads(out[out.index("["):])}

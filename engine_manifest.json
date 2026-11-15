@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+27c0ab1",
+  "version": "2026.11.14+6436873",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T17:41:12"
+  "synced": "2026-11-14T18:09:52"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "d33e76387abf8c3a2530f627469a5593d2ad389840feef44a1283f66d1922bb8",
+  "assistant/README.md": "da50314f09f0a0b3a937c81a60e730add9570c4b5e440be1611ebb6e35f5779e",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "fbc7262e72a6d603dd087791128f1c176b51133146e40ed4eb16cd87cc5bc116",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -262,10 +262,10 @@
   "assistant/ports.py": "48ed625fdd18e6b996ee20098916705d57b13766170238432c80f58cc70503eb",
   "assistant/prompts/brief.md": "a13900819634e26e0219bad883c8c7d3454fd969fa3d708b976747e1f00f2a3c",
   "assistant/prompts/operator.md": "9721e2bc2bd49d1716eff14aa9120d2eb195a7c4698d24bc83c0f5e7a90422d6",
-  "assistant/release.py": "9cd6fb23b6d7e3e87cf900e32c9152d3b6f0f2b14bc23f80430c5f52e9c20d27",
+  "assistant/release.py": "20009c34e1f03db959f7f9939804ef2120b645c1a78feebb875870029beed782",
   "assistant/requirements-semantic.txt": "4fc7fc394ad0a9c9de3d812b5d61040c149416e8e94b307f53f83a2de4824f1f",
   "assistant/requirements.txt": "da40f585ff71b1b80ee61d38fd881734c3d6779fc3bea301e0df0710a41513b4",
-  "assistant/sage.py": "ab534d8f1428eb4d1368933a79285991fdba7a51582daa8b9b56deab83bcd2df",
+  "assistant/sage.py": "87eca2a8231cff56c74f481bba28a2a99703c9362535a40d7856424d1b6cd393",
   "assistant/scripts/alib.py": "4d538508dd38ed022d9225e40139205819f9dd9e504503ad72a1c7b833397c3b",
   "assistant/scripts/builds_requeue.py": "00a1e4e90dccfbe184edd79e059d7926bf019b83a7e423ccff023ef2c0893b6f",
   "assistant/scripts/cards.py": "cdf4db291d9d4967b2e710cd78593e346650266ad40b975838a847a68e0958e7",
@@ -438,7 +438,7 @@
   "assistant/tests/test_home_tab.py": "0ad95170c0c8c019bf370adb0155782dade2b4e4a5d72d9b072253e66a10dcf8",
   "assistant/tests/test_ideas_teach_egress.py": "59e30be353a98bcb3bb1333ca568374064b4568d3b9a9c745a3da3b8445258f0",
   "assistant/tests/test_injection_contract.py": "d9330697acb39b80c4f1f78fb00fef4d9bf225961523531fe2343fde6e3fa7e2",
-  "assistant/tests/test_installer.py": "b7ab409bb3db31ed452b83b45e870bc7cf1ab48d8690e606caf58c862308b6ac",
+  "assistant/tests/test_installer.py": "5b89baaeb4267fce5a8836636e72463ea9b9ab512ecea3e4f3c26d7d9bff517d",
   "assistant/tests/test_intents.py": "d2bce2bdc91e04748b00d8fe148793a7e77e3838926cde2d11bb79d8d403ec98",
   "assistant/tests/test_interaction_words.py": "5519c7e62ce140f28ece668005038c200da22f3faf894e1f54d8d824d35fdd30",
   "assistant/tests/test_layout.py": "ab87062888ef85e365b4a4f728c20888c5a53dd20d3f8ce0279a7393505c3ef6",
@@ -508,7 +508,7 @@
   "assistant/tests/test_wiki_tooling.py": "1ef10c7dba7b49c794a0ea69a48f76070be75a439b90a7bca2c46f968a11db07",
   "assistant/tests/test_worklog_routines.py": "1d05c7843a696b0f33caef7ba0d5336fc09989e4020094e46abe54ae2ac96984",
   "assistant/tracking.json": "fd946cbbef54ad15e6369cc91d4734c08cff596ef97c800663f60248802247fe",
-  "assistant/updater.py": "1f3f14308d036a4e48f2e18329243d34fe819512de172c3ed21e53c1dbd69595",
+  "assistant/updater.py": "7f64242e29f0eb92a282a6e2747e543a852156c3df14adfc8630064d82096cd4",
   "assistant/welcome.py": "49a8d37fe4d6dbcecba870b5ce332a57e9fb8a79ffd1d6cac0b285bfb817f06f",
   "scripts/dream_cron.ps1": "7e997b5a703824fd0bf99836ca9d7a88ff919b929447d44c524f0e87caf7d987",
   "scripts/dream_cron.xml": "370d0b5e7a1e30f4e7f1fbd6b0d9a7fb7f9fd5a3c27936bf98845650cabb8698",

@@ -149,8 +149,19 @@ def derived_url() -> str:
     return feed_from_origin(Path(er)) if er else ""
 
 
+def manifest_feed() -> str:
+    """The feed every release stamps into its own manifest (release.build --url): an install whose org.json lost or never had
+    engine_release_url still finds the next release from the one it runs."""
+    man = _load(ROOT / engine.MANIFEST_NAME, {})
+    return str(((man.get("engine") or {}).get("release_url")) or "")
+
+
 def release_url(explicit: str = "") -> str:
-    u = explicit or os.environ.get("SAGE_RELEASE_URL", "") or str(orgcfg.get("engine_release_url") or "")
+    """Where updates come from, first that answers: --url, SAGE_RELEASE_URL, org.json engine_release_url, the feed the running
+    release carries, the last feed that worked here, the GitHub clone the engine came from. Updates are on for every install
+    (the owner, 2026-11-14: everyone who downloads sage-core gets every new release automatically)."""
+    u = explicit or os.environ.get("SAGE_RELEASE_URL", "") or str(orgcfg.get("engine_release_url") or "") or manifest_feed() \
+        or str(_load(STATE, {}).get("feed") or "")
     return (u or derived_url()).strip()
 
 
@@ -360,9 +371,16 @@ def run(force: bool = False, gates: tuple = GATES, url: str = "", dry: bool = Fa
     avail = str(rel_rec["version"])
     relation = compare(rec["installed"], avail)
     rec["available"] = avail
-    if relation == "same" or (relation in ("older", "different", "unknown") and not force):
-        return finish("up to date" if relation == "same" else f"not applied ({relation})",
-                      f"installed {rec['installed'] or 'unknown'}, available {avail}" + ("" if relation == "same" else "; --force applies it anyway"))
+    st["feed"] = rel_url if _is_remote(rel_url) else st.get("feed", "")     # the last feed that answered: a fallback if org.json loses it
+    # the feed's latest release is the authority: a newer date, another build of the same date, or an install whose own version
+    # cannot be read all take it (2026-11-14). Only an OLDER release waits for --force (a downgrade is a person's call), and the
+    # release an owner rolled back from stays skipped until a newer one is published.
+    if relation == "same":
+        return finish("up to date", f"installed {rec['installed'] or 'unknown'}, available {avail}")
+    if relation == "older" and not force:
+        return finish("not applied (older)", f"installed {rec['installed'] or 'unknown'}, available {avail}; --force applies it anyway")
+    if avail == str(st.get("skip_version") or "") and not force:
+        return finish("not applied (rolled back)", f"{avail} was rolled back here; the next release lands by itself, --force applies this one")
     if dry:
         return finish("would update", f"{rec['installed'] or 'unknown'} -> {avail} (dry run)")
     tmp = Path(tempfile.mkdtemp(prefix="sage_update_"))
@@ -387,7 +405,9 @@ def run(force: bool = False, gates: tuple = GATES, url: str = "", dry: bool = Fa
         installed_at = str(((_load(ROOT / engine.MANIFEST_NAME, {}).get("engine") or {}).get("installed")) or time.strftime("%Y-%m-%dT%H:%M:%S"))
         n = snapshot()
         _log(f"snapshot of {n} engine files kept for rollback; applying")
-        rep = engine.update(ROOT, staged, force=force)
+        # every engine file follows the release, a hand-edited one included (its edit is kept beside it as <file>.pre-update and
+        # in .sage-engines/previous/): an organization's own changes belong in its pack files, which are never touched
+        rep = engine.update(ROOT, staged, force=True)
         final = ENGINES / avail.replace("+", "-")
         if final.exists():
             shutil.rmtree(final)
@@ -402,9 +422,10 @@ def run(force: bool = False, gates: tuple = GATES, url: str = "", dry: bool = Fa
         _request_restart(f"engine {rec['installed']} -> {avail}")
         summary = engine.update_summary(rep)
         note(f"Engine updated {rec['installed'] or 'unknown'} -> {avail}: {summary.splitlines()[0]}." +
-             (f" Left alone (changed by hand here): {', '.join(rep['conflicts'][:6])}." if rep["conflicts"] else "") +
+             (f" Changed by hand here and replaced (the edit is kept as .pre-update): {', '.join(rep['forced'][:6])}." if rep["forced"] else "") +
              " The supervisor restarts itself; `python assistant/sage.py rollback` puts the previous engine back.")
-        return finish("updated", summary.splitlines()[0], replaced=len(rep["replaced"]), added=len(rep["added"]), conflicts=rep["conflicts"],
+        st.pop("skip_version", None)
+        return finish("updated", summary.splitlines()[0], replaced=len(rep["replaced"]), added=len(rep["added"]), conflicts=rep["forced"],
                       removed=len(rep["removed"]), engine_root=str(final))
     except Exception as e:  # noqa: BLE001
         if PREVIOUS.exists() and (PREVIOUS / "rollback.json").exists() and _load(PREVIOUS / "rollback.json", {}).get("version") == rec["installed"] \
@@ -463,6 +484,7 @@ def rollback() -> dict:
     _request_restart(f"rollback {before} -> {r['version']}")
     st = _load(STATE, {})
     st["last_rollback"] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "from": before, "to": r["version"]}
+    st["skip_version"] = before          # the hourly check would put it straight back; the next newer release still lands
     _save(STATE, st)
     note(f"Engine rolled back {before} -> {r['version'] or 'previous'}: {summary}. The supervisor restarts itself.")
     return {"ok": True, "from": before, "to": r["version"], "summary": summary}

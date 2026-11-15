@@ -303,7 +303,10 @@ class Serve:
                     _log("serve: stop file seen, exiting")
                     STOP.unlink()
                     return 0
-                if RESTART.exists():
+                busy = [n for n, t in self.threads.items() if t.is_alive() and n != "engine-update"] if RESTART.exists() else []
+                if busy and time.time() - RESTART.stat().st_mtime < 20 * 60:
+                    pass                    # updates land every hour now: let a running job finish before re-executing (20 min at most)
+                elif RESTART.exists():
                     # the updater (or a rollback) replaced engine files on disk; this process still runs the old code
                     why = RESTART.read_text(encoding="utf-8", errors="replace").strip()[:120]
                     RESTART.unlink()
@@ -433,7 +436,7 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
         rel = updater.release_url()
     except Exception:  # noqa: BLE001
         rel = os.environ.get("SAGE_RELEASE_URL", "") or str(org.get("engine_release_url") or "")
-    add("engine updates", "ok" if rel else "info", f"nightly from {rel}" if rel else "no release feed (org.json engine_release_url, or a GitHub clone as the engine): updates by hand, `sage update --engine <folder>`",
+    add("engine updates", "ok" if rel else "info", f"automatic, every hour, from {rel}" if rel else "no release feed (org.json engine_release_url, or a GitHub clone as the engine): updates by hand, `sage update --engine <folder>`",
         "set org.json -> engine_release_url to the release feed (release.json), then `sage update --check`")
     tok = _user_env("CLAUDE_CODE_OAUTH_TOKEN")
     billing = str(org.get("claude_billing") or "subscription")

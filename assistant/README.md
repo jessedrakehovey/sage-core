@@ -1505,7 +1505,7 @@ every command below, update, modules):
   the doctor table with a fix line per FAIL, a button that opens the console for `sage token` (runs `claude setup-token`,
   the owner pastes the token hidden, stored as the User env var; never through the page), `sage probe` for the Check,
   the Google clicks with one link each, `sage install-startup` for Start; `pack.json` in `SAGE_HOME` names the pack);
-  `updater.py` (nightly `serve.json` job `engine-update` 03:00-05:00 and `sage update` with no `--engine`: release.json
+  `updater.py` (hourly `serve.json` job `engine-update`, since 2026-11-14; was nightly 03:00-05:00 and `sage update` with no `--engine`: release.json
   at `org.json -> engine_release_url` / `SAGE_RELEASE_URL`, date-part compare (same date + other sha = "different",
   `--force` only), sha256-checked download, staged under `<pack>/.sage-engines/staging-<v>/`, gated there (compile,
   `doctor` against this pack's org.json, the staged `test_sage_core.py`), snapshot to `.sage-engines/previous/`,
@@ -1514,6 +1514,16 @@ every command below, update, modules):
   `page_title`), so nothing owner-facing names this organization or that old title. Doctor: git WARN, Node info when the CLI is
   native, gcloud info, `claude cli` fix = the native installer line, a new `engine updates` row. Tests:
   `assistant/tests/test_installer.py`.
+- **Every install takes every release, automatically (the owner, 2026-11-14).** "Force anyone who downloads sage core to
+  receive the updates automatically every time there is a new one." `engine-update` runs every hour on every install, no
+  window and no switch; the feed's latest release is the authority (a newer date, another build of the same date, or an
+  install whose version cannot be read all take it; only an OLDER release waits for `--force`). Hand-edited engine files
+  are replaced too (the edit is kept as `<file>.pre-update` and in `.sage-engines/previous/`): an organization's own
+  changes live in its pack files, never touched. The feed can't get lost: `release.py build --url` stamps it into the
+  shipped manifest (`engine.release_url`, read by `updater.manifest_feed`) and the last feed that answered is kept in
+  `updater_state.json`. A `sage rollback` skips that one release until a newer one is published. Serve waits up to 20
+  min for running jobs before it re-executes on the new code. The gate (compile, doctor, tests) still stops a broken
+  release; it retries the next hour. Publishing a release stays behind the owner's weekly tap (`core_release.py`).
 - **Zero personal data in sage-core (the owner, 2026-10-28: "The Sage-core should have zero personal data in it").** The export
   rules now scrub every line, code and prose: the organization's identity from `org.json` / `people.json` (owners ->
   `owner1`, staff -> `staff1`, names -> `example-org`, hosts -> `this-pc`, the vault path -> `{{ORG_ROOT}}`; prose reads
