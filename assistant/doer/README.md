@@ -35,6 +35,9 @@ code in the note box on Mission Control (Chat buttons cannot carry a typed code)
 can also just type the code in chat: a bare 4-10 digit line answers the newest open code card by code
 (`bridge._code_for_card`, no model turn; the code is kept only in the ticket, never in the transcript); since 2026-11-05 the code may be named around the digits, "148198 for share grid code" or
 "sharegrid code is 148198", while "2000 for the retainer" is never taken for a code.
+An owner who says there is nowhere to type it ("there was no entry box for the code") gets the waiting code card
+posted again in that thread by code (`bridge._code_box_for_card`, its Enter code button opens the code dialog); on Mission
+Control a code card shows its own full-width code field with the number pad, or, read-only, says to type it in Chat.
 
 **Hand-off checkpoints (2026-10-28).** When the last step is the owner's own (typing the payment at a
 checkout, signing), the turn sets `"handoff": true`: before the card posts, `browser.show_on_screen()` moves the

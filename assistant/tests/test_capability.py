@@ -429,6 +429,52 @@ bridge.handle({"channel": "local", "person": owner1, "text": "552183", "convo": 
 ok(seen["brain"], "with no code card open, a bare number goes to the brain as before")
 for f in ("prompt.md", "templates/prompt.generic.md"):
     ok("never say you can't use a code from chat" in (ROOT / "agent" / f).read_text(encoding="utf-8"), f"{f}: the code-in-chat rung is there")
+# the owner, 2026-10-25 14:40 (DMV sign-in): "I opened the link and there as no entry box for the code". The waiting code card
+# comes back into his thread by code, with its Enter code button; replayed, the same; Mission Control shows a code field.
+import chat_push  # noqa: E402
+BOX_ASK = "I opened the link and there as no entry box for the code"
+dmv_card = cards.post([{"header": "Sign in to DMV", "question": "[ACTION PREVIEW] Type the verification code and continue. A verification code was sent to you.",
+                        "lane": "personal", "options": [{"label": "Approve"}, {"label": "No code came"}],
+                        "exec": {"kind": "agent_run", "approve_label": "Approve",
+                                 "payload": {"ticket": "abcdefabcdef0123", "step": "Type the verification code and continue",
+                                             "resume": "On the MyDMV code page, enter the code.", "ask_code": True, "values": {}}}}],
+                      owner="owner1", asked=True)
+dq = dmv_card.get("qid") or dmv_card.get("id")
+pushed, _push0 = [], chat_push.push_card
+chat_push.push_card = lambda c: pushed.append(c) or {"owner1": "spaces/AAQAtest/messages/box1.box1"}
+for held_ in ("", "replay"):
+    brain._run_claude, seen["brain"] = no_brain, False
+    n0, g0, p0 = len(NOTES), len(cap._load()["gaps"]), len(pushed)
+    m_ = {"channel": "local", "person": owner1, "text": BOX_ASK, "convo": "spaces/AAQAtest", "thread": "spaces/AAQAtest/threads/box1",
+          "space": "spaces/AAQAtest", "direct": True}
+    if held_:
+        m_.update(_held=held_)
+    bridge.handle(m_)
+    out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+    ok(not seen["brain"] and len(pushed) == p0 + 1 and pushed[-1]["id"] == dq and pushed[-1].get("chat_thread") == "spaces/AAQAtest/threads/box1",
+       f"'{BOX_ASK}'{' (replayed)' if held_ else ''}: the DMV code card is posted again in his thread, by code")
+    ok("Enter code" in out and "can't" not in out.lower() and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+       f"the reply points at Enter code / a typed reply, no 'can't', no build filed: {out!r}")
+chat_push.push_card = _push0
+ok(cards._read(cards.LIVE / f"{dq}.json").get("status") == "open" and "Enter code" in json.dumps(chat_push.card_body(cards._read(cards.LIVE / f"{dq}.json"), "open")),
+   "the card stays open and its Chat body carries the Enter code button")
+bridge.handle({"channel": "local", "person": owner1, "text": "731942", "convo": "spaces/AAQAtest", "thread": "spaces/AAQAtest/threads/box1",
+               "space": "spaces/AAQAtest", "direct": True})
+tid = next((e.get("ticket") for e in core.rows(cards.ANSWERS) if e.get("qid") == dq), "")
+ok(((_es.fold().get(tid) or {}).get("payload") or {}).get("code") == "731942", "the digits typed after it carry the DMV sign-in on")
+ok(not bridge._CODE_BOX.search("Where is the approval card") and not bridge._CODE_BOX.search("the zip code for the venue is 93101")
+   and bridge._CODE_BOX.search("where do I type the code?") and bridge._CODE_BOX.search("there’s no box for the code"),
+   "the no-box complaint is told apart from 'where is the card' and from a zip code")
+import dashboard  # noqa: E402
+_ro0 = dashboard.mc_read_only
+dashboard.mc_read_only = lambda: False
+code_html = dashboard._code_box("q1")
+ok('inputmode="numeric"' in code_html and 'autocomplete="one-time-code"' in code_html and 'class="note code"' in code_html,
+   "Mission Control: a code card has a visible code field with the phone's number pad (sent with Approve like the note box)")
+dashboard.mc_read_only = lambda: True
+ok("Enter code" in dashboard._code_box("q1") and "<input" not in dashboard._code_box("q1"),
+   "read-only Mission Control: the code card says to type it in Chat instead of showing nothing")
+dashboard.mc_read_only = _ro0
 
 # ---------------------------------------------------------------- 15. a picture or a link is the doer's job, never "I can't pull up a picture"
 # the owner, 2026-10-25 (gap g-53f9ec): asked for a picture of the car title, answered "I can't pull up a picture from here"

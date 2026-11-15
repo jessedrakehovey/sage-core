@@ -56,7 +56,7 @@ header .ts{margin-left:auto;color:var(--muted);font-size:12px}
 .kpi b{display:block;font-family:"Playfair Display",serif;font-size:28px;font-weight:500;line-height:1.1}
 .kpi span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
 .kpi.hot{border-color:var(--warn)}
-section{margin:22px 0}.btns{margin:8px 0 4px}button.ans,button.undo,button.adskill,#ask button{font:inherit;padding:8px 12px;margin:3px 6px 3px 0;border-radius:8px;border:1px solid var(--line);background:var(--accent,#4A5C43);color:#FBFFFA;cursor:pointer}input.note,#asktext{font:inherit;width:70%;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+section{margin:22px 0}.btns{margin:8px 0 4px}button.ans,button.undo,button.adskill,#ask button{font:inherit;padding:8px 12px;margin:3px 6px 3px 0;border-radius:8px;border:1px solid var(--line);background:var(--accent,#4A5C43);color:#FBFFFA;cursor:pointer}input.note,#asktext{font:inherit;width:70%;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit}input.note.code{display:block;width:100%;box-sizing:border-box;font-size:20px;letter-spacing:.2em;margin-top:6px}.codeway{display:block;margin:8px 0 4px;font-size:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
 .item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:9px 0;border-top:1px solid var(--line);align-items:baseline}
 .item:first-child{border-top:0}.item .t{font-weight:500}.item .n{color:var(--muted);font-size:13px;grid-column:2}
 .item .age{color:var(--muted);font-size:12px;white-space:nowrap}
@@ -271,6 +271,30 @@ def _note_box(qid: str) -> str:
     return f'<input class="note" placeholder="or type an answer / a note" data-qid="{html.escape(str(qid))}">'
 
 
+def _code_box(qid: str) -> str:
+    """A doer code card's own field (2026-10-25: "I opened the link and there as no entry box for the code"): full width,
+    the phone's number pad and its one-time-code autofill. Read-only Mission Control points at Chat instead."""
+    if mc_read_only():
+        return ('<div class="codeway">Type the code in Google Chat: tap <b>Enter code</b> on this card there, '
+                'or just reply with the digits. It goes straight into the sign-in.</div>')
+    return (f'<label class="codeway">Code<input class="note code" inputmode="numeric" autocomplete="one-time-code" '
+            f'placeholder="type the code, then tap Approve" data-qid="{html.escape(str(qid))}"></label>')
+
+
+def _is_code_card(qid: str) -> bool:
+    """True for an open doer card waiting on a verification code (payload.ask_code); pending() does not carry it."""
+    try:
+        import cards as _cards
+        q = ((_cards._read(_cards.LIVE / f"{qid}.json") or {}).get("questions") or [{}])[0]
+        return (q.get("exec") or {}).get("kind") == "agent_run" and bool(((q.get("exec") or {}).get("payload") or {}).get("ask_code"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _card_input(qid: str) -> str:
+    return _code_box(qid) if _is_code_card(qid) else _note_box(qid)
+
+
 def _ask_box() -> str:
     if mc_read_only():
         return '<section><h2>Ask the assistant</h2><div class="card">Say it to the agent in Google Chat: nothing is typed on this page.</div></section>'
@@ -477,7 +501,7 @@ def build(crm_check=False):
         return (f'<div class="item card-item" id="card-{esc(c["qid"])}">{lane_pill(c.get("lane") or "personal")}<div class="t"><b>{esc(c.get("header") or c["qid"])}</b>'
                 f'{" · EXEC" if c.get("exec") else ""} · {c["age_min"]:.0f}m{tag}<br><span style="white-space:pre-wrap">{esc(c.get("question", ""))}</span>'
                 + (f'<br><a href="{esc(c["image"])}" target="_blank"><img src="{esc(c["image"])}" alt="review page" style="max-width:100%;border-radius:8px;margin-top:6px;border:1px solid var(--line)"></a>' if c.get("image") else "")
-                + f'<div class="btns">{btns}</div>{_note_box(c["qid"])}'
+                + f'<div class="btns">{btns}</div>{_card_input(c["qid"])}'
                 f'<small class="cli">{cli}</small></div><div class="age"></div></div>')
     open_cards_html = "".join(_card_html(c) for c in open_cards) or '<div class="empty">no open cards</div>'
     exec_html = ("<table>" + "".join(f'<tr><td>{esc(k)}</td><td>{esc(str(v))}</td></tr>' for k, v in sorted(exec_counts.items())) + "</table>"
@@ -531,7 +555,7 @@ def safe_page(err):
         btns = "".join(f'<button class="ans" data-qid="{esc(c["qid"])}" data-option="{esc(o)}">{esc(o)}</button>' for o in c.get("options") or [])
         items += (f'<div class="item card-item" id="card-{esc(c["qid"])}"><div class="t"><b>{esc(c.get("header") or c["qid"])}</b><br>'
                   f'<span style="white-space:pre-wrap">{esc(c.get("question", ""))}</span><div class="btns">{btns}</div>'
-                  f'{_note_box(c["qid"])}</div></div>')
+                  f'{_card_input(c["qid"])}</div></div>')
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>{_esc(_page_title())} (safe mode)</title><style>{CSS}</style></head><body><header><h1>{_esc(_page_title())}</h1>'
             f'<span class="ts">safe mode</span></header><section><div class="card"><div class="item"><div class="t bad">The full page failed to build: '

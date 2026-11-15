@@ -1007,7 +1007,7 @@ lets the owner do from the CLI: answer / undo a card (`POST /api/cards/answer`, 
 serve the Desk at `/desk` (CRM strip, leads, edit bay, nagging; links both ways),
 and queue a request for the operator (`POST /api/ask` -> ticket kind `the owner_request`, which the
 operator answers with a card on its next tick). Every card on the page has its option buttons,
-a note box, and a 30 s undo after a tap. If the full page cannot be built (a malformed
+a note box (a doer code card: a full-width code field with the number pad), and a 30 s undo after a tap. If the full page cannot be built (a malformed
 state file), the server serves a safe-mode page with just the open cards and their buttons.
 Card answers and asks must be same-origin JSON; the phone token never reaches the log. Runs from the logon task **"example Mission Control
 (assistant)"** (`assistant/tasks/MissionControl.xml`, launcher `mc_server.ps1`, single

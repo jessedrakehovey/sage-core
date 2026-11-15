@@ -1072,6 +1072,39 @@ def _code_for_card(text: str, person: dict) -> str:
     return ""
 
 
+# "I opened the link and there as no entry box for the code" (the owner, 2026-10-25, a DMV sign-in): the owner cannot find
+# where to type the code the doer is waiting on
+_CODE_BOX = re.compile(r"\b(?:no|not an?|not any|couldn'?t find (?:an?|the)|can'?t find (?:an?|the)|where(?:'s| is)(?: the| an?)?)\s+"
+                       r"(?:[\w\-]+\s+){0,2}(?:box|field|place|spot|input)\b.{0,40}\bcode\b|"
+                       r"\bwhere (?:do|can|should) I (?:type|enter|put|give)\b.{0,20}\bcode\b|"
+                       r"\b(?:can'?t|cannot|couldn'?t|no way to) (?:type|enter|put in|give (?:you )?)\b.{0,20}\bcode\b", re.I)
+
+
+def _code_box_for_card(text: str, person: dict, convo: str, thread: str, space: str = "") -> str:
+    """An owner says there is nowhere to type the code while the doer waits on a code card: the newest code card is
+    posted again into this thread by code (its Enter code button opens the code dialog on the phone), and a code typed
+    as a plain reply still goes straight in (_code_for_card). '' when it is not that complaint or no card waits."""
+    if not _CODE_BOX.search(str(text or "").replace("’", "'")) or not core.can(person, "approve"):
+        return ""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import cards
+        waiting = [c for c in cards._live() if c.get("status") == "open"
+                   and (((c.get("questions") or [{}])[0].get("exec") or {}).get("kind") == "agent_run")
+                   and ((((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("ask_code"))]
+        if not waiting:
+            return ""
+        card = waiting[-1]
+        here = correction.surface(card, convo, thread, space if str(convo).startswith("dm:") else "")
+        log(f"chat code box: code card {card['id']} {'posted here' if here else 'not re-posted'} for {person['key']}")
+        if here:
+            return "Here it is again: tap Enter code on the card and type it there, or just reply here with the digits. It goes straight into the sign-in."
+        return "Just reply here with the digits and I'll put them straight into the sign-in."
+    except Exception as e:  # noqa: BLE001
+        log(f"chat code box failed: {type(e).__name__}: {str(e)[:160]}")
+    return ""
+
+
 def _is_no_reply(text: str) -> bool:
     return re.sub(r"^[^A-Za-z]+", "", str(text or "")).strip().upper().startswith("NO_REPLY")
 
@@ -1189,6 +1222,14 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     out = _code_for_card(text, person) if not rerun else ""
     if out:
         core.say(convo, person["name"], "(a verification code, handed to the waiting sign-in)", channel=msg["channel"], meta={"thread": thread})
+        core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
+        reply(msg, out, pre_ack)
+        return
+    # "there is no box for the code": the waiting code card comes back into this thread, by code (also on a replay)
+    out = _code_box_for_card(text, person, convo, thread, str(msg.get("space") or ""))
+    if out:
+        if not rerun:
+            core.say(convo, person["name"], text, channel=msg["channel"], meta={"thread": thread})
         core.say(convo, name, out, channel=msg["channel"], meta={"thread": thread})
         reply(msg, out, pre_ack)
         return

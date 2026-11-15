@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.14+0f7c7d6",
+  "version": "2026.11.14+ec93d1b",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-14T20:33:25"
+  "synced": "2026-11-14T21:05:46"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "22fc947255e267a54d035afdd68f00c1ede21815d7fc54df414d6e4d220c3da7",
+  "assistant/README.md": "24569816f7cdd2edc8760b82855ef24707bf691a718f61e2bf5ea1bf1755ce31",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "fbc7262e72a6d603dd087791128f1c176b51133146e40ed4eb16cd87cc5bc116",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -105,7 +105,7 @@
   "assistant/agent/actions.py": "501301da3c89784a9df5bf285769fd067431525725c9f90bc1995213aa7148f7",
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/brain.py": "9a71ade0d8506ae6c0a52873aa24270350d4dfc02c4e25d5c439b156d368f530",
-  "assistant/agent/bridge.py": "5b02752026aba665f9ae36451a6a37fd597f9567e70495401566920a0d2bef12",
+  "assistant/agent/bridge.py": "1e28102e7802c2708d40ffd8e5fec215501dfbba15b76cf8f8f98f5c342c3615",
   "assistant/agent/builder.py": "da0731050907fa78d4de18cd4c868886ff7669ebb09877b7927d62d5066871da",
   "assistant/agent/capability.py": "9bcf50e18df99726f11ea6d15230ef6ec59fa20fd07d6f356c6dbff958ca91d3",
   "assistant/agent/capacity.py": "f3d24223c86cec23685e711bb07e670cea525f071d34897d917aef58d04169c9",
@@ -214,7 +214,7 @@
   "assistant/config.json": "f5cd3b0ac3d20f86e96da619f43e60a691c6b8e1bfb8e0cbe1aeaa2c14b5e24d",
   "assistant/connections.json": "6caa0807606fc54b1f19e71ac7ee61eb97607c2996ad3e8c3e36e9ce89b6f302",
   "assistant/core_sync.py": "c071f35e3ccee79590c2c0777f898a02aa643e52e47b1f82aeb590468a4ecacc",
-  "assistant/doer/README.md": "9f598e2883688559c6f94a8de35580f0073861346c2b9407cd45d458b5fff136",
+  "assistant/doer/README.md": "e0c90ae3b6132ea665efe713b5de199af22832a15a9180d47c80a6d5393c72af",
   "assistant/doer/browser.py": "e4bf843cfa9739b7ef5826a8c3bb296434fc0d484cfe912ffabcfb251d2d6f03",
   "assistant/doer/browser_mcp.py": "9520b76321a4e9a57df9e0d6e6f62bd2edc35ae77a2bfb877f29ee3d5a62f8b4",
   "assistant/doer/click_guard.py": "f92f0e81a93daf0cbd1523cb6c9188e583634f2f53c46ac584ab004b65a3fedc",
@@ -283,7 +283,7 @@
   "assistant/scripts/contacts.py": "ca4c1a8b2f35fdc4666efe2728266890957f165cd99ad9aec288730db97a7ee6",
   "assistant/scripts/core_release.py": "0c5385c44faad3ddd38aea239c38a2e637c9439f546288bd09624282bb3f1000",
   "assistant/scripts/crm.py": "7f726aa0fa305698476f6ec848e11aa4522d45cdf2da0563ca292604b16768c9",
-  "assistant/scripts/dashboard.py": "fa00147dbec74d324acf0447acbe4ad586638645844041d49a174787637238d5",
+  "assistant/scripts/dashboard.py": "f9091de12ff40e4d426e71c4d4a5c2b1736dfdbb682521ce3715aa6880d7cc6f",
   "assistant/scripts/deadman.ps1": "32f6b22bc9d3a3be95bb1a0187c86de327bfe34503d211f130624153f0a63ea5",
   "assistant/scripts/deadman.py": "94053f7413ca6ce922b6e6c2fd7e7ae9a2bd888701ab26ae2c426a4c067ba983",
   "assistant/scripts/decision_keys.py": "b93619e189df9eff30057145029ab485586f94a79a866df726812b3d96969077",
@@ -403,7 +403,7 @@
   "assistant/tests/test_builder_order.py": "3068dfb25d14934b48971f35962d99830ff1b50a6f89a81c847857559c074990",
   "assistant/tests/test_builder_verify.py": "f16933b5d2d125fbd08d736dc8d37d0e65db193515e64d409cf45a2bd642b0bb",
   "assistant/tests/test_burst.py": "8ecbd9b8a57e012921ad892d9f2ae7d22cf4e09238972a4e0241bddb676faeae",
-  "assistant/tests/test_capability.py": "61c4908ae945eac8e14f05f3af2cd6e778a5142e29919be922c1fdb24c652f00",
+  "assistant/tests/test_capability.py": "fbf2a781e871ae47a0068e9f941b072b339a84c5c216ffbec2482a84992347c4",
   "assistant/tests/test_capacity.py": "cc545627a22adfcbc383a92c3424dc332ccb1c08f2756be2ad3ee6ae18d15eac",
   "assistant/tests/test_cards_digest.py": "d8b4a4b1cfd242f29430d1471bcf76068ce99f47a05ee4c0eae1c96822594ddb",
   "assistant/tests/test_cards_exec.py": "b6e1d162bb3cc74298785e0c24d31b0add4a740708de942eca9b2eb37835285d",
