@@ -327,7 +327,9 @@ Resolve was closed). Three things changed:
   job board's login to the employer's own careers site, and treats a password-less sign-in box as a login (sign-in card).
   "Named" also covers a relative path in the job text (read under the folders its full paths sit in) and a named
   document's same-name copy of another document type beside it, e.g. the tailored resume's PDF the job made (2026-11-15).
-  Tests: `test_doer.py` (upload), `test_capability.py` sections 38-39.
+  The owner's own example job search skips the old Jobvite links (they redirect into example.com) and opens
+  jobs.ashbyhq.com/example straight away, without asking whether the new board is OK (gap g-83ff98, 2026-11-15).
+  Tests: `test_doer.py` (upload), `test_capability.py` sections 38-40.
 - **The learn bug.** `import learn` in `doer.py` / `computer.py` resolved to
   `assistant/scripts/learn.py` (the corrections ledger) whenever that was already loaded, so every
   run since 10-12 logged `learn failed: AttributeError` and recorded nothing. `doer._learn()` loads

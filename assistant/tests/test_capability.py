@@ -1823,6 +1823,40 @@ ok(_line39.startswith("UPLOADED owner1_example_Resume_example_UX.pdf") and len(_
 ok(_bad39.startswith("FAILED"), f"a file the job does not name is still refused: {_bad39}")
 
 
+# ---------------------------------------------------------------- 40. the same example ask in its Jobvite words (gap g-83ff98)
+# 2026-11-14 20:22: the ask named only the Jobvite board; its link redirected into example.com/open-roles and the doer stopped
+# with "please say if the Ashby board is OK ... DO IT YOURSELF". Driven here: the ask's own words become ONE browser job, and the
+# doer's opening sends it straight to the Ashby board (never the Jobvite link, never example.com) without asking again.
+JV_ASK = ("owner1 example's own day-job application, personal lane, he asked for it himself in chat and gave explicit permission "
+          "twice (19:03 and 19:54 today): apply for the UX design opening on example's public careers board. This is NOT the "
+          "property-management business: use only example's public careers board on Jobvite (start at "
+          "https://jobs.jobvite.com/example/jobs ; known postings include https://jobs.jobvite.com/example-internal/job/o2exAfw7 "
+          "Sr. User Experience Designer). Never open example.com itself and never any example sign-in.")
+
+
+def fake_run_jv(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["jv_do"] = gmcp.call("do", {"lane": "personal", "text": "Apply for the example UX design opening. " + JV_ASK + " Stop at the final Submit with a checkpoint card."})
+    return {"ok": True, "session": "S40", "text": "I'm on example's careers board filling the UX application now; the Submit stays yours."}
+
+
+brain._run_claude = fake_run_jv
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": JV_ASK, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/jv40", "space": "spaces/AAQAtest", "direct": True})
+out = [r for r in core.rows(bridge.OUTBOX) if r.get("via") == "local"][-1]["text"]
+tix = [x for x in json.loads((TMP / "adata" / "tickets.json").read_text(encoding="utf-8")).values()
+       if x["kind"] == "agent_run" and "example-internal/job/o2exAfw7" in str((x.get("payload") or {}).get("text"))]
+ok(str(seen.get("jv_do")).startswith("accepted") and tix, f"the Jobvite-worded example ask: ONE browser job ({str(seen.get('jv_do'))[:80]})")
+ok("DO IT YOURSELF" not in out and "Ashby board is OK" not in out and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   f"no hand-over line, no build filed: {out!r}")
+_bp40 = _doer38.build_prompt(tix[-1])
+ok("never open a jobs.jobvite.com/example link" in _bp40 and "go straight to https://jobs.ashbyhq.com/example" in _bp40
+   and "never stop to ask whether the new board is OK" in _bp40,
+   "the doer skips the Jobvite redirect into example.com and goes straight to the Ashby board, without asking again")
+
+
 # ---------------------------------------------------------------- a bare "Hello?" is a nudge, never a build
 # the owner, 2026-11-14 19:51 (gap g-59f66e): "Hello?" was answered with an earlier job's status, "the owner Beach final for
 # Kingsmere: I couldn't get into Dropbox on the web", and that "couldn't" was filed as a build titled 'Hello'.
