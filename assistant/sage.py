@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -788,13 +789,93 @@ def store_user_env(name: str, value: str) -> str:
     return str(prof)
 
 
-def token_cmd(api_key: bool = False) -> int:
-    """Runs in a console the owner sees (the wizard's button opens it). Subscription: `claude setup-token` signs in and
-    prints a long-lived token; the owner copies it from the window and pastes it hidden here; it is stored as the User
-    env var CLAUDE_CODE_OAUTH_TOKEN. --api-key: ANTHROPIC_API_KEY instead and org.json claude_billing = api."""
+TOKEN_RE = re.compile(r"sk-ant-oat\d{2}-[A-Za-z0-9_\-]{40,}")
+
+
+def console_lines(last: int = 400) -> tuple:
+    """(rows, width): what this console window shows right now, read from its screen buffer (Windows; ([], 0) where
+    there is no console to read). The sign-in below prints the token on the screen; this is how it is picked up
+    without the owner selecting, copying and pasting it."""
+    if not IS_WIN:
+        return [], 0
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class COORD(ctypes.Structure):
+            _fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("Left", ctypes.c_short), ("Top", ctypes.c_short), ("Right", ctypes.c_short), ("Bottom", ctypes.c_short)]
+
+        class INFO(ctypes.Structure):
+            _fields_ = [("dwSize", COORD), ("dwCursorPosition", COORD), ("wAttributes", wintypes.WORD), ("srWindow", RECT), ("dwMaximumWindowSize", COORD)]
+
+        k = ctypes.windll.kernel32
+        k.GetStdHandle.restype = wintypes.HANDLE
+        k.ReadConsoleOutputCharacterW.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, COORD, ctypes.POINTER(wintypes.DWORD)]
+        h = k.GetStdHandle(-11)
+        info = INFO()
+        if not k.GetConsoleScreenBufferInfo(h, ctypes.byref(info)):
+            return [], 0
+        width, bottom = int(info.dwSize.X), int(info.dwCursorPosition.Y)
+        buf = ctypes.create_unicode_buffer(width + 1)
+        n = wintypes.DWORD()
+        rows = []
+        for y in range(max(0, bottom - last), bottom + 1):
+            if k.ReadConsoleOutputCharacterW(h, buf, width, COORD(0, y), ctypes.byref(n)):
+                rows.append(buf[:n.value])
+        return rows, width
+    except Exception:  # noqa: BLE001  (no console, a redirected stdout: the paste prompt is the way)
+        return [], 0
+
+
+def find_token(rows: list, width: int = 0) -> str:
+    """The last Claude token on the screen. A long token runs past the window's edge, so the rows after its first are
+    joined on while they hold nothing but token characters. '' when none is there or it does not read as one."""
+    found = ""
+    for i, row in enumerate(rows):
+        at = row.find("sk-ant-oat")
+        if at < 0:
+            continue
+        tok = row[at:].strip()
+        if " " in tok:
+            tok = tok.split()[0]
+        else:
+            for nxt in rows[i + 1:]:
+                part = nxt.strip()
+                if not part or not re.fullmatch(r"[A-Za-z0-9_\-]+", part):
+                    break
+                tok += part
+        if TOKEN_RE.fullmatch(tok):
+            found = tok
+    return found
+
+
+def _close_soon(ok: bool, auto: bool) -> None:
+    """The sign-in window the app opened closes by itself when all went well, and waits for a key when it did not."""
+    if not auto:
+        return
+    try:
+        if ok:
+            time.sleep(2.5)
+        else:
+            input("\nPress Enter to close this window.")
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+
+def token_cmd(api_key: bool = False, auto: bool = False) -> int:
+    """Runs in a console the owner sees (the app's button opens it). Subscription: `claude setup-token` signs in and
+    prints a long-lived token; it is stored as the User env var CLAUDE_CODE_OAUTH_TOKEN. With --auto (the app) the
+    token is read off this window by itself and the window closes; without it, or when it cannot be read, the owner
+    pastes it hidden here. --api-key: ANTHROPIC_API_KEY instead and org.json claude_billing = api."""
     import getpass
     name = "ANTHROPIC_API_KEY" if api_key else "CLAUDE_CODE_OAUTH_TOKEN"
-    print(f"\n== Sage: your Claude {'API key' if api_key else 'token'} ==\nThe agent's model turns run on YOUR account; nothing here is sent anywhere, it is stored in your own user environment.\n")
+    if auto:
+        print(f"\n  Sign in to Claude\n  {'-' * 17}\n  The sign-in is stored in your own account on this computer and nowhere else.\n")
+    else:
+        print(f"\n== Sage: your Claude {'API key' if api_key else 'token'} ==\nThe agent's model turns run on YOUR account; nothing here is sent anywhere, it is stored in your own user environment.\n")
     # the User environment is shared by EVERY program of this Windows account, other agents and scheduled jobs included
     # (coexist.py, 2026-10-30): never replace a stored token, or switch them all to metered billing, without a typed yes
     if api_key:
@@ -802,26 +883,46 @@ def token_cmd(api_key: bool = False) -> int:
               "not only this agent's: other agents and scheduled jobs on this PC switch to metered billing too.")
         if input("Type METERED to go ahead, anything else to stop: ").strip() != "METERED":
             print("nothing stored")
+            _close_soon(False, auto)
             return 1
     elif _user_env(name):
         print(f"A {name} is already stored for this Windows account, and other programs on this PC may run on it.\n"
               "This agent will use that one; you need no new token. Replacing it changes it for all of them.")
         if input("Type REPLACE to store a new one, or press Enter to keep the current token: ").strip() != "REPLACE":
-            print("kept the stored token; tap Check on the page")
+            print("kept the stored sign-in" if auto else "kept the stored token; tap Check on the page")
+            _close_soon(True, auto)
             return 0
     if not api_key:
         c = claude_cli()
         if not c:
             print("The Claude Code CLI is not installed yet. Install it first (sage doctor has the line), then run this again.")
+            _close_soon(False, auto)
             return 1
-        print("1. A browser opens: sign in with the Claude account whose subscription the agent should use, then come back here.")
-        print("2. The CLI prints your token below. Select it with the mouse, press Enter to copy it, then paste it where this window asks (nothing shows while you paste).\n")
+        if auto:
+            print("  1. Your browser is opening. Sign in with the Claude account the agent should use, and approve.")
+            print("  2. That is all. This window finishes by itself.\n")
+        else:
+            print("1. A browser opens: sign in with the Claude account whose subscription the agent should use, then come back here.")
+            print("2. The CLI prints your token below. Select it with the mouse, press Enter to copy it, then paste it where this window asks (nothing shows while you paste).\n")
         rc = subprocess.call([c, "setup-token"])
+        if auto:
+            v = find_token(*console_lines())
+            if v:
+                where = store_user_env(name, v)
+                if IS_WIN:
+                    os.system("cls")                      # the token does not stay on the screen
+                print(f"\n  Signed in. The sign-in is stored in {where}.\n  This window closes by itself.")
+                _close_soon(True, auto)
+                return 0
+            print("\n  The sign-in could not be read from this window by itself.")
         if rc != 0:
             print(f"\n`claude setup-token` ended with code {rc}. If it printed a token anyway, paste it below; otherwise close this window and try again.")
+        elif auto:
+            print("  Select the token above with the mouse, press Enter to copy it, then paste it below (nothing shows while you paste).")
     v = getpass.getpass(f"\nPaste the {name} value here (hidden): ").strip().strip('"')
     if not v:
         print("nothing entered; nothing stored")
+        _close_soon(False, auto)
         return 1
     where = store_user_env(name, v)
     if api_key:
@@ -829,6 +930,10 @@ def token_cmd(api_key: bool = False) -> int:
         o = _load(p, {}) or {}
         o["claude_billing"] = "api"
         _save(p, o)
+    if auto:
+        print(f"\n  Stored in {where}. This window closes by itself.")
+        _close_soon(True, auto)
+        return 0
     print(f"\nStored {name} ({len(v)} characters) in {where}. Close this window and tap Check on the page; the agent's runs use it from now on.")
     return 0
 
@@ -884,6 +989,8 @@ def main() -> int:
     p.add_argument("--check", action="store_true", help="what the release feed offers, without applying"); p.add_argument("--no-gate", action="store_true", help="compile check only (the feed path)")
     sub.add_parser("rollback", help="the previous engine back in one step (assistant/updater.py)")
     p = sub.add_parser("token", help="store the owner's Claude token (or --api-key) from a console; never printed"); p.add_argument("--api-key", action="store_true")
+    p.add_argument("--auto", action="store_true", help="the app's sign-in window: the token is read off the window by itself, and the window closes")
+    p = sub.add_parser("app", help="the Sage app: its own window on this computer (assistant/app.py)"); p.add_argument("rest", nargs=argparse.REMAINDER)
     sub.add_parser("probe", help="one headless turn with the stored token: PROBE ok | failed")
     p = sub.add_parser("welcome", help="the first-run wizard (assistant/welcome.py); --open = the launcher"); p.add_argument("rest", nargs=argparse.REMAINDER)
     p = sub.add_parser("release", help="build / verify a release of the engine (assistant/release.py)"); p.add_argument("rest", nargs=argparse.REMAINDER)
@@ -979,7 +1086,9 @@ def main() -> int:
         print(("rolled back: " + r["summary"]) if r.get("ok") else ("nothing to roll back: " + r.get("detail", "")))
         return 0 if r.get("ok") else 1
     if a.cmd == "token":
-        return token_cmd(api_key=a.api_key)
+        return token_cmd(api_key=a.api_key, auto=a.auto)
+    if a.cmd == "app":
+        return subprocess.call([sys.executable, str(HERE / "app.py")] + list(a.rest))
     if a.cmd == "probe":
         return probe_cmd()
     if a.cmd == "welcome":

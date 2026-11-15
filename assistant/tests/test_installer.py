@@ -70,6 +70,8 @@ with zipfile.ZipFile(z1) as z:
 check("the archive has no top folder and carries the manifest, sage.py and the updater", "engine_manifest.json" in names and "assistant/sage.py" in names
       and "assistant/updater.py" in names and "assistant/welcome.py" in names and "assistant/installer/windows/install.ps1" in names
       and not any(n.startswith("sage-core/") for n in names), names[:3])
+check("the archive carries the app: its service, its window and the icon's drawing code", "assistant/app.py" in names and "assistant/app_ui.html" in names
+      and "assistant/installer/windows/make_assets.py" in names)
 check("the archive carries no pack state (the pack's template files travel once, as new_org's templates)", not any(n.startswith(("assistant/data/", "assistant/agent/state/", "assistant/out/")) for n in names))
 ok, msg = release.verify(z1)
 check("release.verify passes on a good pair", ok, msg)

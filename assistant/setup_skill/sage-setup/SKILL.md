@@ -23,9 +23,9 @@ paste a token, password or key into a message, a file or a chat; the owner types
 
 ## 0. Before anything: is the installer the better path?
 
-An owner who does not want a terminal gets `SageSetup.exe` (`assistant/installer/README.md`): it installs a private
-Python, the engine release, the browser and the Claude CLI, then opens the setup page (`assistant/welcome.py`) that asks
-the same three questions, creates the pack, shows the doctor table, opens the token window and starts the agent. Use this
+An owner who does not want a terminal gets `SageSetup.exe` (`assistant/installer/README.md`): one click installs a private
+Python, the engine release, the browser and the Claude CLI, then the Sage app opens in its own window (`assistant/app.py`)
+and asks the same three questions, creates the pack, checks the computer, signs in to Claude and starts the agent. Use this
 skill when there is no installer build for their machine, when something in that flow failed, or when the owner wants a
 copilot. Both end in the same pack and the same `sage update`.
 

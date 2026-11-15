@@ -1505,6 +1505,19 @@ every command below, update, modules):
   the doctor table with a fix line per FAIL, a button that opens the console for `sage token` (runs `claude setup-token`,
   the owner pastes the token hidden, stored as the User env var; never through the page), `sage probe` for the Check,
   the Google clicks with one link each, `sage install-startup` for Start; `pack.json` in `SAGE_HOME` names the pack);
+  **`app.py` + `app_ui.html` (2026-11-14: "it should work like an app installed on pc, not have a browser page"): the
+  installer is one click (no questions; `install.ps1` reports `##step N/M` and the installer shows the step, a real bar
+  and a download's percent; `RedirectionGuard=no` + pip with no cache, after pip refused a package cache that was a
+  folder link) and ends by opening the Sage app in a window of its own: Edge / Chrome / the agent's browser in app mode
+  with its own profile, the window file served from 127.0.0.1 on a port the system picks, every call keyed. First run:
+  welcome, the organization, the agent's name, the owners, "Setting up", this computer in plain words with Fix
+  buttons (`app.checks` / `app.fix` over `welcome.doctor`), Connect Claude (`sage token --auto`: the token is read off
+  the sign-in window's screen buffer, stored, the window closes; paste is the fallback), the Google steps, then home
+  (running / paused, Pause, the folder, connections, the next step). The Start-menu and desktop entries open it with
+  `sage.ico` (drawn by `installer/windows/make_assets.py`, no picture files in the repository); once a pack exists the
+  entry runs the pack's own copy, which the hourly update keeps current. `--dry` looks without starting anything (a
+  preview once woke a scratch agent: never show the home screen of a real service in a test), `--quit` closes it.
+  `welcome.py`'s page stays for a clone install and `/welcome`; the installer no longer opens it. Test: `tests/test_app.py`.**
   `updater.py` (hourly `serve.json` job `engine-update`, since 2026-11-14; was nightly 03:00-05:00 and `sage update` with no `--engine`: release.json
   at `org.json -> engine_release_url` / `SAGE_RELEASE_URL`, date-part compare (same date + other sha = "different",
   `--force` only), sha256-checked download, staged under `<pack>/.sage-engines/staging-<v>/`, gated there (compile,

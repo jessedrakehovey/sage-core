@@ -8,7 +8,10 @@
 #   install.json  where things are (python, engine, release URL, version), read by assistant/welcome.py
 # plus the Playwright Chromium browser (%LOCALAPPDATA%\ms-playwright, shared) and the Claude Code CLI by its native installer
 # (%USERPROFILE%\.local\bin\claude.exe; skipped when a `claude` is already on this machine). The organization's own folder is
-# made afterwards by the setup page (welcome.py), never here; this script touches no organization data and stores no token.
+# made afterwards by the app (assistant/app.py, the window this script opens when it ends), never here; this script touches
+# no organization data and stores no token.
+# What the installer shows while this runs comes from here: a line "##step N/M <title>" as each part starts, "##fail <why>"
+# when one cannot finish (then exit 1); every "[sage] ..." line is the small print under the title (2026-11-14).
 # Idempotent: every step is skipped when its result is already there; re-run it until it ends with "ready".
 # -Bundle (default: a `bundle` folder next to this file, which SageSetup.exe carries when build.ps1 ran with -Bundle;
 # 2026-11-14): Python, pip, every package and the browser come out of that folder and nothing is fetched for them:
@@ -29,7 +32,14 @@ param(
 # Windows PowerShell 5.1: under 'Stop' a native program's stderr line (pip's progress, a Python traceback we probe for) becomes a
 # terminating error, so native calls run under 'Continue' and are judged by their exit code; cmdlets ask for -ErrorAction Stop.
 $ErrorActionPreference = 'Continue'
+$ProgressPreference = 'SilentlyContinue'      # Windows PowerShell 5.1 draws a progress bar per download chunk; with it on, a download takes many times longer
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$Steps = 6
+$env:PIP_NO_CACHE_DIR = '1'                    # an installer neither needs nor trusts a package cache left on the machine
+$env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+function Step($n, $title) { Write-Host "##step $n/$Steps $title" }
+# anything that stops the install says why in one plain line the installer can show, and ends with exit 1
+trap { Write-Host ("##fail " + $_.Exception.Message); exit 1 }
 $PyVersion = '3.11.9'
 $PyUrl = "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-embed-amd64.zip"
 $PySha = '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b'      # python.org, pinned 2026-10-28
@@ -59,8 +69,16 @@ $wheels = if ($Bundle -and (Test-Path (Join-Path $Bundle 'wheels'))) { Join-Path
 Say "root $Root"
 if ($Bundle) { Say "bundle $Bundle (nothing is downloaded for Python, the packages or the browser)" }
 
-# ---- 1. Python (embeddable, private) ----------------------------------------------------------------------------
+# an app window left open from an earlier install keeps the engine folder busy: close it first (it reopens at the end)
 $pyDir = Join-Path $Root 'python'
+$oldApp = Join-Path $Root 'engine\assistant\app.py'
+if ((Test-Path (Join-Path $pyDir 'python.exe')) -and (Test-Path $oldApp)) {
+    $env:SAGE_HOME = $Root
+    cmd /c "`"$(Join-Path $pyDir 'python.exe')`" `"$oldApp`" --quit >nul 2>&1"
+}
+
+# ---- 1. Python (embeddable, private) ----------------------------------------------------------------------------
+Step 1 'Setting up a private Python'
 $py = Join-Path $pyDir 'python.exe'
 if (-not (Test-Path $py)) {
     $zip = Join-Path $Root "python-$PyVersion-embed-amd64.zip"
@@ -93,13 +111,14 @@ if (-not (PyOk "import pip")) {
         Say "installing pip"
         & $py $gp --no-warn-script-location --quiet
     }
-    if ($LASTEXITCODE -ne 0) { throw "pip did not install" }
+    if ($LASTEXITCODE -ne 0) { throw "pip did not install (exit $LASTEXITCODE)" }
     if (Test-Path $gp) { Remove-Item $gp -Force }
 }
 Say ("python: " + (& $py --version))
 if ($PythonOnly) { Say "python ready: $py"; exit 0 }
 
 # ---- 2. The engine release ---------------------------------------------------------------------------------------
+Step 2 'Unpacking Sage'
 $engineDir = Join-Path $Root 'engine'
 $manifest = Join-Path $engineDir 'engine_manifest.json'
 $rel = $null
@@ -126,6 +145,7 @@ if (-not (Test-Path $manifest) -or ($relVersion -and $relVersion -ne $installedV
 if (-not (Test-Path (Join-Path $engineDir 'assistant\sage.py'))) { throw "the archive is not a sage-core release (assistant/sage.py missing)" }
 
 # ---- 3. Python packages + the browser ---------------------------------------------------------------------------
+Step 3 'Installing the building blocks'
 $req = Join-Path $engineDir 'assistant\requirements.txt'
 if (-not (PyOk "import keyring, playwright, pykeepass, google.auth, requests, cryptography, tzdata")) {
     if ($wheels) {
@@ -137,6 +157,7 @@ if (-not (PyOk "import keyring, playwright, pykeepass, google.auth, requests, cr
     }
     if ($LASTEXITCODE -ne 0) { throw "pip install -r requirements.txt failed" }
 } else { Say "python packages present" }
+Step 4 'Installing the browser your agent works in'
 if (-not $SkipBrowser) {
     $bb = if ($Bundle) { Join-Path $Bundle 'ms-playwright' } else { '' }
     if ($bb -and (Test-Path $bb)) {
@@ -167,6 +188,7 @@ function HaveClaude {
     foreach ($c in @((Join-Path $env:USERPROFILE '.local\bin\claude.exe'), (Join-Path $env:APPDATA 'npm\claude.cmd'))) { if (Test-Path $c) { return $true } }
     return $false
 }
+Step 5 'Installing Claude'
 if (-not $SkipClaude) {
     if (HaveClaude) { Say "Claude Code CLI present" }
     else {
@@ -176,13 +198,26 @@ if (-not $SkipClaude) {
     }
 }
 
-# ---- 5. Where things are ----------------------------------------------------------------------------------------
+# ---- 5. The app's typefaces (kept on this computer, so its window looks the same with no network) -------------------
+Step 6 'Finishing up'
+$fontsDir = Join-Path $Root 'fonts'
+$bf = if ($Bundle) { Join-Path $Bundle 'fonts' } else { '' }
+if (-not (Test-Path (Join-Path $fontsDir 'fraunces.woff2'))) {
+    if ($bf -and (Test-Path $bf)) {
+        New-Item -ItemType Directory -Force -Path $fontsDir -ErrorAction Stop | Out-Null
+        Copy-Item -Path (Join-Path $bf '*') -Destination $fontsDir -Force -ErrorAction SilentlyContinue
+    } else {
+        cmd /c "`"$py`" `"$engineDir\assistant\app.py`" --fetch-fonts `"$fontsDir`" >nul 2>&1"      # no network: the window uses the system's own faces
+    }
+}
+
+# ---- 6. Where things are ----------------------------------------------------------------------------------------
 $info = [ordered]@{ python = $py; engine = $engineDir; release_url = $ReleaseUrl; version = $relVersion; installed = (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'); installer = 'SageSetup' }
 $info | ConvertTo-Json | Set-Content -Path (Join-Path $Root 'install.json') -Encoding UTF8 -ErrorAction Stop
 Say "ready: $Root"
 if (-not $NoLaunch) {
     $pyw = Join-Path $pyDir 'pythonw.exe'
     $env:SAGE_HOME = $Root
-    Start-Process -FilePath $(if (Test-Path $pyw) { $pyw } else { $py }) -ArgumentList @("`"$engineDir\assistant\welcome.py`"", '--open') -WorkingDirectory $engineDir
-    Say "the setup page is opening in your browser"
+    Start-Process -FilePath $(if (Test-Path $pyw) { $pyw } else { $py }) -ArgumentList @("`"$engineDir\assistant\app.py`"") -WorkingDirectory $Root
+    Say "Sage is opening"
 }

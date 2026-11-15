@@ -1,4 +1,4 @@
-# sage-core 2026.11.14+4972b92
+# sage-core 2026.11.14+98b6382
 
 The engine of a Sage agent: the code, generic prompts, generic skills and templates, with nothing of any
 organization in it. An organization is a separate folder (its *pack*) made from this engine by
@@ -14,10 +14,11 @@ Start here: `python assistant/sage.py doctor` (what this machine still needs), t
 Three ways onto a machine, one update path (`assistant/installer/README.md` has the detail):
 
 1. **The installer (Windows, no terminal, no git):** `SageSetup.exe` (built by `assistant/installer/windows/build.ps1`)
-   installs a private Python, this engine as a release, the browser and the Claude Code CLI under `%LOCALAPPDATA%\Sage`,
-   then opens the setup page (`assistant/welcome.py`): the organization's name, what to call the agent, the owners; it
-   creates the pack, shows the doctor table, opens the one window the owner types the Claude token into, lists the
-   Google clicks, starts the agent. Nothing secret passes through the page.
+   is one click: it shows each step as it installs a private Python, this engine as a release, the browser and the Claude
+   Code CLI under `%LOCALAPPDATA%\Sage`, then **the Sage app opens in a window of its own** (`assistant/app.py`, no
+   browser tab): the organization's name, what to call the agent, the owners; it creates the pack, checks the computer
+   (one tap fixes what the install could not finish), signs in to Claude in a window that closes by itself, shows the
+   Google steps, starts the agent. The Start-menu entry opens the same app: the agent's home from then on.
 2. **A git clone:** `python assistant/new_org.py "<Org>" --agent <Name> --owner "Full Name:email" --out <folder>`,
    then `python assistant/sage.py doctor` and `serve` in that folder (`sage welcome` opens the same setup page).
 3. **The copilot skill** (`/sage-setup` in Claude Code) for a guided install; it ends in the same pack.
@@ -31,4 +32,4 @@ Optional modules (their jobs start off; `sage module on <name>`):
 - `money`: personal-finance lane: read-only bank feeds (Plaid / SimpleFIN), categorising, forecasts; never pays
 - `typeform`: Typeform lead sensor
 
-Files: 476. Manifest: `engine_manifest.json`.
+Files: 479. Manifest: `engine_manifest.json`.

@@ -84,6 +84,9 @@ if ($Bundle) {
     # a newer browser replaced an older one: keep only what the bundled Playwright just asked for
     $keep = Get-ChildItem -Path $browsers -Directory | Sort-Object LastWriteTime -Descending | Group-Object { $_.Name -replace '-\d+$', '' } | ForEach-Object { $_.Group[0].FullName }
     Get-ChildItem -Path $browsers -Directory | Where-Object { $keep -notcontains $_.FullName } | Remove-Item -Recurse -Force
+    # the app's two typefaces, so its window looks the same on a computer with no network
+    & $Python (Join-Path $repo 'assistant\app.py') --fetch-fonts (Join-Path $bundleDir 'fonts')
+    if ($LASTEXITCODE -ne 0) { Write-Host "[build] bundle: the typefaces did not download; the app will fetch them itself, or use the system's" }
     $mb = [math]::Round(((Get-ChildItem -Path $bundleDir -Recurse -File | Measure-Object Length -Sum).Sum) / 1MB)
     Write-Host "[build] bundle: $bundleDir ($mb MB before compression)"
 }
@@ -93,7 +96,14 @@ $iscc = @((Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'), (Join-
 if (-not $iscc) { $cmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue; if ($cmd) { $iscc = $cmd.Source } }
 if (-not $iscc) { Write-Host "[build] Inno Setup not found: winget install JRSoftware.InnoSetup --scope user   (then re-run)"; exit 2 }
 Write-Host "[build] $iscc"
-$isccArgs = @('/Qp', "/DVersion=$($rel.version)", "/DZip=$($rel.file)", "/DDist=$Out", "/DReleaseUrl=$ReleaseUrl")
+# the icon and the installer's corner image are drawn by code (make_assets.py): no picture files in the repository
+$assets = Join-Path $Out 'assets'
+& $Python (Join-Path $here 'make_assets.py') $assets
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $assets 'sage.ico'))) { throw "make_assets.py failed" }
+# the file's own version number must be four plain numbers: 2026.11.14+abc1234 -> 2026.11.14.0
+$num = (($rel.version -split '\+')[0] -split '\.' | Where-Object { $_ -match '^\d+$' } | Select-Object -First 3) -join '.'
+if (-not $num) { $num = '0.0.0' }
+$isccArgs = @('/Qp', "/DVersion=$($rel.version)", "/DNumVersion=$num.0", "/DZip=$($rel.file)", "/DDist=$Out", "/DAssets=$assets", "/DReleaseUrl=$ReleaseUrl")
 if ($bundleDir) { $isccArgs += "/DBundle=$bundleDir" }
 & $iscc @isccArgs (Join-Path $here 'SageSetup.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
