@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+8aadbd1",
+  "version": "2026.11.16+5a2c875",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T14:20:31"
+  "synced": "2026-11-16T14:42:09"
  },
  "modules": {
   "money": {
@@ -99,10 +99,10 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "9c911bdd02f93dfa836c680553b51e1e8de7b486d035d7302565f673d456e3c9",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
-  "assistant/agent/README.md": "7fb79e01608551be900deb4c18793e8ebd9a9643da1430843f55e8664c3d879b",
+  "assistant/agent/README.md": "cfe6ced82105a1666c35f0027ad185425a6f038f9279b5183636ee38d38b0977",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
-  "assistant/agent/actions.py": "24d94435400cc7d2b69c05d3693121b95e2773115b9d2fdf23a5210d5ecde985",
+  "assistant/agent/actions.py": "98825a4c0c12fa5068865ab1719aae77db20cbd4cc1c432e8108815edec889f9",
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/billcheck.py": "81df4347bc09bfc621d6ca09f72640693f7f885e117d97ff9cbe6178753ffa5e",
   "assistant/agent/brain.py": "9a71ade0d8506ae6c0a52873aa24270350d4dfc02c4e25d5c439b156d368f530",
@@ -405,7 +405,7 @@
   "assistant/templates/data/sop_map.json": "3e37ed67c3cc301da57cc6d833901b0d95e9fcc779ed72a8720478924bcf7e78",
   "assistant/tests/stress_browser.py": "3ec3435a932ceb006b1d740b88b4b4f0bda77b7fbabfdb5d770eb06d5558b7f7",
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
-  "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
+  "assistant/tests/test_agent.py": "ccb243aeada74f9ec80ae78439d61b335009ca806e7a0343998c75c366783b06",
   "assistant/tests/test_app.py": "4925cdf976fa3d5bd84c3afe163f1c38caa761ee6ff8f289510dee18c374c185",
   "assistant/tests/test_browser_mcp.py": "8b9674f5cf35526048f0f6de5b2f11ae54f8d3e79d603878f81d07f3d9a7087e",
   "assistant/tests/test_browser_stay_up.py": "ed244d913588e5046a0d996e796d903d826297cdcfa3bde03465bc79329948e8",

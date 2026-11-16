@@ -284,6 +284,17 @@ def team_member(to: str) -> str:
         toks = name.lower().split()
         if key in mine or (len(toks) >= 2 and all(t in saved for t in toks)):
             return name
+    # a staff or contractor user of the agent (people.json) by the phone/emails in their entry (2026-10-31:
+    # a team member's $90-a-day drone rental reply went to the phone only people.json knew, and was refused)
+    for u in (core.people().get("users") or {}).values():
+        if str(u.get("role") or "") in ("owner", "guest", ""):
+            continue
+        if "@" in h:
+            mine = {contacts.email_key(e) for e in u.get("emails") or []}
+        else:
+            mine = {contacts.phone_key(u.get("phone"))} if u.get("phone") else set()
+        if key in mine:
+            return str(u.get("name") or "")
     return ""
 
 

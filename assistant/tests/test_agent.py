@@ -1112,6 +1112,21 @@ check("team pay: matched by the handle in org, the People page or the contact's 
       actions.team_member("8055550142") == "Quinn Heathcote" and actions.team_member("owner2@example.invalid") == "staff1 Quillfeather"
       and actions.team_member("+1 805 555 0199") == "Corwin Castellan IV"
       and actions.team_member("p4f6cf3@example.invalid") == "" and actions.team_member("") == "")
+# 2026-10-31: a team member's drone rental reply went to the phone only people.json had (role staff) and was refused
+_real_people = core.PEOPLE
+core.PEOPLE = TMP / "people_team.json"
+core.save(core.PEOPLE, {"roles": {}, "users": {
+    "owner1": {"name": "owner1", "role": "owner", "emails": ["owner1@x.com"], "phone": "+18055550100"},
+    "staff1": {"name": "staff1", "role": "staff", "emails": ["owner1@example.invalid"], "phone": "+18055550160"}}})
+_posted.clear()
+_rent = "Hi staff1, yes, I'll cover the $90 a day rental. Go ahead and book it."
+actions.draft_card("wedding", "answer staff1 about the drone", {"channel": "text", "to": "+1 805-555-0160", "name": "staff1", "text": _rent}, _me, {})
+check("team rental: a draft to staff1 saying 'I'll cover the $90 a day rental' posts as a card instead of being refused",
+      len(_posted) == 1 and _posted[0].get("thread_class") == "vendor" and not _dl.check_card(_posted[0])[0]
+      and not actions.draft_blocker("wedding", "answer staff1", {"channel": "text", "to": "+18055550160", "text": _rent}, _me))
+check("team rental: staff matched by people.json phone or email; an owner's own handle is not a team member",
+      actions.team_member("owner1@example.invalid") == "staff1" and actions.team_member("+18055550100") == "")
+core.PEOPLE = _real_people
 _contacts_mod.lookup, _cards_mod.post = _real_lookup, _real_post
 
 # reschedule (2026-11-06): a schedule is found by id, by the dict the deed records, or by its title; changed in place;

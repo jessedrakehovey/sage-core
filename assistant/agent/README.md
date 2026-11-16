@@ -529,8 +529,10 @@ practice". The turn was rebuilt around three rules code enforces (details in HAN
   and SUPERSEDES the older open card on the same recipient or subject instead of a FRESHNESS / DUPLICATE
   refusal (the send path, drain and the tap are untouched). A draft to one of our own people (org.json
   `people`, matched by the number/email in their entry, their Wiki/People page or a contact saved under
-  their full name) is linted as a vendor message, so a shooter's pay offer is not refused as a price
-  promise to a lead (2026-10-24); leads and couples are checked as before. The `task` tool runs the card's
+  their full name, or the phone/email of a staff or contractor user in people.json) is linted as a vendor
+  message, so a shooter's pay offer or a team member's rental/reimbursement reply is not refused as a price
+  promise to a lead (2026-10-24; people.json since 2026-10-31, a team member's $90-a-day drone rental); leads and
+  couples are checked as before. The `task` tool runs the card's
   exec check and draft lint first (`actions.draft_blocker`, read-only): a draft cards.post would refuse is
   answered "refused: no card was posted, because ..." and never "posted below" (Corwin's proposal,
   2026-10-22 12:49, refused DRAFT_LINT after Sage had said it was below). A `task` without a draft still goes to the
