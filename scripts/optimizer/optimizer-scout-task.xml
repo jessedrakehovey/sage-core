@@ -36,8 +36,8 @@
   </Triggers>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
-      <Arguments>-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{{ORG_ROOT}}\scripts\optimizer\optimizer_cron.ps1"</Arguments>
+      <Command>wscript.exe</Command>
+      <Arguments>//B //Nologo "{{ORG_ROOT}}\scripts\lib\run_hidden.vbs" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{{ORG_ROOT}}\scripts\optimizer\optimizer_cron.ps1"</Arguments>
     </Exec>
   </Actions>
 </Task>

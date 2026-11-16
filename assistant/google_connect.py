@@ -180,11 +180,44 @@ def _account(pack: Path) -> str:
     return out.strip().splitlines()[0].strip() if rc == 0 and out.strip() else ""
 
 
+def _login(pack: Path, note, timeout: int = 600) -> tuple:
+    """Google's sign-in, waited on while its own lines are read: the tool prints the address of the page it opened, and
+    that address is handed to the window ("##link"), so an owner who lost the tab can open it again. (exit code, stderr)."""
+    py = welcome.pack_python(pack)
+    argv = (list(GCLOUD_CMD) if GCLOUD_CMD else [py, str(_gcloud_py())]) + ["auth", "login", "--brief"]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLOUDSDK_")}
+    env.update(CLOUDSDK_CONFIG=str(sdk_home() / "config"), CLOUDSDK_PYTHON=py, CLOUDSDK_CORE_DISABLE_PROMPTS="1",
+               CLOUDSDK_CORE_DISABLE_USAGE_REPORTING="1", PYTHONIOENCODING="utf-8")
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", env=env,
+                             creationflags=NO_WINDOW, stdin=subprocess.DEVNULL)
+    except OSError as e:
+        return 127, str(e)
+    seen: list = []
+
+    def read() -> None:
+        for ln in p.stderr:  # type: ignore[union-attr]
+            ln = ln.strip()
+            if ln:
+                seen.append(ln)
+                if ln.startswith("https://accounts.google.com/"):
+                    note("##link " + ln)
+
+    import threading
+    threading.Thread(target=read, daemon=True).start()
+    try:
+        rc = p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        return 124, "\n".join(seen[-6:])
+    return rc, "\n".join(seen[-6:])
+
+
 def step_signin(pack: Path, st: dict, note) -> dict:
     acct = _account(pack)
     if not acct:
-        note("Your browser is opening. Sign in to Google and choose Allow.")
-        rc, out, err = gc(pack, ["auth", "login", "--brief"], timeout=600)
+        note("Your browser opened a Google page. Choose your account there, then Allow.")
+        rc, err = _login(pack, note)
         acct = _account(pack)
         if not acct:
             return {"ok": False, "message": "The Google sign-in did not finish. Try again, and choose Allow when Google asks." if rc in (0, 124)

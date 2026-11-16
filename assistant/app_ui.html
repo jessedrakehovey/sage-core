@@ -213,7 +213,7 @@ async function job(p, onLine, onStep) {
     await sleep(600);
     const j = await api("job", {id: d.job});
     if (onStep && j.step) onStep(j.step);
-    if (onLine && j.line) onLine(j.line);
+    if (onLine && (j.line || j.link)) onLine(j.line || "", j);
     if (j.status !== "running") return j.result || {ok: false, message: j.message || "It stopped before finishing."};
   }
 }
@@ -481,7 +481,10 @@ const AFTER = {
       box.innerHTML = '<ul class="stages wide" id="gs">' + G.steps.map(x => '<li data-k="' + x.key + '"' + (x.status === "done" ? ' class="done"' : '') + '><span class="tick">&#10003;</span><span>' + esc(x.title.replace("the agent", A)) + '<small></small></span></li>').join("") + '</ul>';
       const at = k => { let seen = false; box.querySelectorAll("#gs li").forEach(li => { if (li.dataset.k === k) { li.className = "on"; seen = true; } else if (!seen) li.className = "done"; else if (li.className === "on") li.className = ""; }); };
       await job(api("google", body || {}),
-        line => { const sm = box.querySelector("#gs li.on small"); if (sm) { const m = /(\d+)% of (\d+) MB/.exec(line); sm.textContent = m ? "Downloading: " + m[1] + "%" : (/^[A-Z]/.test(line) ? line : ""); } },
+        (line, j) => { const sm = box.querySelector("#gs li.on small"); if (!sm) return;
+          const m = /(\d+)% of (\d+) MB/.exec(line), words = m ? "Downloading: " + m[1] + "%" : (/^[A-Z]/.test(line) ? line : "");
+          if (j && j.link) { if (!sm.querySelector("button")) sm.innerHTML = esc(words || "Waiting for you in your browser.") + ' <button class="link" data-open="' + esc(j.link) + '" style="font-size:13px">Open the sign-in page again</button>'; }
+          else sm.textContent = words; },
         step => at(step));
       await refresh();
     };
@@ -611,6 +614,8 @@ setInterval(() => { if (!timer) load(); }, 9000);          // keeps the window's
   await load();
   if (!S.app) { $("#screen").innerHTML = '<div class="screen"><div class="solo"><h1>Sage could not start.</h1><p class="lede">Close this window and open Sage again from the Start menu.</p></div></div>'; return; }
   if (!S.pack) return show(D.org.trim() ? "org" : "intro");
+  const want = location.hash.slice(1);
+  if (["computer", "claude", "google", "home"].includes(want)) { wokeOnce = want !== "home"; return show(want); }
   if (!S.auth_ok) return show("claude");
   show("home");
 })();

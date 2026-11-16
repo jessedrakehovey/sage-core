@@ -28,8 +28,8 @@
   </Triggers>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
-      <Arguments>-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{{ORG_ROOT}}\assistant\scripts\operator_cron.ps1" -Morning</Arguments>
+      <Command>wscript.exe</Command>
+      <Arguments>//B //Nologo "{{ORG_ROOT}}\scripts\lib\run_hidden.vbs" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{{ORG_ROOT}}\assistant\scripts\operator_cron.ps1" -Morning</Arguments>
     </Exec>
   </Actions>
 </Task>

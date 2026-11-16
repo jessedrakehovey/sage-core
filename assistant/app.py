@@ -52,7 +52,7 @@ NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 UI = HERE / "app_ui.html"
 TITLE = "Sage"
 WINDOW_SIZE = (1180, 800)
-IDLE_S = 75                      # the window pings every few seconds; this long without one and the service ends
+IDLE_S = 900                     # with no window process to watch, this long without a ping ends the service (a hidden tab pings rarely)
 KEY = secrets.token_urlsafe(24)
 _LAST_PING = {"t": time.time()}
 _QUIT = {"now": False}
@@ -115,14 +115,16 @@ def fetch_fonts(dst: Path | None = None) -> bool:
 # ---------------------------------------------------------------- background jobs (the window polls them)
 def job_start(kind: str, title: str, fn) -> dict:
     jid = secrets.token_hex(5)
-    rec = {"id": jid, "kind": kind, "title": title, "status": "running", "line": "", "step": "", "result": None, "started": time.time()}
+    rec = {"id": jid, "kind": kind, "title": title, "status": "running", "line": "", "step": "", "link": "", "result": None, "started": time.time()}
     with _JOBS_LOCK:
         _JOBS[jid] = rec
 
     def note(line: str) -> None:
         line = str(line).strip()
         if line.startswith("##step "):                 # which step a long job is on (the window ticks its list by this)
-            rec["step"], rec["line"] = line[7:].strip(), ""
+            rec["step"], rec["line"], rec["link"] = line[7:].strip(), "", ""
+        elif line.startswith("##link "):               # a page the step is waiting on, for a button that opens it again
+            rec["link"] = line[7:].strip()
         else:
             rec["line"] = line[-200:]
 
@@ -144,7 +146,7 @@ def job_get(jid: str) -> dict:
         rec = _JOBS.get(jid)
     if not rec:
         return {"ok": False, "status": "gone", "message": "no such job"}
-    return {"ok": True, **{k: rec[k] for k in ("id", "kind", "title", "status", "line", "step", "result")}}
+    return {"ok": True, **{k: rec[k] for k in ("id", "kind", "title", "status", "line", "step", "link", "result")}}
 
 
 def running_jobs() -> list:
@@ -230,6 +232,7 @@ def fix(key: str) -> dict:
         title = "Installing Claude"
     elif key == "playwright browsers":
         argv, title = [py, "-m", "playwright", "install", "chromium"], "Installing the browser"
+        os.environ["PLAYWRIGHT_SKIP_BROWSER_GC"] = "1"      # never delete the shared folder's other browsers (install.ps1 says why)
     elif key == "python packages":
         argv, title = [py, "-m", "pip", "install", "--disable-pip-version-check", "--no-warn-script-location", "-r", str(pack / "assistant" / "requirements.txt")], "Installing the building blocks"
     else:
@@ -385,6 +388,8 @@ POSTS = {
 
 
 DRY = {"on": False}                # --dry: a preview or a test may look at every screen; nothing is started, installed or signed in
+HOLD = {"on": False}               # --hold-agent: every set-up step is real, but the agent itself is never started (a trial on a test organization)
+HOLD_STEPS = ("start", "pause", "resume")
 DRY_STEPS = ("create", "fix", "claude", "probe", "start", "pause", "resume", "open", "google", "google_text", "google_relay", "google_check")
 
 
@@ -442,6 +447,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json({"ok": False, "message": "no such step"}, 404)
         if DRY["on"] and step in DRY_STEPS:
             return self._json({"ok": False, "message": "This is a preview: nothing is started from here."})
+        if HOLD["on"] and step in HOLD_STEPS:
+            return self._json({"ok": False, "message": "This is a trial: the agent stays asleep."})
         try:
             self._json(fn(body if isinstance(body, dict) else {}))
         except Exception as e:  # noqa: BLE001
@@ -472,7 +479,12 @@ def window_browser() -> str:
     return ""
 
 
+SCREEN = {"name": ""}              # --screen: the window opens on that screen (the Start-menu entry never passes it)
+
+
 def open_window(url: str) -> subprocess.Popen | None:
+    if SCREEN["name"]:
+        url = url + "#" + SCREEN["name"]
     exe = window_browser()
     if not exe:
         webbrowser.open(url)
@@ -579,8 +591,8 @@ def run(window: bool = True, port: int = 0) -> int:
             time.sleep(1)
             if _QUIT["now"]:
                 break
-            if window and time.time() - _LAST_PING["t"] > IDLE_S and not running_jobs():
-                break                                            # the window is closed (it pings while it is open)
+            if window and proc is None and time.time() - _LAST_PING["t"] > IDLE_S and not running_jobs():
+                break                                            # no window process to watch (a tab in the default browser): it is closed when it stops pinging
             if proc is not None and proc.poll() is not None and time.time() - _LAST_PING["t"] > 12 and not running_jobs():
                 break                                            # the browser process ended and nothing has pinged since
     except KeyboardInterrupt:
@@ -602,6 +614,8 @@ def main() -> int:
     ap.add_argument("--no-window", action="store_true", help="the service alone (prints APP <url>)")
     ap.add_argument("--port", type=int, default=0, help="a fixed port for the service (tests, a preview); default: the system picks")
     ap.add_argument("--dry", action="store_true", help="look only: starting, installing, signing in and opening links answer 'preview' and do nothing")
+    ap.add_argument("--hold-agent", action="store_true", help="a trial: every set-up step is real, the agent is never started")
+    ap.add_argument("--screen", default="", choices=["", "computer", "claude", "google", "home"], help="open the window on this screen")
     ap.add_argument("--state", action="store_true", help="print what the window would show and exit")
     ap.add_argument("--quit", action="store_true", help="close the app if it is open (the installer and the uninstaller ask this)")
     ap.add_argument("--fetch-fonts", nargs="?", const="", default=None, metavar="FOLDER", help="fetch the typefaces (into FOLDER, default the app's own) and exit")
@@ -617,7 +631,9 @@ def main() -> int:
         print("closed" if quit_running() else "was not open")
         return 0
     DRY["on"] = bool(a.dry)
-    theirs = _packs_own_copy() if not (a.no_window or a.dry or a.port) else None
+    HOLD["on"] = bool(a.hold_agent)
+    SCREEN["name"] = a.screen
+    theirs = _packs_own_copy() if not (a.no_window or a.dry or a.port or a.hold_agent or a.screen) else None
     if theirs:
         env = dict(os.environ, SAGE_APP_CHILD="1", SAGE_HOME=str(home()))
         py = welcome.pack_python(welcome.current_pack())
