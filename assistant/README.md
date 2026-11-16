@@ -1527,8 +1527,10 @@ every command below, update, modules):
   Gmail account, unaccepted Cloud terms, and the organization's rule against new keys (lifted for the one project only,
   and only on the owner's Allow). The relay script and the Chat app's page stay by hand, guided with Copy buttons
   (`guide` / `text` / `save_relay`), then `check` proves it with `gchat.py --test` + `sage relay check`. Resumable
-  (`data/google_connect.json`). Tests: `tests/test_google_connect.py` (a stand-in for Google's tool). Not yet run
-  against a live Google account.**
+  (`data/google_connect.json`). Tests: `tests/test_google_connect.py` (a stand-in for Google's tool). Run live once
+  (2026-11-15) as far as the owner's Allow lifting the key rule on the one project: sign-in, project, services,
+  identity and that override are proven; the key file after it, the Pub/Sub line, the sign-out, the guided relay /
+  Chat page and `check` are not.**
   `updater.py` (hourly `serve.json` job `engine-update`, since 2026-11-14; was nightly 03:00-05:00 and `sage update` with no `--engine`: release.json
   at `org.json -> engine_release_url` / `SAGE_RELEASE_URL`, date-part compare (same date + other sha = "different",
   `--force` only), sha256-checked download, staged under `<pack>/.sage-engines/staging-<v>/`, gated there (compile,

@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+7cc3854",
+  "version": "2026.11.15+d976fc7",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T19:37:13"
+  "synced": "2026-11-15T20:13:54"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "052f839323eeb085d19bb9ce2094fab43ddff384d5c0ee1ac630d7d76e2e811f",
+  "assistant/README.md": "886de25d2023794e205f38486b25d764f515070eca082c38b98a08ff1a9a13b3",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "05ae40a9f21e28b777d40b0abab931043b1eb993f50847811cb963d199b532e0",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -244,7 +244,7 @@
   "assistant/doer/vault_purge.py": "6f5c9fc7845b597a1709316b2c7680ae44cc5ef607d0775abc73eaa66192064a",
   "assistant/engine.py": "c9c9edef80691c8a67266a35e067f498e200fc0ea87d0382e8bdd7fd58792f8c",
   "assistant/google_connect.py": "3bb24d27c99ccf694f8a4754993ca7aafff1a23ea33d8c28b7da9a9ac899b779",
-  "assistant/installer/README.md": "4f9b709c2d31109b89db0ae25461489d05294a8be60d6b38fa6169769b1663e0",
+  "assistant/installer/README.md": "9893863c0d1fa4d21fd025288807cd9479d06976b3bafb687de2a8b3b2c2623b",
   "assistant/installer/windows/SageSetup.iss": "c279f9302ddf443e3b818a528820815cef17cd71e07e8c1a365c27584c390b9b",
   "assistant/installer/windows/build.ps1": "77948cbcc9726b3136dc934c40e04cad7a0c59bc330573372890c2b1b986c6e5",
   "assistant/installer/windows/install.ps1": "1de027b56d1445188179d5f5eefa868308f7170f8fd75e256a669f4748686bc4",
