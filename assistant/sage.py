@@ -1027,6 +1027,7 @@ def main() -> int:
     sub.add_parser("probe", help="one headless turn with the stored token: PROBE ok | failed")
     p = sub.add_parser("welcome", help="the first-run wizard (assistant/welcome.py); --open = the launcher"); p.add_argument("rest", nargs=argparse.REMAINDER)
     p = sub.add_parser("release", help="build / verify a release of the engine (assistant/release.py)"); p.add_argument("rest", nargs=argparse.REMAINDER)
+    p = sub.add_parser("settings", help="what an owner may change: every setting as JSON | set <key> <json> | undo <id> | call (assistant/settings.py)"); p.add_argument("rest", nargs=argparse.REMAINDER)
     p = sub.add_parser("module"); p.add_argument("state", choices=["on", "off"]); p.add_argument("name")
     p = sub.add_parser("relay", help="card taps without Tailscale: secret | url <web app url> | check | poll"); p.add_argument("op", choices=["secret", "url", "check", "poll"]); p.add_argument("value", nargs="?", default="")
     p = sub.add_parser("new-org"); p.add_argument("rest", nargs=argparse.REMAINDER)
@@ -1123,6 +1124,8 @@ def main() -> int:
         return 0 if r.get("ok") else 1
     if a.cmd == "token":
         return token_cmd(api_key=a.api_key, auto=a.auto)
+    if a.cmd == "settings":
+        return subprocess.call([sys.executable, str(HERE / "settings.py")] + a.rest)
     if a.cmd == "app":
         return subprocess.call([sys.executable, str(HERE / "app.py")] + list(a.rest))
     if a.cmd == "probe":

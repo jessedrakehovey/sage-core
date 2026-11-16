@@ -3,7 +3,8 @@
 An owner who installs Sage gets an app, the way any installed program is one: the installer ends by opening this
 window and the Start-menu entry opens it again. No browser tab, no address to type. Inside, the first time: the
 set-up (the organization's name, what to call the agent, the owners, what this computer still needs, the Claude
-sign-in). From then on: the agent's home (running or paused, what is connected, what comes next).
+sign-in). From then on: the agent's home (running or paused, what is connected, what comes next) and its Settings
+(people and roles, when it speaks, what it handles, how it works: assistant/settings.py, drawn from that file's list).
 
   python assistant/app.py                 the window (starts the app's own local service, ends when the window closes)
   python assistant/app.py --no-window     the service alone; prints APP <url> (tests, a preview; add --dry to look without starting anything)
@@ -319,6 +320,35 @@ def google_check(body: dict) -> dict:
     return job_start("google_check", "Checking the connection", lambda note: google_connect.check(pack))
 
 
+SETTINGS_READS = ("get",)
+
+
+def settings_call(body: dict) -> dict:
+    """The Settings screen. One request goes to the organization's own settings.py, on its own Python and in its own
+    folder, so what is read and written is that organization's files and nothing else (assistant/settings.py)."""
+    pack = _pack_or_none()
+    script = (pack / "assistant" / "settings.py") if pack else None
+    if not pack:
+        return {"ok": False, "message": "Settings open once your agent is set up."}
+    if not script.exists():
+        return {"ok": False, "message": "This agent needs its next update before its settings can be changed here."}
+    if DRY["on"] and str(body.get("op") or "get") not in SETTINGS_READS:
+        return {"ok": False, "message": "This is a preview: nothing is changed from here."}
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
+    env["PYTHONIOENCODING"] = "utf-8"
+    try:
+        r = subprocess.run([welcome.pack_python(pack), str(script), "call"], input=json.dumps(body), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=90, cwd=str(pack), env=env, creationflags=NO_WINDOW)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return {"ok": False, "message": f"The settings did not answer ({type(e).__name__})."}
+    line = next((ln for ln in reversed((r.stdout or "").splitlines()) if ln.strip().startswith("{")), "")
+    try:
+        out = json.loads(line)
+    except ValueError:
+        return {"ok": False, "message": "The settings did not answer: " + ((r.stderr or r.stdout or "").strip()[-200:] or f"exit {r.returncode}")}
+    return out if isinstance(out, dict) else {"ok": False, "message": "The settings did not answer."}
+
+
 def chat_connected(pack: Path) -> bool:
     """Connected means proven: the app's own check passed. An organization connected before this screen existed (its
     relay or endpoint already in the config, no record of a run here) counts as connected too."""
@@ -387,6 +417,7 @@ POSTS = {
     "claude": lambda b: claude_window(str(b.get("mode") or "subscription")), "probe": lambda b: probe(), "start": lambda b: start(),
     "pause": lambda b: pause(True), "resume": lambda b: pause(False), "open": lambda b: open_link(b),
     "job": lambda b: job_get(str(b.get("id") or "")),
+    "settings": settings_call,
     "google": google_run, "google_status": google_status, "google_text": google_text, "google_relay": google_relay, "google_check": google_check,
     "quit": lambda b: (_QUIT.update(now=True) or {"ok": True, "message": "closing"}),
     # how lately the window spoke (a ping), and whether one was opened in the last moments: a second launch asks

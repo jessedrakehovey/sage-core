@@ -340,7 +340,7 @@ def main() -> int:
     (agent / "profile.json").write_text(json.dumps(profile, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     people = {"_doc": "Who the agent answers. Anyone not listed is never answered.",
               "roles": {"owner": {"can": ["ask", "teach", "note", "schedule", "task", "undo", "approve"]},
-                        "staff": {"can": ["ask", "note"]}, "guest": {"can": []}},
+                        "staff": {"can": ["ask", "note", "task"]}, "guest": {"can": []}},
               "users": {o["key"]: {"name": o["name"], "role": "owner", "emails": [o["email"]] if o["email"] else [], "chat_user": ""} for o in owners}}
     (agent / "people.json").write_text(json.dumps(people, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     shutil.copy2(HERE / "agent" / "templates" / "prompt.generic.md", agent / "prompt.md")

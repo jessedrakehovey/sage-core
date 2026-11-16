@@ -193,7 +193,30 @@ check("the picture file is a real PNG", make_assets.png(make_assets.mark(32))[:8
 appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
 iss = (ROOT / "installer" / "windows" / "SageSetup.iss").read_text(encoding="utf-8")
 ps1 = (ROOT / "installer" / "windows" / "install.ps1").read_text(encoding="utf-8")
+# ---------------------------------------------------------------- the Settings screen's one call
+_pack = TMP / "setpack"
+(_pack / "assistant").mkdir(parents=True)
+_real = app._pack_or_none
+app._pack_or_none = lambda: None
+check("settings: closed until an organization exists", not app.settings_call({"op": "get"})["ok"])
+app._pack_or_none = lambda: _pack
+check("settings: an agent older than the screen says so", "update" in app.settings_call({"op": "get"})["message"])
+_stub = ["import sys, json", "b = json.loads(sys.stdin.read() or '{}')", "print('noise before the answer')",
+         "print(json.dumps({'ok': True, 'echo': b, 'argv': sys.argv[1:]}))"]
+(_pack / "assistant" / "settings.py").write_text(chr(10).join(_stub) + chr(10), encoding="utf-8")
+_r = app.settings_call({"op": "set", "key": "k", "value": 3})
+check("settings: the request reaches the organization's own settings and its answer comes back", _r.get("ok") and _r["echo"] == {"op": "set", "key": "k", "value": 3} and _r["argv"] == ["call"], str(_r))
+app.DRY["on"] = True
+check("settings: a preview may look", app.settings_call({"op": "get"}).get("ok") is True)
+check("settings: a preview changes nothing", not app.settings_call({"op": "person_save", "name": "x"})["ok"] and not app.settings_call({"op": "set", "key": "k", "value": 1})["ok"])
+app.DRY["on"] = False
+(_pack / "assistant" / "settings.py").write_text("print('not json')" + chr(10), encoding="utf-8")
+check("settings: an answer that is not one is an error, not a crash", app.settings_call({"op": "get"})["ok"] is False)
+app._pack_or_none = _real
+check("settings: the step is one of the window's", "settings" in app.POSTS)
+
 ui = (ROOT / "app_ui.html").read_text(encoding="utf-8")
+check("the window has a Settings screen drawn from the organization's own list", "SCREENS.settings" in ui and 'api("settings"' in ui and 'id="gear"' in ui)
 check("the installer asks nothing and opens the app, never a page in a browser", "DisableWelcomePage=yes" in iss and "DisableFinishedPage=yes" in iss and "app.py" in iss
       and "welcome.py"" --open" not in iss and "--open" not in iss.split("[UninstallRun]")[0])
 check("the installer shows the steps the install script reports", "##step" in iss and ps1.count("\nStep ") >= 6 and "##fail" in ps1 and "ExecAndLogOutput" in iss)

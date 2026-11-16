@@ -1740,6 +1740,35 @@ engine, on every machine. Three kinds: `mission_control` (org.json `mission_cont
   keepalive (asks `python assistant/ports.py current mission_control`).
 - `python assistant/ports.py status` shows wanted / now / holder per kind. Tests: `assistant/tests/test_ports.py`.
 
+### Settings in the app's window, and the organization's structure (2026-11-15)
+
+The app's window (`app.py`) had set-up steps and a home screen and nothing to change afterwards; who the agent answers
+and what a team member may do were fields only a person editing `people.json` could reach. `assistant/settings.py` is the
+one door to all of it, and the window's **Settings** screen is drawn from what it returns.
+
+- **`REGISTRY`**: one row per setting (file + dotted path, type, bounds, the owner's words, and the code that READS it).
+  A setting is only added for a field some engine code reads; `tests/test_settings.py` fails a row whose reader does not
+  mention its field. A new setting is a new row, never a new screen. Groups today: Organization (the agent's own notes
+  about the organization, through `agent/org.py`), When it speaks (weekly list or one at a time, its day and hour,
+  follow-up hours, event reminders, whether a night-time approval waits for morning), How it works (the Claude model for
+  answers / work / the nightly review, daily ceilings, what happens when work piles up), On this computer (its browser).
+- **People and roles** (the organization's structure): add, change or remove a person (name, the address they write
+  from, role, what they handle, who they report to); change what a role may do (`ask`, `note`, `task`), which lanes it
+  sees and which wiki folders it may search; make a role of the organization's own. `approve`, `teach` and `undo` cannot
+  be given to a role other than owner; the last owner can neither be demoted nor removed. What they handle and who they
+  report to are mirrored into `state/org.json -> people`, which is what the model reads (`org.render`).
+- **What it handles**: the same feature gate the first chat question answers (`onboarding.apply_features`).
+- **Guardrails** are listed and not changeable: they are code. Standing yeses (`scripts/policy.py` grants) are listed
+  and can be taken back; nothing in settings gives one. Quiet hours (`exec_store.QUIET_START/END`) are not a setting.
+- **Writes** go in place (`json_set`: one value changes, the file keeps its layout, `_doc` notes, line endings and
+  byte-order mark; a result that does not parse to exactly the intended data is never written). Every change is a row in
+  `data/agent/settings_changes.jsonl` with what it was before, and a row in the agent's own change ledger (undo op
+  `settings_undo`), so an undo in the window and an undo asked for in chat are the same undo.
+- **How the window reaches it**: `app.settings_call` runs the ORGANIZATION'S own `assistant/settings.py call` (its
+  Python, its folder, the request as JSON on stdin), so the window never writes an organization's files itself. `--dry`
+  may look and changes nothing. `python assistant/sage.py settings` prints every setting; `settings set <key> <json>`.
+- A new organization's staff role now starts with `task` (hand a task to the owners), as the live one has.
+
 ## The organization's own pages, and the shoot-day app in the OS (2026-11-01)
 
 `config.json -> pages` is the one place an organization adds a page to Mission Control without touching the

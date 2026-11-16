@@ -485,6 +485,10 @@ def _undo(cid: str, by: str) -> str:
         sys.path.insert(0, str(VAULT / "assistant" / "scripts"))
         import policy
         ok = policy.revoke(u.get("id", ""), by=by, why=f"undo {cid}")
+    elif op == "settings_undo":                                 # a setting changed in the app's window (assistant/settings.py)
+        sys.path.insert(0, str(VAULT / "assistant"))
+        import settings
+        ok = bool(settings.undo(u.get("id", ""), by=by, ledger=False).get("ok"))
     elif op == "alias_forget":                                  # the `identify` deed (whois.py)
         sys.path.insert(0, str(VAULT / "assistant" / "scripts"))
         import whois

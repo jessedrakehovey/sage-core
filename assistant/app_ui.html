@@ -179,6 +179,70 @@ ol.how .btn{margin-right:6px}
 .conn li:first-child{border-top:0}
 .conn b{font-weight:600;font-size:15px;display:block}.conn span.d{font-size:13.5px;color:var(--muted);display:block}
 .foot{margin-top:18px;font-size:13px;color:var(--dim)}
+
+/* ---------- settings ---------- */
+select,textarea{font-family:inherit}
+.top .link{font-size:14px;margin-right:6px}
+.screen:has(.set){align-self:start}
+.set{display:grid;grid-template-columns:220px minmax(0,1fr);gap:30px;align-items:start;width:100%}
+.set-nav{position:sticky;top:0;display:grid;gap:3px}
+.set-nav h2{font-size:26px;margin:14px 0 12px}
+.set-nav .link{justify-self:start}
+.set-nav button.g{text-align:left;background:none;border:0;border-radius:14px;padding:10px 14px;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+.set-nav button.g:hover{background:#fff;color:var(--ink)}
+.set-nav button.g.on{background:var(--mint);color:var(--green-d)}
+.set-body h2{font-size:30px}
+.blurb{color:var(--muted);font-size:15.5px;margin-top:8px;max-width:62ch}
+.sech{font-size:22px;margin-top:34px}
+.card.pad{padding:6px 26px;margin-top:18px}
+.who2{padding:18px 0 4px;font-size:15.5px;color:var(--muted)}.who2 b{color:var(--ink);font-weight:600}
+.srow{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:16px 0;border-top:1px solid var(--line)}
+.srows>.srow:first-child{border-top:0}
+.srow b{font-weight:600;font-size:15.5px;display:block}
+.srow .d,.pn .d,.clist .d,.locks .d,.role .d{font-size:14px;color:var(--muted);display:block;margin-top:2px;max-width:56ch}
+.srow.stack{grid-template-columns:1fr}
+.srow.sub{padding-left:20px;border-top-style:dashed}
+.sw{width:50px;height:30px;border-radius:999px;border:0;background:var(--line2);position:relative;cursor:pointer;transition:background .15s;flex:none;padding:0}
+.sw i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(29,42,51,.25);transition:transform .15s var(--ease)}
+.sw.on{background:var(--green)}.sw.on i{transform:translateX(20px)}
+.sel{appearance:none;-webkit-appearance:none;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%2355626e' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 14px center;border:1.5px solid var(--line2);border-radius:14px;padding:10px 38px 10px 14px;font-size:15px;color:var(--ink);cursor:pointer;max-width:320px}
+.sel:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 4px var(--mint)}
+.sel.wide{width:100%;max-width:none;padding-top:13px;padding-bottom:13px;border-radius:16px;font-size:16px}
+.inp.num{width:112px;font-size:15px;padding:10px 14px;border-radius:14px;text-align:right}
+.inp.ta{font-size:15.5px;padding:12px 16px;resize:vertical;min-height:58px;line-height:1.5;margin-top:10px;display:block}
+.win{display:inline-flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.rhead{display:flex;align-items:center;gap:14px;padding-top:18px}.rhead h3{font-size:20px;flex:1}
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree{padding:6px 0 18px}
+.tree ul{margin-left:20px;padding-left:22px;border-left:2px solid var(--mint2)}
+.tree li{padding-top:12px}
+.pn{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center}
+.av{width:42px;height:42px;border-radius:50%;background:var(--mint);display:grid;place-items:center;font-family:var(--display);font-weight:600;font-size:18px;color:var(--green-d)}
+.pn b{font-weight:600;font-size:15.5px;display:block}
+.form{margin-top:18px;border-color:var(--mint2)}
+.form h3{font-size:22px}
+.form .inp{font-size:16px;padding:12px 16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.link.danger{color:var(--rust);text-decoration-color:var(--peach)}
+.role{margin-top:14px;padding:6px 26px 22px}
+.checks{display:grid;gap:9px;margin-top:14px}
+.ck{display:flex;gap:10px;align-items:center;font-size:15px;cursor:pointer}
+.ck input{width:18px;height:18px;accent-color:var(--green);cursor:pointer;margin:0}
+.lab{font-size:13.5px;font-weight:600;color:var(--muted);margin-top:18px}
+.chip.pick{cursor:pointer}
+.role .fine{margin-top:8px}
+.addrole{display:flex;gap:10px;margin-top:16px;max-width:440px}
+.addrole .inp{font-size:15px;padding:10px 16px}
+.clist,.locks{list-style:none;margin:0;padding:0}
+.clist li,.locks li{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.locks li{grid-template-columns:32px 1fr}
+.clist li:first-child,.locks li:first-child{border-top:0}
+.clist b,.locks b{font-weight:600;font-size:15.5px;display:block}
+.lock{width:32px;height:32px;border-radius:50%;background:var(--butter);display:grid;place-items:center}
+.empty{padding:18px 0;font-size:15px;color:var(--muted)}
+#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ink);color:#fff;border-radius:999px;padding:10px 20px;font-size:14.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:5;max-width:80vw}
+#toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{background:#6e3413;border-radius:18px}
+@media (max-width:860px){.set{grid-template-columns:1fr;gap:14px}.set-nav{position:static;display:flex;flex-wrap:wrap;align-items:center}.set-nav h2{width:100%}.grid2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -186,10 +250,12 @@ ol.how .btn{margin-right:6px}
   <div class="top">
     <div class="logo"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#17785f"/><g transform="translate(16 16) rotate(45)"><path d="M0-10.5A12.6 12.6 0 0 1 0 10.5A12.6 12.6 0 0 1 0-10.5Z" fill="#fff"/><path d="M0 10.5V-2.5" stroke="#17785f" stroke-width="1.7" stroke-linecap="round"/></g></svg>Sage</div>
     <div class="sp"></div>
+    <button class="link" id="gear" hidden>Settings</button>
     <div id="status"></div>
   </div>
   <div class="stage"><div id="screen"></div></div>
 </div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const KEY = "__SAGE_KEY__";
@@ -226,7 +292,10 @@ const first = () => S.first_name || (D.owners[0].name.trim().split(/\s+/)[0]) ||
 const initial = () => (S.agent || D.agent.trim() || "S").trim().charAt(0).toUpperCase();
 
 function drawStatus() {
-  const el = $("#status");
+  const el = $("#status"), gear = $("#gear");
+  gear.hidden = !S.pack || ["building", "intro", "org", "agent", "people"].includes(cur);
+  gear.textContent = cur === "settings" ? "Home" : "Settings";
+  gear.onclick = () => show(cur === "settings" ? "home" : "settings");
   if (!S.pack) { el.innerHTML = ""; return; }
   const [cls, txt] = S.paused ? ["warn", agent() + " is paused"] : S.serve_running ? ["live", agent() + " is running"] : started ? ["warn", "Waking " + agent()] : ["off", agent() + " is asleep"];
   el.innerHTML = '<span class="status ' + cls + '"><span class="dot"></span>' + esc(txt) + '</span>';
@@ -234,6 +303,7 @@ function drawStatus() {
 function show(name) {
   if (timer) { clearInterval(timer); timer = null; }
   cur = name;
+  drawStatus();
   const el = $("#screen");
   el.innerHTML = '<div class="screen">' + SCREENS[name]() + '</div>';
   $(".stage").scrollTop = 0;
@@ -323,7 +393,7 @@ const SCREENS = {
       '<div class="row" style="margin-top:22px">' +
       (S.serve_running ? '<button class="btn ' + (S.paused ? "primary" : "ghost") + ' small" id="pause">' + (S.paused ? "Resume " + esc(agent()) : "Pause " + esc(agent())) + '</button>'
                        : '<button class="btn primary small" id="wake"' + (started ? " disabled" : "") + '>' + (started ? '<span class="spin"></span> Waking ' + esc(agent()) : "Wake " + esc(agent())) + '</button>') +
-      '<button class="btn ghost small" id="folder">Open the folder</button></div></div>' +
+      '<button class="btn ghost small" id="folder">Open the folder</button><button class="btn ghost small" id="sets">Settings</button></div></div>' +
       '<div class="card mint next"><span class="kicker">' + esc(nx.k) + '</span><h3>' + esc(nx.t) + '</h3><p>' + esc(nx.p) + '</p>' +
       (nx.b ? '<div class="row" style="margin-top:18px"><button class="btn primary small" id="next">' + esc(nx.b) + '</button></div>' : '') + '</div>' +
       '</div><div class="card"><h3 style="font-size:20px">Connections</h3><ul class="conn">' +
@@ -586,6 +656,7 @@ const AFTER = {
     if (w) w.onclick = () => { wokeOnce = false; wake(); show("home"); };
     if (n) n.onclick = () => nx.open ? api("open", {url: nx.open}) : show(nx.go);
     $("#folder", el).onclick = () => api("open", {folder: true});
+    $("#sets", el).onclick = () => show("settings");
     el.querySelectorAll("[data-go]").forEach(b => b.onclick = () => show(b.dataset.go));
     let sig = JSON.stringify([S.serve_running, S.paused, S.auth_ok, S.chat_connected, S.google_accounts, started]);
     timer = setInterval(async () => {
@@ -597,6 +668,143 @@ const AFTER = {
     if (wakeErr && !S.serve_running) { const c = document.createElement("div"); c.className = "err"; c.style.marginBottom = "18px"; c.textContent = agent() + " did not wake up. " + wakeErr; $(".home", el).before(c); }
   },
 };
+/* ---------- settings: one screen drawn from the list the organization's own settings give (assistant/settings.py) ---------- */
+let ST = null, SG = "org", SE = null;
+const LOCK = '<svg width="14" height="16" viewBox="0 0 14 16" fill="none" aria-hidden="true"><rect x="1" y="7" width="12" height="8" rx="2.4" fill="#6f4b00"/><path d="M4 7V4.8a3 3 0 0 1 6 0V7" stroke="#6f4b00" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const cap = s => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
+function toast(msg, bad) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "show" + (bad ? " bad" : "");
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.className = ""; }, bad ? 5600 : 1500);
+}
+async function setDo(body) {
+  const r = await api("settings", body);
+  if (!r.ok) toast(r.message || "That did not save.", true);
+  else if (!r.unchanged) toast(r.message || "Saved");
+  const g = await api("settings", {op: "get"});
+  if (g.ok) ST = g;
+  if (cur === "settings") drawSet();
+  return r;
+}
+const allItems = () => ST.groups.flatMap(g => g.items);
+const valOf = k => (allItems().find(x => x.key === k) || {}).value;
+const shown = it => !(it.show_if && valOf(it.show_if[0]) !== it.show_if[1]) && !(it.show_unless && valOf(it.show_unless[0]) === it.show_unless[1]);
+const HALF = (() => { const o = []; for (let h = 7; h <= 21; h++) for (const m of ["00", "30"]) { if (h === 21 && m === "30") break; o.push(String(h).padStart(2, "0") + ":" + m); } return o; })();
+const clock = t => { const [h, m] = t.split(":").map(Number); return (h % 12 || 12) + ":" + String(m).padStart(2, "0") + (h < 12 ? " AM" : " PM"); };
+function control(it) {
+  const k = esc(it.key), lab = ' aria-label="' + esc(it.label) + '"';
+  if (it.type === "bool") return '<button class="sw' + (it.value ? " on" : "") + '" role="switch" aria-checked="' + (it.value ? "true" : "false") + '"' + lab + ' data-sw="' + k + '"><i></i></button>';
+  if (it.type === "choice") return '<select class="sel"' + lab + ' data-ch="' + k + '">' + it.choices.map((c, i) => '<option value="' + i + '"' + (c.value === it.value ? " selected" : "") + '>' + esc(c.label) + '</option>').join("") + '</select>';
+  if (it.type === "int") return '<input class="inp num" type="number"' + lab + ' min="' + it.min + '" max="' + it.max + '" step="' + (it.step || 1) + '" value="' + esc(it.value) + '" data-num="' + k + '">';
+  if (it.type === "window") {
+    const opt = v => HALF.concat(HALF.includes(v) ? [] : [v]).sort().map(t => '<option value="' + t + '"' + (t === v ? " selected" : "") + '>' + clock(t) + '</option>').join("");
+    return '<span class="win"><select class="sel" aria-label="From" data-win="' + k + '">' + opt(it.value[0]) + '</select><span>to</span><select class="sel" aria-label="To" data-win="' + k + '">' + opt(it.value[1]) + '</select></span>';
+  }
+  return "";
+}
+function rowsOf(g) {
+  const words = it => '<b>' + esc(it.label) + '</b>' + (it.help ? '<span class="d">' + esc(it.help) + '</span>' : '');
+  return '<div class="srows">' + g.items.filter(shown).map(it => it.type === "text"
+    ? '<div class="srow stack"><div>' + words(it) + '<textarea class="inp ta" rows="2" maxlength="' + (it.max || 400) + '" aria-label="' + esc(it.label) + '" data-txt="' + esc(it.key) + '">' + esc(it.value) + '</textarea></div></div>'
+    : '<div class="srow' + (it.show_if || it.show_unless ? " sub" : "") + '"><div>' + words(it) + '</div>' + control(it) + '</div>').join("") + '</div>';
+}
+function tree() {
+  const us = ST.people.users, kids = k => us.filter(u => u.reports_to === k);
+  const node = u => '<li><span class="pn"><span class="av">' + esc(u.name.charAt(0).toUpperCase()) + '</span><span><b>' + esc(u.name) + '</b><span class="d">' +
+    esc([cap(u.role), u.title, u.email].filter(Boolean).join(" · ")) + '</span></span><button class="link" data-edit="' + esc(u.key) + '">Edit</button></span>' +
+    (kids(u.key).length ? '<ul>' + kids(u.key).map(node).join("") + '</ul>' : '') + '</li>';
+  return '<ul class="tree">' + us.filter(u => !u.reports_to || !us.some(x => x.key === u.reports_to)).map(node).join("") + '</ul>';
+}
+function personForm(p) {
+  const P = ST.people;
+  return '<div class="card form" id="pform"><h3>' + (p.key ? "Edit " + esc(p.was || p.name) : "Add a person") + '</h3><div class="grid2">' +
+    '<div class="field"><label for="pn">Name</label><input class="inp" id="pn" maxlength="60" autocomplete="off" value="' + esc(p.name) + '"' + (p.key ? "" : " autofocus") + '></div>' +
+    '<div class="field"><label for="pe">Email</label><input class="inp" id="pe" maxlength="120" autocomplete="off" inputmode="email" placeholder="name@example.com" value="' + esc(p.email) + '"></div>' +
+    '<div class="field"><label for="pr">Role</label><select class="sel wide" id="pr">' + P.roles.map(r => '<option value="' + esc(r.name) + '"' + (r.name === p.role ? " selected" : "") + '>' + esc(cap(r.name)) + '</option>').join("") + '</select></div>' +
+    '<div class="field"><label for="pb">Reports to</label><select class="sel wide" id="pb"><option value="">Nobody</option>' + P.users.filter(u => u.key !== p.key).map(u => '<option value="' + esc(u.key) + '"' + (u.key === p.reports_to ? " selected" : "") + '>' + esc(u.name) + '</option>').join("") + '</select></div></div>' +
+    '<div class="field"><label for="pt">What they handle</label><input class="inp" id="pt" maxlength="120" autocomplete="off" placeholder="Scheduling and client calls" value="' + esc(p.title) + '"></div>' +
+    '<p class="fine" style="margin-top:14px">' + esc(ST.agent || "The agent") + ' knows people by the address they sign in to Google Chat with. Anyone not on this list is never answered.</p>' +
+    '<div class="row"><button class="btn primary small" id="psave">Save</button><button class="btn ghost small" id="pcancel">Cancel</button>' +
+    (p.key ? '<span style="flex:1"></span><button class="link danger" id="pdel">Remove ' + esc((p.was || p.name).split(" ")[0]) + '</button>' : '') + '</div></div>';
+}
+function roleCard(r) {
+  const P = ST.people, plus = (known, own) => known.concat(own.filter(x => !known.includes(x)));
+  const chip = (kind, v, on) => '<button class="chip pick' + (on ? " ok" : "") + '" data-pick="' + kind + '" data-v="' + esc(v) + '">' + esc(kind === "paths" ? v.replace(/^Wiki\//, "").replace(/\/$/, "") : cap(v)) + '</button>';
+  let h = '<div class="card role" data-role="' + esc(r.name) + '"><div class="rhead"><h3>' + esc(cap(r.name)) + '</h3><span class="fine">' + r.members + (r.members === 1 ? " person" : " people") + '</span>' +
+    (!r.builtin && !r.members ? '<button class="link danger" data-rdel="' + esc(r.name) + '">Remove</button>' : '') + '</div>';
+  if (r.locked) return h + '<p class="d">' + esc(r.about) + '</p></div>';
+  h += '<div class="checks">' + P.can_words.map(c => '<label class="ck"><input type="checkbox" data-can="' + c.key + '"' + (r.can.includes(c.key) ? " checked" : "") + '><span>' + esc(c.label) + '</span></label>').join("") + '</div>';
+  const lanes = plus(P.lanes, r.lanes), folders = plus(P.folders, r.paths);
+  if (lanes.length) h += '<p class="lab">Areas of work it can see</p><div class="chips">' + lanes.map(l => chip("lanes", l, r.lanes.includes(l))).join("") + '</div>' +
+    (r.lanes.length ? "" : '<p class="fine">None picked: only the main business area' + (r.name === "staff" ? "" : ", or what Staff can see") + '.</p>');
+  if (folders.length) h += '<p class="lab">Notes it can search</p><div class="chips">' + folders.map(f => chip("paths", f, r.paths.includes(f))).join("") + '</div>' +
+    (r.paths.length ? "" : '<p class="fine">None picked: it cannot search the notes.</p>');
+  return h + '</div>';
+}
+function setBody() {
+  if (SG === "changes") return '<h2>Recent changes</h2><p class="blurb">What was changed from this window, newest first. One click puts it back.</p><div class="card pad">' +
+    (ST.changes.length ? '<ul class="clist">' + ST.changes.map(c => '<li><div><b>' + esc(cap(c.summary)) + '</b><span class="d">' + esc(c.when) + '</span></div>' +
+      (c.undone ? '<span class="fine">Undone</span>' : '<button class="link" data-undo="' + esc(c.id) + '">Undo</button>') + '</li>').join("") + '</ul>' : '<p class="empty">Nothing has been changed here yet.</p>') + '</div>';
+  const g = ST.groups.find(x => x.id === SG) || ST.groups[0];
+  let h = '<h2>' + esc(g.title) + '</h2><p class="blurb">' + esc(g.blurb) + '</p>';
+  if (g.id === "org") return h + '<div class="card pad"><p class="who2"><b>' + esc(ST.agent) + '</b> works for <b>' + esc(ST.org) + '</b>.</p>' + rowsOf(g) + '</div>';
+  if (g.id === "people") return h + '<div class="card pad"><div class="rhead"><h3>Who is who</h3><button class="btn primary small" id="padd">Add a person</button></div>' + tree() + '</div>' +
+    (SE ? personForm(SE) : "") + '<h3 class="sech">Roles</h3><p class="blurb">What each role may do. Owners are the only ones who approve.</p>' + ST.people.roles.map(roleCard).join("") +
+    '<div class="addrole"><input class="inp" id="rname" maxlength="30" autocomplete="off" placeholder="A role of your own, like Contractor"><button class="btn ghost small" id="radd">Add role</button></div>';
+  if (g.id === "handles") return h + '<div class="card pad"><div class="srows">' + ST.features.map(f => '<div class="srow"><div><b>' + esc(f.label) + '</b></div><button class="sw' + (f.on ? " on" : "") +
+    '" role="switch" aria-checked="' + (f.on ? "true" : "false") + '" aria-label="' + esc(f.label) + '" data-feat="' + esc(f.key) + '"><i></i></button></div>').join("") + '</div></div>';
+  if (g.id === "guard") return h + '<div class="card pad"><ul class="locks">' + ST.locked.map(l => '<li><span class="lock">' + LOCK + '</span><div><b>' + esc(l.title) + '</b><span class="d">' + esc(l.detail) + '</span></div></li>').join("") + '</ul></div>' +
+    '<h3 class="sech">Standing yeses</h3><p class="blurb">Things you told ' + esc(ST.agent || "the agent") + ' it may do without asking each time. A message going out can never be one of them.</p><div class="card pad">' +
+    (ST.grants.length ? '<ul class="clist">' + ST.grants.map(x => '<li><div><b>' + esc(x.what) + '</b><span class="d">' + esc(["Answer: " + x.answer, x.until ? "until " + x.until : "", "since " + x.since].filter(Boolean).join(" · ")) +
+      '</span></div><button class="link" data-grant="' + esc(x.id) + '">Take back</button></li>').join("") + '</ul>' : '<p class="empty">None. Every card waits for your tap.</p>') + '</div>';
+  return h + '<div class="card pad">' + rowsOf(g) + '</div>';
+}
+function drawSet() {
+  const nav = $("#snav"), body = $("#sbody");
+  if (!nav || !body || !ST) return;
+  const y = $(".stage").scrollTop;
+  nav.innerHTML = '<h2>Settings</h2>' + ST.groups.map(g => '<button class="g' + (g.id === SG ? " on" : "") + '" data-g="' + g.id + '">' + esc(g.title) + '</button>').join("") +
+    '<button class="g' + (SG === "changes" ? " on" : "") + '" data-g="changes">Recent changes</button>';
+  body.innerHTML = setBody();
+  $(".stage").scrollTop = y;
+  nav.querySelectorAll("[data-g]").forEach(b => b.onclick = () => { SG = b.dataset.g; SE = null; drawSet(); $(".stage").scrollTop = 0; });
+  const q = (sel, fn) => body.querySelectorAll(sel).forEach(fn);
+  q("[data-sw]", b => b.onclick = () => setDo({op: "set", key: b.dataset.sw, value: !b.classList.contains("on")}));
+  q("[data-ch]", s => s.onchange = () => setDo({op: "set", key: s.dataset.ch, value: allItems().find(x => x.key === s.dataset.ch).choices[+s.value].value}));
+  q("[data-num]", i => i.onchange = () => setDo({op: "set", key: i.dataset.num, value: Number(i.value)}));
+  q("[data-txt]", t => t.onchange = () => setDo({op: "set", key: t.dataset.txt, value: t.value}));
+  q("[data-win]", s => s.onchange = () => { const two = body.querySelectorAll('[data-win="' + s.dataset.win + '"]'); setDo({op: "set", key: s.dataset.win, value: [two[0].value, two[1].value]}); });
+  q("[data-feat]", b => b.onclick = () => setDo({op: "feature_set", key: b.dataset.feat, on: !b.classList.contains("on")}));
+  q("[data-grant]", b => b.onclick = () => setDo({op: "grant_revoke", id: b.dataset.grant}));
+  q("[data-undo]", b => b.onclick = () => setDo({op: "undo", id: b.dataset.undo}));
+  q("[data-rdel]", b => b.onclick = () => setDo({op: "role_remove", name: b.dataset.rdel}));
+  q("[data-edit]", b => b.onclick = () => { const u = ST.people.users.find(x => x.key === b.dataset.edit); SE = Object.assign({was: u.name}, u); drawSet(); $("#pform").scrollIntoView({block: "center", behavior: "smooth"}); });
+  q(".role[data-role]", card => {
+    const picked = kind => [...card.querySelectorAll('[data-pick="' + kind + '"].ok')].map(x => x.dataset.v);
+    const send = () => setDo({op: "role_save", name: card.dataset.role, can: [...card.querySelectorAll("[data-can]:checked")].map(x => x.dataset.can), lanes: picked("lanes"), paths: picked("paths")});
+    card.querySelectorAll("[data-can]").forEach(c => c.onchange = send);
+    card.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { b.classList.toggle("ok"); send(); });
+  });
+  const add = $("#padd", body), radd = $("#radd", body);
+  if (add) add.onclick = () => { SE = {key: "", name: "", email: "", title: "", reports_to: "", role: ST.people.roles.some(r => r.name === "staff") ? "staff" : ST.people.roles[0].name}; drawSet(); $("#pform").scrollIntoView({block: "center", behavior: "smooth"}); $("#pn").focus(); };
+  if (radd) radd.onclick = () => { const n = $("#rname", body).value.trim(); if (n) setDo({op: "role_save", name: n, can: ["ask"]}); };
+  if (SE && $("#pform")) {
+    const read = () => Object.assign(SE, {name: $("#pn").value.trim(), email: $("#pe").value.trim(), role: $("#pr").value, reports_to: $("#pb").value, title: $("#pt").value.trim()});
+    $("#psave").onclick = async () => { read(); const r = await setDo({op: "person_save", key: SE.key, name: SE.name, email: SE.email, role: SE.role, title: SE.title, reports_to: SE.reports_to}); if (r.ok) { SE = null; drawSet(); } };
+    $("#pcancel").onclick = () => { SE = null; drawSet(); };
+    $("#pform").onkeydown = e => { if (e.key === "Enter" && e.target.tagName === "INPUT") $("#psave").click(); };
+    const del = $("#pdel");
+    if (del) del.onclick = async () => { if (!del.dataset.sure) { del.dataset.sure = "1"; del.textContent = "Click again to remove"; return; } const k = SE.key; SE = null; await setDo({op: "person_remove", key: k}); };
+  }
+}
+SCREENS.settings = () => '<div class="set"><div class="set-nav" id="snav"><h2>Settings</h2></div><div class="set-body" id="sbody"><div class="wait"><span class="spin"></span>One moment</div></div></div>';
+AFTER.settings = async () => {
+  const r = await api("settings", {op: "get"});
+  if (cur !== "settings") return;
+  if (!r.ok) { $("#sbody").innerHTML = '<div class="card"><h2>Settings</h2><p class="lede">' + esc(r.message || "The settings could not be read.") + '</p></div>'; return; }
+  ST = r; drawSet();
+};
+
 async function wake() {
   if (started || S.serve_running || !S.pack) return;
   started = true; wokeOnce = true; wakeErr = ""; drawStatus();
@@ -622,6 +830,7 @@ setInterval(() => { if (!timer) load(); }, 9000);          // keeps the window's
   if (!S.app) { $("#screen").innerHTML = '<div class="screen"><div class="solo"><h1>Sage could not start.</h1><p class="lede">Close this window and open Sage again from the Start menu.</p></div></div>'; return; }
   if (!S.pack) return show(D.org.trim() ? "org" : "intro");
   const want = location.hash.slice(1);
+  if (want === "settings") { wokeOnce = true; return show("settings"); }
   if (["computer", "claude", "google", "home"].includes(want)) { wokeOnce = want !== "home"; return show(want); }
   if (!S.auth_ok) return show("claude");
   show("home");
