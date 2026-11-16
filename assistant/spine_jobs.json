@@ -441,7 +441,7 @@
     23
    ],
    "timeout_s": 60,
-   "_what": "Sage's builder (the owner 2026-10-07: 'full hands off'): when a wiki build note or a 'needs a code change' dream-ask is open, starts ONE detached builder run (git worktree, headless opus with edit tools + tests only; verify protected paths, tests vs baseline, gate check; commit; fast-forward master; Chat note with git revert ids). kick returns at once; max 4 runs a day, 60 min apart"
+   "_what": "Sage's builder (the owner 2026-10-07: 'full hands off'): when a wiki build note or a 'needs a code change' dream-ask is open, starts ONE detached builder run (git worktree, headless opus with edit tools + tests only; verify protected paths, tests vs baseline, gate check; commit; fast-forward master; Chat note with git revert ids). kick returns at once; max 8 runs a day, 60 min apart"
   },
   {
    "name": "agent-pending",

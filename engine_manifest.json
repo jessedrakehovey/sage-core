@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+1b459f4",
+  "version": "2026.11.15+fb67a31",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T17:53:03"
+  "synced": "2026-11-15T18:00:22"
  },
  "modules": {
   "money": {
@@ -106,7 +106,7 @@
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/brain.py": "9a71ade0d8506ae6c0a52873aa24270350d4dfc02c4e25d5c439b156d368f530",
   "assistant/agent/bridge.py": "1e28102e7802c2708d40ffd8e5fec215501dfbba15b76cf8f8f98f5c342c3615",
-  "assistant/agent/builder.py": "ae946ec2c9e33c4637ae57ba5b6c2bbf08d6d6a16024f45bd80f5548403d8eea",
+  "assistant/agent/builder.py": "e6e7e33112231dcfa79d6e8aa400ae8ca5517c1854761c439e3f5f8df3c4bf37",
   "assistant/agent/capability.py": "44e61c0d0422d4a937e77d8a8f1f5928de216cbd0a4b1cb5c00d9390b01ede1b",
   "assistant/agent/capacity.py": "f3d24223c86cec23685e711bb07e670cea525f071d34897d917aef58d04169c9",
   "assistant/agent/cause_vocab.json": "454859d9ce48028b869fd80ffc26c2be80e865e8550c564a79186189040c397e",
@@ -376,7 +376,7 @@
   "assistant/setup_skill/sage-setup/SKILL.md": "5eb2620adb1586899d87c6a1082e4e29cf4f021416d03f9cdb1c1cff77788c41",
   "assistant/setup_skill/sage-setup/bootstrap.ps1": "6e4d5720972d2286030c7d533667788992a1c4508966602d6cf4a18c8729836d",
   "assistant/setup_skill/sage-setup/bootstrap.sh": "6b0d3a6842386ba2e040ffb486a846b075bb41c64c1061f59afdee7bc432cfea",
-  "assistant/spine_jobs.json": "33b91aca0f6616b8c7a40e14e09f9c0d60e29272c4f9ce33853701b93d02533f",
+  "assistant/spine_jobs.json": "f29408f57f1d8b2ea05902fe17f980b7087d322c7680532f06b2d962de0aa3f6",
   "assistant/tasks/AssistantMorning.xml": "5266f9df8b7449e5039e9765f63918459a59d51d42ef66ba0f9d3cde3cb6cadd",
   "assistant/tasks/AssistantTick.xml": "c6ee06fb72ce9fdaeb3b04eefbef2530c194e0d59a68cdf0451f86f3348811cc",
   "assistant/tasks/CommsProbe.xml": "ea7794d2e7adb2192d269678c2da2e681575a677d119ad7ed8df4dfc0ac103f7",
