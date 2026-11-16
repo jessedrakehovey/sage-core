@@ -28,11 +28,17 @@ tree, so the snapshot never shows it, and it lives in a closed shadow root, so a
 from __future__ import annotations
 
 import argparse
+import base64
 import json
+import os
 import re
+import socket
 import sys
+import threading
 import time
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 NAME, VERSION = "sage-browser", "1"
 PROTOCOL = "2025-06-18"
@@ -41,6 +47,17 @@ NAV_MS = 60000
 SNAP_MAX = 60000            # characters of snapshot returned inline; the rest is cut with a note
 REF = re.compile(r"^(?:f\d+)?e\d+$")
 GLIDE_MIN_MS, GLIDE_MAX_MS = 220, 650   # one glide of the cursor, by how far it goes
+# A call that does not come back (stress run, 2026-11-14: `() => { while (true) {} }` hung the server for good, and a
+# page frozen by its own script does the same to a snapshot or a title read). Nothing in Playwright's sync calls can be
+# interrupted from inside, so a watchdog thread does it from outside, over a connection of its own: after the tool's
+# deadline it stops the script that is running in the page (Runtime.terminateExecution); if the call is still not back
+# a few seconds later it closes that tab, which ends every call waiting on it. The agent gets an error it can read and
+# the server goes on.
+DEADLINE_S = {"browser_evaluate": 20, "browser_navigate": 80, "browser_navigate_back": 80, "browser_wait_for": 45,
+              "browser_type": 180, "browser_fill_form": 120}
+DEADLINE_DEFAULT_S = 60
+SECOND_STAGE_S = 8
+EVAL_ASYNC_MS = 15000                   # a script that returns a promise which never settles
 COLOR = re.compile(r"^#[0-9a-fA-F]{3,8}$")
 
 # The cursor, as one function the page runs: build it once per document (DOM calls and style properties only: no
@@ -173,6 +190,46 @@ def log(msg: str) -> None:
     print(f"[browser_mcp] {msg}", file=sys.stderr, flush=True)
 
 
+def cdp_once(ws_url: str, method: str, params: dict | None = None, timeout: float = 6.0) -> bool:
+    """One CDP command on a websocket of its own, standard library only, answer not awaited. For the watchdog: it
+    must work while the Playwright connection of this very process is stuck inside a call."""
+    u = urlparse(ws_url)
+    try:
+        sock = socket.create_connection((u.hostname, u.port or 80), timeout=timeout)
+    except OSError:
+        return False
+    try:
+        key = base64.b64encode(os.urandom(16)).decode()
+        crlf = chr(13) + chr(10)
+        sock.sendall(crlf.join([f"GET {u.path} HTTP/1.1", f"Host: {u.hostname}:{u.port}", "Upgrade: websocket", "Connection: Upgrade",
+                                f"Sec-WebSocket-Key: {key}", "Sec-WebSocket-Version: 13", "", ""]).encode())
+        head = b""
+        while (crlf + crlf).encode() not in head:
+            chunk = sock.recv(4096)
+            if not chunk:
+                return False
+            head += chunk
+        if b" 101 " not in head.split(crlf.encode(), 1)[0]:
+            return False
+        payload = json.dumps({"id": 1, "method": method, "params": params or {}}).encode()
+        mask, n = os.urandom(4), len(payload)
+        frame = bytes([0x81]) + (bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + n.to_bytes(2, "big"))
+        sock.sendall(frame + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+        sock.settimeout(1.5)
+        try:
+            sock.recv(2048)
+        except OSError:
+            pass
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
 class ToolError(Exception):
     """A failure the model should read as the tool's result (never a protocol error)."""
 
@@ -219,6 +276,8 @@ class Browser:
         self.cursor, self.label = bool(cursor), str(label or "")[:24]
         self.color = color if COLOR.match(color or "") else ""
         self.at: dict = {}                               # where the cursor was last, per page: id(page) -> (x, y)
+        self.tids: dict = {}                             # id(page) -> the browser's own id of that tab (the watchdog's handle)
+        self.stopped = ""                                # what the watchdog did to the call in flight ('' = nothing)
         self.pw = self.browser = self.ctx = self.page = None
         self.dialog = None
         self.console: list[tuple[int, str, str]] = []     # (navigation count, level, text)
@@ -267,6 +326,15 @@ class Browser:
         page.on("framenavigated", lambda f, p=page: self._on_nav(f, p))
 
     def _on_dialog(self, d) -> None:
+        # only a dialog on THIS agent's page is this agent's to answer. Every server attached to the browser hears
+        # every page's dialogs; one that kept another agent's dialog refused all its own work until someone answered
+        # it (stress run, 2026-11-14: 4 and 8 agents at once stopped each other this way). The listener itself stays
+        # on every page: a page with no listener has its dialogs dismissed for it, under the agent that owns it.
+        try:
+            if d.page is not None and d.page is not self.page:
+                return
+        except Exception:  # noqa: BLE001
+            pass
         self.dialog = d
 
     def _on_console(self, m) -> None:
@@ -281,6 +349,45 @@ class Browser:
         try:
             if frame == page.main_frame and page is self.page:
                 self.navs += 1
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ---- the watchdog ------------------------------------------------------------------------------------------
+    def _tid(self) -> str:
+        """The browser's id of the current tab, read before the work starts (it cannot be asked of a frozen page)."""
+        key = id(self.page)
+        if key not in self.tids:
+            try:
+                cs = self.ctx.new_cdp_session(self.page)
+                try:
+                    self.tids[key] = str(cs.send("Target.getTargetInfo")["targetInfo"]["targetId"])
+                finally:
+                    cs.detach()
+            except Exception:  # noqa: BLE001
+                self.tids[key] = ""
+        return self.tids[key]
+
+    def _guard(self, done: threading.Event, name: str, tid: str) -> None:
+        limit = DEADLINE_S.get(name, DEADLINE_DEFAULT_S)
+        if done.wait(limit) or not tid:
+            return
+        ws = ""
+        try:
+            with urllib.request.urlopen(self.cdp + "/json/list", timeout=5) as r:
+                ws = next((str(x.get("webSocketDebuggerUrl") or "") for x in json.loads(r.read().decode("utf-8", "replace"))
+                           if str(x.get("id")) == tid), "")
+        except Exception:  # noqa: BLE001
+            pass
+        self.stopped = f"the page did not answer within {limit} s, so the script running in it was stopped"
+        log(f"{name}: no answer in {limit} s; stopping the page's running script")
+        if ws:
+            cdp_once(ws, "Runtime.terminateExecution")
+        if done.wait(SECOND_STAGE_S):
+            return
+        self.stopped = f"the page did not answer within {limit + SECOND_STAGE_S} s even with its script stopped, so its tab was closed"
+        log(f"{name}: still no answer; closing the tab")
+        try:
+            urllib.request.urlopen(self.cdp + "/json/close/" + tid, timeout=5).read()
         except Exception:  # noqa: BLE001
             pass
 
@@ -426,19 +533,32 @@ class Browser:
         fn = getattr(self, "t_" + name[len("browser_"):], None) if name.startswith("browser_") else None
         if fn is None:
             raise ToolError(f"no such tool: {name}")
+        if not isinstance(a, dict):
+            raise ToolError("the arguments must be an object")
+        self.stopped = ""
+        done = threading.Event()
+        threading.Thread(target=self._guard, args=(done, name, self._tid()), daemon=True).start()
         try:
             return fn(a)
         except ToolError:
             raise
         except Exception as e:  # noqa: BLE001
+            if self.stopped:
+                raise ToolError(self.stopped + ". Take a snapshot to see where things stand before going on.") from None
             if self.dialog is not None:            # the action opened a dialog and stalled behind it
                 return _text(self._dialog_note())
             raise ToolError(_err(e)) from None
+        finally:
+            done.set()
 
     def t_navigate(self, a):
         url = str(a.get("url") or "").strip()
         if not url:
             raise ToolError("url is required")
+        if re.match(r"^\s*(javascript|vbscript):", url, re.I):
+            # not a place to go: it runs a script in the page that is open (and one that opens a dialog never came
+            # back: stress run, 2026-11-14). browser_evaluate is the tool for a script.
+            raise ToolError("that is a script, not an address; use browser_evaluate to run a script in the page")
         if not re.match(r"^[a-z][a-z0-9+.-]*:", url, re.I):
             url = "https://" + url
         self.page.goto(url, wait_until="domcontentloaded", timeout=NAV_MS)
@@ -637,7 +757,13 @@ class Browser:
         fn = str(a.get("function") or "").strip()
         if not fn:
             raise ToolError("function is required")
-        res = self.loc(a).evaluate(fn, timeout=ACTION_MS) if (a.get("target") or a.get("ref")) else self.page.evaluate(fn)
+        # the agent's script, raced against a timer in the page: one that returns a promise which never settles would
+        # otherwise never come back (one that never yields at all is the watchdog's to stop)
+        guarded = ("(el) => { const __f = (\n" + fn + "\n); const __r = typeof __f === 'function' ? __f(el) : __f;"
+                   " if (!__r || typeof __r.then !== 'function') return __r;"
+                   " return Promise.race([__r, new Promise((_, no) => setTimeout(() => no(new Error('the script did not finish in "
+                   + str(EVAL_ASYNC_MS // 1000) + " s')), " + str(EVAL_ASYNC_MS) + "))]); }")
+        res = self.loc(a).evaluate(guarded, timeout=ACTION_MS) if (a.get("target") or a.get("ref")) else self.page.evaluate(guarded)
         try:
             body = json.dumps(res, indent=1, ensure_ascii=False, default=str)
         except Exception:  # noqa: BLE001
@@ -730,17 +856,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cdp-endpoint", default="")
     ap.add_argument("--output-dir", default=".")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--engine", choices=["playwright", "native"], default="playwright",
+                    help="what drives the browser: the Playwright package, or the engine's own driver (browser_native.py)")
     ap.add_argument("--cursor", choices=["on", "off"], default="on", help="draw the agent's own cursor in the page")
     ap.add_argument("--cursor-label", default="", help="a name on the cursor (none by default)")
     ap.add_argument("--cursor-color", default="", help="#rrggbb")
     ns = ap.parse_args(argv)
     if ns.check:
-        ok, why = check()
+        ok, why = (True, "ok") if ns.engine == "native" else check()      # the engine's own driver needs nothing installed
         print(why)
         return 0 if ok else 1
     if not ns.cdp_endpoint:
         ap.error("--cdp-endpoint is required")
-    br = Browser(ns.cdp_endpoint, Path(ns.output_dir), cursor=ns.cursor == "on", label=ns.cursor_label, color=ns.cursor_color)
+    if ns.engine == "native":
+        import browser_native
+        br = browser_native.Native(ns.cdp_endpoint, Path(ns.output_dir), cursor=ns.cursor == "on", label=ns.cursor_label, color=ns.cursor_color)
+    else:
+        br = Browser(ns.cdp_endpoint, Path(ns.output_dir), cursor=ns.cursor == "on", label=ns.cursor_label, color=ns.cursor_color)
     try:
         serve(br)
     finally:
@@ -749,4 +881,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # run as ONE module object: browser_native.py imports ToolError and the tool list from `browser_mcp`, and a script
+    # run as __main__ would otherwise be a second copy with a second ToolError
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import browser_mcp
+    sys.exit(browser_mcp.main())

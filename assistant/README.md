@@ -2036,3 +2036,10 @@ attaches to the one that is running. `doer.mode` = auto | background | foregroun
 never by a restart; in the background it is off the screen with no taskbar button and takes no keyboard focus.
 `doer/browser_mcp.py` draws the agent's own cursor in the page (a second cursor: the PC's own mouse is never moved).
 Detail, what was measured, and what is not changed: `doer/README.md`, the section of the same name.
+
+## The engine's own browser driver (2026-11-16)
+
+`doer/cdp.py` + `doer/browser_native.py`: the browser tools with no Playwright underneath, standard library only,
+chosen with `doer.browser_server: "native"`. Faster, lighter and unable to hang in the stress run
+(`tests/stress_browser.py`); the default stays `"python"` until the owner switches. Numbers, what is different on
+purpose and what is not ported yet: `doer/README.md`, the section of the same name.

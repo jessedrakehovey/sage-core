@@ -167,8 +167,12 @@ def cdp_url() -> str:
 
 
 def chrome_exe() -> Path | None:
-    if CFG.get("chrome"):
-        p = Path(os.path.expandvars(CFG["chrome"]))
+    """The browser to start: doer.chrome (or DOER_CHROME) when set, else Playwright's Chromium when it is installed,
+    else the Chrome or the Edge this PC already has. With the engine's own driver (browser_native.py) nothing has to
+    be downloaded: every Windows PC ships a Chromium browser (Edge), and any of them speaks the same protocol."""
+    named = os.environ.get("DOER_CHROME") or CFG.get("chrome")
+    if named:
+        p = Path(os.path.expandvars(named))
         if p.exists():
             return p
     for root in CHROME_CANDIDATES:
@@ -178,7 +182,9 @@ def chrome_exe() -> Path | None:
         if hits:
             return hits[0]
     for p in (Path(os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe")),
-              Path(os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"))):
+              Path(os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe")),
+              Path(os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe")),
+              Path(os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"))):
         if p.exists():
             return p
     return None

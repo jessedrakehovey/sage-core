@@ -547,3 +547,58 @@ drives the browser; what was replaced is the Node tool server in front of it.
 Tests: `test_browser_stay_up.py` (a throwaway browser: parks, re-attaches to the same process, works in the
 background, quits only when told; the foreground round trip with `SAGE_TEST_FRONT=1`), `test_browser_mcp.py` (the
 cursor's glide sampled mid-way from a second connection), `test_left_open.py`.
+
+## The engine's own browser driver, without Playwright (`browser_native.py` + `cdp.py`, 2026-11-16)
+
+The owner: "can we replace playwright officially in sage and sage core?", then "I want ours undoubtably better for
+our uses". `cdp.py` is the engine's own line to the browser (the DevTools protocol over one websocket, standard
+library only); `browser_native.py` is the same eighteen tools as `browser_mcp.py` on top of it. Chosen with
+`config.json -> doer.browser_server: "native"` (`browser_mcp.py --engine native`). The default is still `"python"`
+(the Playwright package underneath) until the owner switches; tool names, the allow / deny lists and the hooks are
+the same either way.
+
+What it does on purpose, for an agent that shares one browser with other agents and with a person:
+
+- **Nothing can hang.** Every word to the browser has a time limit; a script that overruns is stopped in the page. The
+  Playwright-backed server needs a watchdog thread for this and still hung for good in the stress run (a script that
+  never ends, then the next call).
+- **Agents do not hear each other.** A process listens only to the tabs it works in.
+- **The page is read from the browser's own accessibility tree** (frames and shadow roots included). A reference is
+  the browser's own id of the element: stable from snapshot to snapshot, and a reference to an element that is gone
+  fails at once instead of after five seconds.
+- **A click is checked before it is sent** (`READY_JS`, one call to the page): on the page, shown, enabled, stopped
+  moving, and really what is under the pointer; when something covers it the error names it. "Stopped moving" is by
+  the clock, not by animation frames, which a tab that is not in front never gets. Press and release go out together.
+- **An action is over when what it set in motion is over** (`_settle`): a click that leads to another page reports
+  the new page, not the old one.
+- **Nothing to install:** no Playwright package (107 MB, with a Node program of its own inside), and it drives the
+  Chrome or Edge a PC already has (`browser.chrome_exe`, `DOER_CHROME`). The functional suite passes on Edge.
+
+Measured with `tests/stress_browser.py` (2026-11-16, this PC, the same random actions on both, in one throwaway
+browser in the background):
+
+| | own driver | Playwright-backed |
+|---|---|---|
+| whole stress run (load + abuse) | all passed | hung on an abuse case |
+| 1 agent, 60 calls | 22 s | 50 s |
+| 4 agents at once, 232 calls | 22 s | 67 s |
+| 8 agents at once, 464 calls | 36 s | 48 s |
+| slowest single call | 5.8 s | 6.2 s in every round |
+| tool server memory | 8 MB, flat after 400 clicks | not reached |
+
+Not done yet, said plainly: `login_fill.py`, `setup_actions.py`, `chat_console.py`, `remote_desktop.py` and
+`shots_setup.py` still use the Playwright package, so it stays in `requirements.txt` until they are ported; the
+`boxes` option of a snapshot is not offered; an element inside an out-of-process frame is not hit-tested before a
+click; `browser.py` starts Edge but does not yet track its real process (Edge's launcher hands off and exits), so on
+Edge the taskbar and focus handling are not in effect. No real Sage job has run on it yet.
+
+`tests/stress_browser.py [--engine playwright|native] [--agents 1,4,8] [--front] [--real]`: N agents at once in their
+own tabs (clicks, typing, forms, a round trip to another page, a dialog, a frame, a shadow root, a moving button, a
+stale reference), then abuse (the tab closed under the agent, the page crashed, the browser quit and restarted, a
+pop-up in the background, a 5,000-row page, garbage on the protocol, a script that never ends, 200,000 characters
+typed, thirty park / open cycles, memory). `SAGE_BROWSER_ENGINE=native python assistant/tests/test_browser_mcp.py`
+runs the functional suite on the own driver.
+
+Found by that run and fixed in the Playwright-backed server too: one agent's dialog stopped every other agent
+(`_on_dialog` now keeps only its own page's); a `javascript:` address is refused; a call that does not come back is
+stopped by a watchdog (`_guard`).

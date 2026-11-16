@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+0b2a993",
+  "version": "2026.11.16+cb9c6f8",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T13:08:04"
+  "synced": "2026-11-16T13:17:20"
  },
  "modules": {
   "money": {
@@ -97,7 +97,7 @@
   ".claude/skills/wiki-maintain/SKILL.md": "e89442d7a1ba2378c72ad14299a2ca054280114f077206d2686507afdddedd11",
   ".claude/skills/wiki-query/SKILL.md": "579eba81de86a8be503d4b58c73923fac6022c97de0e52e078e22960f88b0478",
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
-  "assistant/README.md": "efbd60c2924fe4b4168b1d51ac88191ffb309d31d1f78e8cc4bea9f2fdb8830f",
+  "assistant/README.md": "9c911bdd02f93dfa836c680553b51e1e8de7b486d035d7302565f673d456e3c9",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
   "assistant/agent/README.md": "7fb79e01608551be900deb4c18793e8ebd9a9643da1430843f55e8664c3d879b",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
@@ -218,9 +218,11 @@
   "assistant/config.json": "8078bf860ca4fe271cb846d5bdfd6df873b24c3bab27574fa3269eea73c09a95",
   "assistant/connections.json": "6caa0807606fc54b1f19e71ac7ee61eb97607c2996ad3e8c3e36e9ce89b6f302",
   "assistant/core_sync.py": "c071f35e3ccee79590c2c0777f898a02aa643e52e47b1f82aeb590468a4ecacc",
-  "assistant/doer/README.md": "4452a1b06d78389754c71c5527635d0c0de6182fa9425d1c6af32bb9203e4065",
-  "assistant/doer/browser.py": "47ca964c00eaa84c34f41e4766f06c8637f1f6779d93be9b19028f08c6b14088",
-  "assistant/doer/browser_mcp.py": "7357f636cb62a906519677da6bf2c7a8069790701d09e19e6d8b406793d38e9d",
+  "assistant/doer/README.md": "69afb53c5228bc81d902b8bbf6e0ddc038d66885c3a72156cf7ff02ff97b20af",
+  "assistant/doer/browser.py": "0f777c7f61d739f31ccc32622ce4c87da699cbc803fa65ad28a9befb60eb79dd",
+  "assistant/doer/browser_mcp.py": "edaabd5052840f1ff6b99d89e3eacf9170cb2f3b12da2ebbd0d4b06fdb0f894b",
+  "assistant/doer/browser_native.py": "7f50f59cf285dc617fae478d7c54ff6ddfd5b3190e6ad8d38ca4442916c1f009",
+  "assistant/doer/cdp.py": "3e8ff1088b20bb19cf0ceae56f6a9509ac797ab895ae5fab48d9ebea7c3a469b",
   "assistant/doer/click_guard.py": "f92f0e81a93daf0cbd1523cb6c9188e583634f2f53c46ac584ab004b65a3fedc",
   "assistant/doer/computer.py": "17416208259386f1365d052272b493719212054867e39b2d712dbdd180108acc",
   "assistant/doer/computer_policy.json": "8ce249978f51907026cb5de1c8b2d5ed518253cfe59dfa403e4177ac0599e99f",
@@ -404,7 +406,7 @@
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
   "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
   "assistant/tests/test_app.py": "4925cdf976fa3d5bd84c3afe163f1c38caa761ee6ff8f289510dee18c374c185",
-  "assistant/tests/test_browser_mcp.py": "8e3c2581b008a73690409d8d8e07b1a8dbf03da8cbdd184e19e3911d2d67077f",
+  "assistant/tests/test_browser_mcp.py": "8b9674f5cf35526048f0f6de5b2f11ae54f8d3e79d603878f81d07f3d9a7087e",
   "assistant/tests/test_browser_stay_up.py": "ed244d913588e5046a0d996e796d903d826297cdcfa3bde03465bc79329948e8",
   "assistant/tests/test_build_ack.py": "5157cc084a99371522ea4e4ad06347795f3451935f91da8cece68f32cfe88246",
   "assistant/tests/test_build_race.py": "44ff86ee9cf6fff754a228675ceae6032a2053ab45d1eb117beb10415f4125eb",

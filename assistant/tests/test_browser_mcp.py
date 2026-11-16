@@ -11,6 +11,7 @@
    snapshot, never takes a click meant for the page, shows in pictures; `--cursor off` leaves the page untouched.
 5. The small arguments the Node server had: `filename` (the result lands in the job's own folder), screenshot `scale`.
    python assistant/tests/test_browser_mcp.py
+   SAGE_BROWSER_ENGINE=native python assistant/tests/test_browser_mcp.py     # the same checks on the engine's own driver
 """
 import os as _os, tempfile as _tf
 _os.environ.setdefault("WV_LOG_DIR", _tf.mkdtemp(prefix="wv_logs_"))
@@ -34,6 +35,11 @@ FAILS = []
 sys.path.insert(0, str(ROOT / "doer"))
 sys.path.insert(0, str(ROOT / "scripts"))
 import browser_mcp as bm  # noqa: E402
+
+
+ENGINE = os.environ.get("SAGE_BROWSER_ENGINE") or "playwright"
+ENG = ["--engine", ENGINE]
+print(f"engine: {ENGINE}")
 
 
 def check(name, cond, extra=""):
@@ -96,7 +102,7 @@ check("the server's interpreter exists", Path(srv["command"]).exists(), srv["com
 # ---- 3. live ----------------------------------------------------------------------------------------------------
 import browser  # noqa: E402
 exe = browser.chrome_exe()
-ok_pw, why = bm.check()
+ok_pw, why = (True, "ok") if ENGINE == "native" else bm.check()
 if not exe or not ok_pw:
     print(f"skip the live part: {'no Chromium on this machine' if not exe else why}")
 else:
@@ -128,7 +134,7 @@ else:
 </body></html>""", encoding="utf-8")
     out = TMP / "out"
     srv = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out),
-                            "--cursor-label", "Pip", "--cursor-color", "#4A5C43"],
+                            "--cursor-label", "Pip", "--cursor-color", "#4A5C43", *ENG],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NOWIN)
     n = [0]
 
@@ -163,7 +169,7 @@ else:
         txt, err = tool("browser_click", target="#go")
         check("live: click by a plain selector", not err, txt[:200])
         txt, err = tool("browser_click", target="e9999")
-        check("live: a dead reference is an error in Playwright's own words", err and "aria-ref=e9999" in txt, txt[:200])
+        check("live: a dead reference is an error that says so", err and ("aria-ref=e9999" in txt or "no longer on the page" in txt), txt[:200])
         snap, _ = tool("browser_snapshot")
         name, agree, pick, hov, ask = (ref(snap, p) for p in ('textbox "Name"', 'checkbox "Agree"', 'combobox "Pick"', 'button "Hover me"', 'button "Ask"'))
         txt, err = tool("browser_type", target=name, text="Ada", submit=True)
@@ -285,7 +291,7 @@ else:
         check("filename: console messages are saved", not err and (out / "console.log").exists(), txt)
 
         # --cursor off: a second server on the same browser leaves the page alone
-        off = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out), "--cursor", "off"],
+        off = subprocess.Popen([sys.executable, str(ROOT / "doer" / "browser_mcp.py"), "--cdp-endpoint", cdp, "--output-dir", str(out), "--cursor", "off", *ENG],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NOWIN)
 
         def otool(name, **args):
