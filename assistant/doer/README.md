@@ -134,6 +134,8 @@ presented in chat."
   a password, a code, a captcha, a payment, identity). Not on a Stop, a refused handed-over login (the sign-in card comes
   back), the configured site's own sign-in window, or a block that is the agent's own to build (that still files its
   build quietly and closes, as before). `doer._leave_open` decides before the `finally` that used to close the browser.
+  Nor when there is nothing open to act on (the posting expired, the listing lists no openings): `doer.gone` makes that
+  block the job's answer, said in one line, the job done and its outcome verified (2026-11-16, "Apply to these ...").
 - **What.** The browser is NOT closed. The page stays where the job stopped, in front unless someone used the PC in the last
   few minutes (`browser.want_front`), and `leftopen.offer` posts ONE message in the job's own thread (the live card's
   `_space_for`: never a space with staff in it): the "One step needs you" line, that it is left open, and two buttons.

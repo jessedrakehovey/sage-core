@@ -546,6 +546,31 @@ def give_files(t: dict, r: dict, out_dir: Path, timeout: int) -> dict:
     return r
 
 
+# The thing the job was for is not there to act on: the posting expired, the listing is gone, nothing is open. That is the
+# job's answer, not a block (daily review, 2026-11-16: "Apply to these ..." came back "neither posting has an open
+# application ... DO IT YOURSELF", was held open as the owner's step with Control PC, and graded a miss).
+_GONE = re.compile(r"\bexpired\b|no longer (?:accepting|available|open|posted|listed|taking|exists?|on the site)|"
+                   r"\b(?:posting|listing|job|position|role|opening|application|vacancy|ad)s? (?:is |are |has |have |was |were )?"
+                   r"(?:been )?(?:closed|filled|removed|taken down|pulled)\b|"
+                   r"\bno (?:open(?:ings?)?|current openings|vacanc(?:y|ies)|open applications?|open positions?|jobs? (?:open|listed))\b|"
+                   r"(?:has|have|lists|shows|listed) no (?:open|current) ?(?:openings?|applications?|positions?|jobs?)?\b|"
+                   r"\blists no openings\b|not (?:accepting|taking) (?:applications|bookings|orders|new)", re.I)
+
+
+def gone(r: dict) -> dict:
+    """A DOER_BLOCKED whose reason is that the posting / listing is closed or gone becomes DOER_ANSWER with the same
+    words (the next step, if the model gave one, kept as a suggestion). A sign-in, a code or a payment in the same line
+    stays a block: then the page is the owner's step after all."""
+    if (r or {}).get("marker") != "DOER_BLOCKED":
+        return r
+    why, _, how = str(r.get("arg") or "").partition("DO IT YOURSELF:")
+    why = why.replace("||", "").strip().rstrip(".")
+    if not _GONE.search(why) or STOPPED in why.lower() or _SIGNED_OUT.search(why) or _owner_only(re.sub(r"\byour phone\b", "", why)):
+        return r
+    how = " ".join(how.split()).strip().rstrip(".")
+    return dict(r, marker="DOER_ANSWER", arg=f"{why}." + (f" If you want to follow it up: {how}." if how else ""), gone=True)
+
+
 def with_fallback(turn, prompt: str, out_dir: Path, resume: str = "", **kw) -> dict:
     """Run `turn`; on a usage limit, once more on profile.json `claude_account_fallback` (the owner 2026-10-26).
     A limited turn that already started a session is resumed there, so the browser work it did is not redone."""
@@ -1069,6 +1094,7 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | No
             r = run_turn(build_prompt(t, resume_block=follow_up), out_dir, timeout=int(CFG.get("turn_timeout_s", 900)))
         r = carry_on(t, r, out_dir, int(CFG.get("turn_timeout_s", 900)))     # a cut-off run goes on from its notes
         r = give_files(t, r, out_dir, int(CFG.get("turn_timeout_s", 900)))   # a file the ask names, given by code
+        r = gone(r)                               # nothing open to act on is the answer, never the owner's step
         keep = _leave_open(r, out_dir, login)     # a step only the owner can take: the page stays up for them
     finally:
         if not keep:
