@@ -1797,9 +1797,12 @@ fail when a sentence stops being true.
   one month on every linked account, each account's share, the month before, and each merchant that charged more.
 - Checked and already true, now with a test: a photo is looked at, names become real tags, an added event gets its
   reminder, a correction is a rule before the next reply and can be undone.
-- Still the owner's call, not built: quiet hours hold what goes out BY ITSELF; a message an owner approves at night
-  goes at the tap unless they turn on "Hold what I approve at night" in Settings (`exec.quiet_holds_approved`). And
-  naming a CRM files the connector build (`onboarding.crm_build`, `CRM_CONTRACT.md`); no connector ships ready-made.
+- Decided, not built (the owner, 2026-11-16: "keep my tap"): quiet hours hold what goes out BY ITSELF, for every
+  organization. A message an owner approves at night goes at the tap unless they turn on "Hold what I approve at night"
+  in Settings (`exec.quiet_holds_approved`, off by default; a new organization starts the same way). The page says
+  "nothing goes out by itself" in those hours.
+- Not built: naming a CRM files the connector build (`onboarding.crm_build`, `CRM_CONTRACT.md`); no connector ships
+  ready-made, and the build has only ever run for one CRM.
 
 ## The organization's own pages, and the shoot-day app in the OS (2026-11-01)
 
