@@ -101,6 +101,13 @@ def _short(s, n: int = 140) -> str:
     return s if len(s) <= n else s[: n - 1].rstrip() + "…"
 
 
+def _title(s, n: int = 60) -> str:
+    """A request's title is also its file name: plain letters, digits and spaces only, cut at a word (an ellipsis or
+    a phone's curly apostrophe in it and the wiki linter refuses the note, 2026-11-15)."""
+    s = re.sub(r"\s+", " ", re.sub(r"[^A-Za-z0-9 ]+", " ", _URL.sub(" ", _apos(s)).replace("'", ""))).strip()
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0]
+
+
 _URL = re.compile(r"https?://([^/\s\"')]+)\S*")
 _LONG_ID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f-]{12,}\b|\b[A-Za-z]{0,6}\d{6,}\b|\b[0-9a-f]{16,}\b", re.I)
 
@@ -410,7 +417,7 @@ def run(day: str | None = None, dry: bool = False, now: float | None = None) -> 
         if _recent(issue) or filed >= MAX_FILED_PER_RUN:
             continue
         why = {"repeated": "the owner had to say it again", "not done": "it did not land", "no answer": "nothing came back"}[a["grade"]]
-        title = "Review fix: " + _short(a["text"], 64)
+        title = "Review fix " + _title(a["text"])
         body = (f"On {day} an owner asked this and {why}.\n\n> " + _short(a["text"], 500)
                 + (f"\n\nWhat the record says went wrong ({a['cause']}): {a['detail']}" if a.get("detail") else "")
                 + "\n\nFind why the ask did not land the first time and change the code so the same ask lands. "
@@ -452,7 +459,7 @@ def run(day: str | None = None, dry: bool = False, now: float | None = None) -> 
         cur.update(what=v["what"], missed=0)
         if cur["seen"] < STREAK or _recent(k) or filed >= MAX_FILED_PER_RUN:
             continue
-        title = "Review fix: " + _short(v["what"], 64)
+        title = "Review fix " + _title(v["what"])
         body = (f"The daily review has seen this {cur['seen']} runs in a row (first {cur.get('first')}): {v['what']}."
                 + (f"\n\nAn example from the record:\n\n> {v['example']}" if v.get("example") else "")
                 + "\n\nFind the shared cause and fix it in code. For a loop nobody acts on: make what it posts worth acting on, "
