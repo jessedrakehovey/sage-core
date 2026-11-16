@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+bb5fc03",
+  "version": "2026.11.15+e310cb2",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T17:46:08"
+  "synced": "2026-11-15T17:47:34"
  },
  "modules": {
   "money": {
@@ -441,6 +441,7 @@
   "assistant/tests/test_escalation.py": "42734c734c6d871d62e4c983faaad1e0304997ec965e49e475eef8a9b8e406aa",
   "assistant/tests/test_followthrough.py": "495d1f8bc91f3b91a37d6d79f08074cafbac9520ac03857878e4c7c02b2a4ea7",
   "assistant/tests/test_form_ingest.py": "b02b252f0ba1582775d9a3873a16dd7dce8b6cf9dd559bad157312e262afbba5",
+  "assistant/tests/test_google_connect.py": "d6911ddd3a2962b5dba4c5bf95d2740c94b0ee644dabf37c04de932e0c2c3e3e",
   "assistant/tests/test_held.py": "828ea2a7d2da5df688e32ae1a0ce8214cab0a6cd7e7ff66e4a862515eaf0a22f",
   "assistant/tests/test_home_tab.py": "0ad95170c0c8c019bf370adb0155782dade2b4e4a5d72d9b072253e66a10dcf8",
   "assistant/tests/test_ideas_teach_egress.py": "59e30be353a98bcb3bb1333ca568374064b4568d3b9a9c745a3da3b8445258f0",
