@@ -462,6 +462,11 @@ _CARD_CLAIM = re.compile(r"\bcards?\b[^.!?\n]{0,60}\b(?:below|under this|is up|'
                          r"\b(?:posted|made|put up|put)\b[^.!?\n]{0,30}\b(?:on a |the |a )?card\b|\bon a card\b", re.I)
 
 
+# the desk's cards go up before its reply, so in the thread they sit ABOVE it (the owner, 2026-11-15: "You said the
+# text to her is below, but it was actually above")
+_CARD_BELOW = re.compile(r"(\bcards?\b[^.!?\n]{0,60}?)\b(?:below|under this(?: message| one)?|right under this)\b", re.I)
+
+
 def posted_cards(jid: str) -> list:
     """The cards this job posted through cards.py (--owner desk:<job>)."""
     out = []
@@ -501,6 +506,8 @@ def finish_text(reply: str, r: dict, posted: list, lines: list, job: dict) -> st
     out = str(reply or "").strip()
     if _CARD_CLAIM.search(out) and not posted:
         out = (out + " Correction: no card has actually gone up from this, so nothing is waiting on your tap yet.").strip()
+    elif posted:
+        out = _CARD_BELOW.sub(lambda m: m.group(1) + "above", out)
     if lines:
         out = (out + "\n\n" if out else "") + " ".join(ln.strip() for ln in lines if ln.strip())
     return out or "Done."

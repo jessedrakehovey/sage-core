@@ -69,7 +69,8 @@ content"); example had the same disease on 2026-09-08 and manager mode fixed it 
   didn't work"; `notes_cap` per job).
 - The reply is checked against the record before it posts: "the card is below / posted" with no card
   from this job (`cards.LIVE` owner `desk:<job>` or a `card` deed) gets "Correction: no card has actually
-  gone up from this" appended; `reflex.fix_reply` and `voice.polish` run as for the brain; a timed-out or
+  gone up from this" appended; with a card posted, "the card below" becomes "the card above" (the desk's
+  cards go up before its reply; 2026-11-15); `reflex.fix_reply` and `voice.polish` run as for the brain; a timed-out or
   failed turn says so once, plainly, with the last milestone. Transcript row channel `desk`, outbox row,
   Chat post in the thread (the receipt's thread when the ask was top-level).
 - `desk.block(convo)` puts the last day's desk jobs (running with their milestones / done with the reply /

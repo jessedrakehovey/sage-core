@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+aa1525f",
+  "version": "2026.11.15+1011fea",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T11:16:53"
+  "synced": "2026-11-15T17:13:58"
  },
  "modules": {
   "money": {
@@ -99,7 +99,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "052f839323eeb085d19bb9ce2094fab43ddff384d5c0ee1ac630d7d76e2e811f",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
-  "assistant/agent/README.md": "402d97aba11ca9ab84bdd9eeb9c87b8f4d548b760f6f6f7dd9c58dc42a4dd330",
+  "assistant/agent/README.md": "05ae40a9f21e28b777d40b0abab931043b1eb993f50847811cb963d199b532e0",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "501301da3c89784a9df5bf285769fd067431525725c9f90bc1995213aa7148f7",
@@ -122,10 +122,10 @@
   "assistant/agent/core.py": "4e1f8969d5fb814fb90cf5c331b85c1069d149c1c7c8089fa03c19848ff52612",
   "assistant/agent/correction.py": "3c5d1567c36b7d15e0469ee3952bb804078f5ba1a70de6f2ba60acbc44e17447",
   "assistant/agent/dayreview.py": "aba1247c990bbf91b9b163cf6cf1b2a3b6a940d335037fa79ef4a2724d830483",
-  "assistant/agent/desk.py": "2c667705189b22b6bab2ae8a7c7fc2337dd56836db7957a7be64f8b9c6590221",
+  "assistant/agent/desk.py": "502bf7a0caa0c2ec56f5f43403a88cae19c1490120ff2d0f22079e655aef4ada",
   "assistant/agent/desk_policy.json": "ffec791298c05bcdfa5b3c4613acab58425ed07803137d1c1378fb6846aa992d",
   "assistant/agent/desk_policy.py": "7338d96efe809694345f613c3d0a1b37f80d0c727295603e4d6105ec62b6fbbe",
-  "assistant/agent/desk_prompt.md": "b34568ed0094e52fe1a73d6764044dc21faa6a07aed48f501c72a900b129aee6",
+  "assistant/agent/desk_prompt.md": "2acd526ec8f0a457cc67f304b2c8dd764b8d6362c0a5c4d648e5d4d66af6bd5d",
   "assistant/agent/dream.py": "0eb9733981de4025db573c977f84b6a44ca25a6a82fd7e8deab7d1397533fc5b",
   "assistant/agent/event_reminders.py": "2488d0d48850fd5efce294f2148b3c9d28e9f396d0919316872b12ee5b7be910",
   "assistant/agent/followups.py": "f8a8fd5a89dd873756ef881eb990c9e95299cea77a9ac9bf6efd98cfa12d74e6",
