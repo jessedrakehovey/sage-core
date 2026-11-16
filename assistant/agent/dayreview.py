@@ -410,8 +410,15 @@ def run(day: str | None = None, dry: bool = False, now: float | None = None) -> 
 
     # 1. the day's worst three asks become code fixes
     rank = {"repeated": 0, "not done": 1, "no answer": 2}
-    worst = sorted([a for a in graded if a["grade"] in rank and not a.get("followup") and a.get("cause") not in OWNER_CAUSES],
-                   key=lambda a: (rank[a["grade"]], -a.get("again", 0), a["t"]))[:3]
+    worst = []
+    for a in sorted([a for a in graded if a["grade"] in rank and not a.get("followup") and a.get("cause") not in OWNER_CAUSES],
+                    key=lambda a: (rank[a["grade"]], -a.get("again", 0), a["t"])):
+        # misses in one sitting in one thread are one job (2026-11-15: one job application failed five ways in three
+        # hours and three requests were filed for it); the first of them carries the fix
+        if any(b["where"] == a["where"] and abs(b["t"] - a["t"]) <= SAME_JOB_H * 3600 for b in worst):
+            continue
+        worst.append(a)
+    worst = worst[:3]
     for a in worst:
         issue = "ask:" + _id(a["text"])
         if _recent(issue) or filed >= MAX_FILED_PER_RUN:
