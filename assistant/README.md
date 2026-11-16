@@ -1644,7 +1644,9 @@ every command below, update, modules):
   carrying this organization's literals as fallbacks: no org.json = nothing sends, nothing watched) and
   `config.json -> lanes[0]` (`alib.business_lane()`, the business lane). Niche code sits behind
   **`config.json -> plugins.modules`**: modules under `assistant/scripts` the engine asks for hooks by attribute
-  (`alib.plugin_map / plugin_set / plugin_call / plugin_each`) and runs the same without. This organization's two are
+  (`alib.plugin_map / plugin_set / plugin_call / plugin_each`) and runs the same without. `alib.plugins()` imports
+  `exec_store` before the first plugin, so the plugins' ticket kinds are in the whitelist whatever asked first (2026-11-16:
+  the `task` tool refused "Reply to Delia" in her CRM thread as `unknown kind` because `intents` asked first). This organization's two are
   niche paths (`core_sync.json -> niche_paths`, never exported): the organization's CRM connector module (ticket kinds,
   validators, executors, result lines, after-done follow-ups, stale-write reason, card button words, the agent turn's
   MCP server, sentinel findings, the doer's standing Publish & share step) and the organization's texts plugin module (who a standing text
