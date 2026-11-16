@@ -151,5 +151,22 @@ ok(gchat.thread_title(SPACE, "WO 184741-5", title="WO 184741-5 · B43 · faucet 
    and CALLS[0]["body"]["text"] == "✅ done WO 184741-5 · B43 · faucet replaced", "a retitle keeps the mark", CALLS)
 ok(not gchat.thread_title(SPACE, "unit-C05", mark="✅"), "an adopted thread has no header to edit")
 
+# thread_report: new threads per space per day, read-only
+import thread_report as trp  # noqa: E402
+reg = tk.Registry().dump()
+reg["spaces/X"] = {"stray": {"key": "k", "thread": "spaces/G/threads/T9", "opened": old, "n": 3}}
+rep = trp.report(reg, days=14, top=5)
+g = rep["spaces"].get(SPACE) or {}
+today = datetime.now().strftime("%Y-%m-%d")
+ok(g.get("opened", {}).get(today, 0) >= 3 and g.get("adopted", {}).get(today) == 1,
+   "today's opened and adopted threads are counted apart", g)
+ok(g.get("regenerated") == 1, "a 2nd-generation subject is flagged", g)
+ok("spaces/X" not in rep["spaces"] and rep["foreign"] == ["spaces/X stray"], "a test leftover in another space is left out", rep["foreign"])
+ok(rep["top"] and rep["top"][0]["posts"] >= rep["top"][-1]["posts"] and len(rep["days"]) == 14, "top subjects by posts", rep["top"])
+txt = trp.render(rep, {SPACE: "team"}, "Sage")
+ok("spaces/G (team):" in txt and "left out" in txt and "Top subjects" in txt, "the text report", txt)
+ok(trp.space_labels().get("spaces/DM") == "dm owner1", "a DM space is labelled from gchat_spaces.json", trp.space_labels())
+ok("no registry entries" in trp.render(trp.report({})), "an empty registry says so")
+
 print("\n" + ("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
 sys.exit(1 if FAILS else 0)

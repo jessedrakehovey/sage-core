@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+92429ea",
+  "version": "2026.11.16+e2505be",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T08:08:35"
+  "synced": "2026-11-16T08:10:22"
  },
  "modules": {
   "money": {
@@ -99,7 +99,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "886de25d2023794e205f38486b25d764f515070eca082c38b98a08ff1a9a13b3",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
-  "assistant/agent/README.md": "1f011058e4309365bf07b60dc2f0a307b7641b3105c537cb7eef798919adcf74",
+  "assistant/agent/README.md": "bb83ff7662abef59e87a1ff202aa9386504aa78a2b2b4265513c2c16093ade33",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "501301da3c89784a9df5bf285769fd067431525725c9f90bc1995213aa7148f7",
@@ -173,6 +173,7 @@
   "assistant/agent/templates/prompt.staff.md": "888fd437b3a82960a625a295f4a23667f67e9508b41ec053816ddf7fd8e26f31",
   "assistant/agent/templates/prompt.team.md": "99b295b4f46d273a6c3f4daac9f172f8e99d3d215824b4439d57be77fae7dcd4",
   "assistant/agent/thread_keys.py": "1939dab82189b14e4f2356e6488e1f4555df430803f58ebb5138ec7378654eae",
+  "assistant/agent/thread_report.py": "584d186923e863f3e3fe59fa3297f39118d3b4a8d5f9fbe91a0de38c8e94fc3d",
   "assistant/agent/truth.py": "565f90d33c3a3e83a0f5805d64f1763332fdacce5a3c5ed00f677878b8c269f0",
   "assistant/agent/untrusted.py": "e7d3db7fa239cf277b71226c1336c6d70b8523e3d5153873c983f729ef63f3e0",
   "assistant/agent/voice.py": "4b4da48d2c9a8a40d35065372b6eb2dcf938b8929207a3475864f3b3f55f5749",
@@ -500,7 +501,7 @@
   "assistant/tests/test_startup.py": "a58ccd17d90573a528bac3fdcf459997fa78ee4a9fd890a1e3e1f2718d0ca6ed",
   "assistant/tests/test_switches.py": "8b682cb256e5b97a83bb8f7ced03b05a0fdd910dd5044afa11d9398e7b25c87b",
   "assistant/tests/test_template.py": "bbb6ce54089f1c077e5c93864baf18a968a6950b4903a0d5edbecb7ba1c9bbde",
-  "assistant/tests/test_thread_keys.py": "a726331dbc34b45afa6bdbf8a81cee2f84fc513e2874fe93aa75717b386307ce",
+  "assistant/tests/test_thread_keys.py": "9b23c5d63859a8b476860309df97d336725d1d78d58d7dda7a91203ca1ce572a",
   "assistant/tests/test_threadfix.py": "21720972f7fd8366b3f9a8343b666e763ce375e651ceb66ab8935e2980c873a9",
   "assistant/tests/test_today_gaps.py": "314f0196ea6832e2b1c47a8f137098beb18f14115ae467d8d60562b7d66c4915",
   "assistant/tests/test_totp.py": "931d226fe94f72998671887da8b575439c66c14f35241cc3bf4593763a64cdd5",
