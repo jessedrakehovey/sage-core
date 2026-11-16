@@ -101,6 +101,15 @@ def _short(s, n: int = 140) -> str:
     return s if len(s) <= n else s[: n - 1].rstrip() + "…"
 
 
+_URL = re.compile(r"https?://([^/\s\"')]+)\S*")
+_LONG_ID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f-]{12,}\b|\b[A-Za-z]{0,6}\d{6,}\b|\b[0-9a-f]{16,}\b", re.I)
+
+
+def clean(s) -> str:
+    """Words fit to file: a link is its site's name, a long id or number is left out."""
+    return _LONG_ID.sub("(a number)", _URL.sub(r"\1", str(s or "")))
+
+
 def _id(text: str) -> str:
     return hashlib.sha1(re.sub(r"[^a-z0-9]+", " ", _apos(text).lower()).strip().encode("utf-8")).hexdigest()[:10]
 
@@ -335,13 +344,19 @@ def file_build(title: str, body: str, issue: str) -> str:
             if marker in str(r.get("text") or "") or core.similar(str(r.get("title") or ""), title):
                 return str(r.get("key") or "")
         import wiki_writer
-        text = ("## Build request\n\n**Ask (the daily review, by code, " + core.stamp() + "):** " + title + "\n\n" + body
-                + "\n\n**Acceptance:** the same ask, tried again, lands and is confirmed from the record; a test encodes the "
+        tail = ("\n\n**Acceptance:** the same ask, tried again, lands and is confirmed from the record; a test encodes the "
                 "path that failed. A rule or a reworded prompt is not a fix.\n\n<!-- " + marker + " -->\n")
-        x = wiki_writer.write({"title": title[:90], "type": "workflow", "lane": "personal", "body": text}, by="dayreview")
-        if x.get("status") not in ("applied", "appended"):
-            return ""
-        return str(x.get("path") or "")
+        head = "## Build request\n\n**Ask (the daily review, by code, " + core.stamp() + "):** " + clean(title) + "\n\n"
+        x = {}
+        # the wiki refuses a note that looks like it holds a secret, and an owner's ask often carries a pasted link or a
+        # reference number (2026-11-15: two of a day's three worst asks were refused and silently never filed). The
+        # quoted words are cleaned first; if the note is still refused it is filed without the quote.
+        for b in (clean(body), "The ask and what the record said are in the outcome ledger for that day; they could not be quoted here."):
+            x = wiki_writer.write({"title": clean(title)[:90], "type": "workflow", "lane": "personal", "body": head + b + tail}, by="dayreview")
+            if x.get("status") in ("applied", "appended"):
+                return str(x.get("path") or "")
+        print(f"dayreview: build request refused ({x.get('reason')}): {title}", file=sys.stderr)
+        return ""
     except Exception as e:  # noqa: BLE001
         print(f"dayreview: build request not filed ({type(e).__name__}: {str(e)[:120]})", file=sys.stderr)
         return ""

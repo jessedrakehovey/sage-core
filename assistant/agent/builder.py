@@ -98,6 +98,7 @@ MAX_ATTEMPTS = 2
 RUNS_PER_DAY = 4
 MIN_GAP_MIN = 60
 STALE_REQ_DAYS = 21        # an unranked request untouched this long waits behind everything fresher
+RANK_URGENT = 50           # a review score at or above this goes ahead of an owner's own queued asks
 TEST_GLOB = "assistant/tests/test_*.py"
 TURN_TIMEOUT_S = 45 * 60
 TEST_TIMEOUT_S = 300
@@ -728,16 +729,22 @@ def pick(reqs: list, max_n: int = 2, first: str = "") -> list:
     cut = time.time() - STALE_REQ_DAYS * 86400
 
     def _tier(r: dict) -> int:
+        # 0 the ask in chat; 1 ranked urgent (a fault that came back, the day's worst asks, a standing cause);
+        # 2 an owner's own fresh ask; 3 ranked low (a fix that slipped, a loop nobody acts on); 4 fresh; 5 stale.
+        # A slipped fix never goes ahead of an owner's own ask: 54 of them were ranked the first morning.
         if r["key"] == first:
             return 0
-        if rank.get(r["key"]):
+        score = rank.get(r["key"], 0)
+        if score >= RANK_URGENT:
             return 1
-        if float(r.get("ts") or 0.0) < cut:
-            return 4
-        try:
-            return 2 if owner_asked(r) else 3
-        except Exception:  # noqa: BLE001
+        if score:
             return 3
+        if float(r.get("ts") or 0.0) < cut:
+            return 5
+        try:
+            return 2 if owner_asked(r) else 4
+        except Exception:  # noqa: BLE001
+            return 4
 
     reqs = sorted(reqs, key=lambda r: (_tier(r), -rank.get(r["key"], 0), r.get("ts", 0.0), r["key"]))
     ports = [r for r in reqs if _PORT.search(r["title"]) and r["key"] != first and not rank.get(r["key"])]

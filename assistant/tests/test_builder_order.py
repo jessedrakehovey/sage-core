@@ -75,6 +75,11 @@ got = [r["key"] for r in builder.pick(ALL, 2)]
 check("a ranked port takes a real slot by its score; the extra slot stays the oldest unranked port",
       got == [NEW_OWN["key"], NEW_PORT["key"], OLD_PORT["key"]], str(got))
 core.save(dayreview.PRIORITY, {})
+dayreview.prioritize(OLD_OWN["key"], 40, "a fix that slipped")
+got = [r["key"] for r in builder.pick([OLD_OWN, MID_OWN, NEW_OWN], 3)]
+check("a low rank (a slipped fix) still goes ahead of the unranked queue", got[0] == OLD_OWN["key"], str(got))
+check("...and is not the urgent tier an owner's own ask waits behind", builder.RANK_URGENT > 40)
+core.save(dayreview.PRIORITY, {})
 fresh = req("Wiki/Personal/Build request Gamma today.md", time.time() - 3600)
 got = [r["key"] for r in builder.pick([OLD_OWN, fresh], 1)]
 check("a request untouched for weeks waits behind a fresh one", got == [fresh["key"]], str(got))
