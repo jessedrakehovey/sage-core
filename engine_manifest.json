@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+537c9ac",
+  "version": "2026.11.16+80d6bcb",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T12:45:03"
+  "synced": "2026-11-16T13:00:52"
  },
  "modules": {
   "money": {
@@ -422,6 +422,7 @@
   "assistant/tests/test_chat_push.py": "8745815e57f07f0073b24c7fd61d1eb5b9105965ecd161f401e179dbd95995ff",
   "assistant/tests/test_chat_stack.py": "3c67c3aa79f27c769f200d6a4e292081c974866812d40dae13ee13a832865ec4",
   "assistant/tests/test_chat_thread.py": "64cf94aa66f47ba58e9af212e5b2f037c68be6a5ec89fdd0a714a026cb0d5377",
+  "assistant/tests/test_claims.py": "9b407fe49c9089ef133e1b083e186a9d7aec21d255211d5e2ae2ee21b15530df",
   "assistant/tests/test_coexist.py": "5b11586f2ce48a39cca944470257ae66e675c526a08609fee20b56908327d798",
   "assistant/tests/test_commitments_chat.py": "c9015d36f4dfbcddfb1041db1616ed07a7eba2787c6f50a3627b8b359ad74ae0",
   "assistant/tests/test_comms.py": "9533bb3d094082c87cc32bebc72ad2adf1134e79d4bc1984d694d81729af0273",
