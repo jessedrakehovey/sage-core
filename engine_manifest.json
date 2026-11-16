@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+cb9c6f8",
+  "version": "2026.11.16+8aadbd1",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T13:17:20"
+  "synced": "2026-11-16T14:20:31"
  },
  "modules": {
   "money": {
@@ -403,6 +403,7 @@
   "assistant/templates/data/comms_law.json": "178f759c89f0a80b4b09d93b3f482f50d721ebc9c9fd5f1264df31abd72b6240",
   "assistant/templates/data/draft_rules.json": "2b23a34290b5612cb9e5eb55423f5058741dda7b9c9c328bba6c1304f971e2af",
   "assistant/templates/data/sop_map.json": "3e37ed67c3cc301da57cc6d833901b0d95e9fcc779ed72a8720478924bcf7e78",
+  "assistant/tests/stress_browser.py": "3ec3435a932ceb006b1d740b88b4b4f0bda77b7fbabfdb5d770eb06d5558b7f7",
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
   "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
   "assistant/tests/test_app.py": "4925cdf976fa3d5bd84c3afe163f1c38caa761ee6ff8f289510dee18c374c185",
