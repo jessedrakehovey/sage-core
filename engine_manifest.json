@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+e31ef91",
+  "version": "2026.11.16+c30f281",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T08:55:06"
+  "synced": "2026-11-16T09:32:29"
  },
  "modules": {
   "money": {
@@ -374,7 +374,7 @@
   "assistant/scripts/vault_chat.py": "9bb44c2cfa4eadafbab73d9833a1202bb5371b0c1d1d46fa4435c67764b37cba",
   "assistant/scripts/whois.py": "70555dab07b52282f0040c62ce20aed0a73ec8c57f0a9a1129177d8ea73fe16c",
   "assistant/serve.json": "81554776dedbc15975b2c2a999f3f90b0213bf45a2770de8f94c6204b716f2bc",
-  "assistant/settings.py": "46297663c13766c87a27ed0c152b6c5b5f98d6714d6f6b781cc0215cb384b473",
+  "assistant/settings.py": "9dee69d44d1e9a626052caf6ef2316a110b56df2943cf465322e7988c144ce0c",
   "assistant/setup_skill/sage-setup/SKILL.md": "5eb2620adb1586899d87c6a1082e4e29cf4f021416d03f9cdb1c1cff77788c41",
   "assistant/setup_skill/sage-setup/bootstrap.ps1": "56f1a76dc4748864aa27262630039022a8bb53e802636e2d663bbd7676c605f4",
   "assistant/setup_skill/sage-setup/bootstrap.sh": "ae824348c6b4f3a3631f31b8af229380830607f5fb5fcd6cc2a2b0edf9ce6c0d",
@@ -496,6 +496,7 @@
   "assistant/tests/test_scorecard.py": "d8eaccc148b95829397635c3a627a0a1a788bbc3fbf1841efa50c39c7c0dc5f0",
   "assistant/tests/test_seeds_wired.py": "73c510be730d214662249fc2970e23dac9e1838574919e0b2b5e75a2cf213055",
   "assistant/tests/test_send_hold.py": "bce6a6c632fa90f459b1603a622c407b34c67d055e6c1ec6596cc506097c8df3",
+  "assistant/tests/test_settings.py": "b8b7ca4366c33b02ab0e8d48324bb556a03bd598c1e61d03f0af466e3fd64b8d",
   "assistant/tests/test_setup_reliability.py": "593a979df167672e0d6cd327baf6861d1e26329c1e56d55d2d35ab0785f2f9bc",
   "assistant/tests/test_sheet_set.py": "35223f2981fe0b700e969e5a49488a6cdbeb21a2c6449e7a919f9780ed2d6ffb",
   "assistant/tests/test_staff_role.py": "b7eb1a280045f370fd5e2a4203a09746cdc88988471523d64afef7a928c92a35",

@@ -650,11 +650,28 @@ def people_view() -> dict:
 
 
 # ------------------------------------------------------------------ what it handles, standing yeses
+def _module_on(mod: str) -> bool:
+    """An optional module is on when its scheduled jobs are (a new organization's start off; `sage module on` and the
+    feature gate switch them); with no job list to read, when the organization lists it."""
+    import engine
+    names = set((engine.MODULES.get(mod) or {}).get("jobs") or [])
+    jobs = [j for j in (_read(ROOT / "spine_jobs.json").get("jobs") or []) if isinstance(j, dict) and j.get("name") in names]
+    return any(j.get("enabled", True) for j in jobs) if jobs else mod in (_read(ROOT / "org.json").get("modules") or [])
+
+
+def _features_on() -> dict:
+    """Which features are on. Once the gate is answered: what was wanted. Before that nothing is gated, but a feature that
+    is an optional module (money) is only on when that module is running."""
+    import onboarding
+    st = onboarding.features_state()
+    return {k: (k in st["wanted"]) if st is not None else (_module_on(mod) if mod else True) for k, _what, _fns, mod, _words in onboarding.FEATURES}
+
+
 def features_view() -> list:
     try:
         import onboarding
-        st = onboarding.features_state()
-        return [{"key": k, "label": what[:1].upper() + what[1:], "on": True if st is None else k in st["wanted"]} for k, what, *_ in onboarding.FEATURES]
+        on = _features_on()
+        return [{"key": k, "label": what[:1].upper() + what[1:], "on": on[k]} for k, what, *_ in onboarding.FEATURES]
     except Exception:  # noqa: BLE001
         return []
 
@@ -666,7 +683,8 @@ def feature_set(body: dict, by: str = "") -> dict:
     if key not in keys:
         return {"ok": False, "message": "There is no such feature."}
     st = onboarding.features_state()
-    wanted = list(keys if st is None else st["wanted"])
+    now = _features_on()
+    wanted = [k for k in keys if now[k]]
     if (key in wanted) == on:
         return {"ok": True, "message": "", "unchanged": True}
     new = [k for k in keys if (k in wanted and k != key) or (k == key and on)]
