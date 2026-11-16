@@ -572,10 +572,66 @@ def on_built(key: str) -> bool:
         g["status"] = "built_stale"
         _save(d)
         return False
+    landed = landed_card(g)
+    if landed:
+        # the ask itself had landed (its card went up and was tapped, or still waits for the tap): the complaint was
+        # about the words around it, and the build fixed those. Replaying it made a second text to the same person
+        # (2026-11-15 17:09, gap g-d80383: "<owner> says the first text didn't do it", which was never said).
+        g["status"], g["landed"] = "built_landed", landed
+        _save(d)
+        core.log_change("capability_built", f"gap {g['id']}: {key} landed; the ask already landed as card {landed}, not replayed",
+                        {"op": "none"}, "builder")
+        return False
     d["replays"] = [r for r in d["replays"] if r.get("gap") != g["id"]] + [{"gap": g["id"], "due": time.time() + REPLAY_AFTER_S}]
     _save(d)
     core.log_change("capability_built", f"gap {g['id']}: {key} landed; the ask is replayed in {REPLAY_AFTER_S}s", {"op": "none"}, "builder")
     return True
+
+
+_SKIPPED = re.compile(r"^(?:skip|drop|stop|close|no\b|don'?t)", re.I)
+
+
+def landed_card(g: dict, rows: list | None = None) -> str:
+    """The card the gap's ask already got in its thread, or '': posted between the ask and the owner's next line there,
+    and tapped (anything but Skip / Drop / Stop) or still open for the tap. Such an ask is done or waits on the owner."""
+    thread, name = str(g.get("thread") or ""), str((core.person_for(handle=g.get("person") or "") or {}).get("name") or "")
+    if not thread or not name or not g.get("ask"):
+        return ""
+    rows = rows if rows is not None else core.rows(core.TRANSCRIPT)
+    mine = [r for r in rows if str(r.get("thread") or "") == thread and str(r.get("who") or "") == name
+            and not r.get("click") and not str(r.get("text") or "").startswith("[")]
+    when = str(g.get("when") or "9999")
+    asked = [i for i, r in enumerate(mine) if str(r.get("ts") or "") <= when and core.similar(str(r.get("text") or ""), str(g["ask"]))]
+    if not asked:
+        return ""
+    i = asked[-1]
+    t0 = _stamp_s(mine[i].get("ts"))
+    t1 = _stamp_s(mine[i + 1].get("ts")) if i + 1 < len(mine) else time.time()
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import cards
+    except Exception:  # noqa: BLE001
+        return ""
+    for d in (cards.LIVE, cards.DONE):
+        try:
+            files = list(d.glob("q*.json"))
+        except OSError:
+            continue
+        for f in files:
+            c = cards._read(f)
+            if not isinstance(c, dict) or str(c.get("chat_thread") or "") != thread or not t0 - 60 <= float(c.get("ts") or 0) < t1:
+                continue
+            ans = cards.answer_of(c.get("id"))
+            if (ans and not _SKIPPED.match(ans)) or (not ans and d == cards.LIVE and c.get("status") == "open"):
+                return str(c.get("id") or "")
+    return ""
+
+
+def _stamp_s(ts) -> float:
+    try:
+        return time.mktime(time.strptime(str(ts or "")[:16], "%Y-%m-%d %H:%M"))
+    except ValueError:
+        return 0.0
 
 
 REPLAY_NOTE = ("[REPLAY, from code: the owner asked this earlier and you could not do it then ({quote}). The missing piece was "

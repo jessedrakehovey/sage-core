@@ -1347,8 +1347,9 @@ def handle(msg: dict, pre_ack: str = "") -> None:
     if direct:
         try:
             corr_kind = correction.kind(text)
-            if not corr_kind:
-                # the same ask again inside two hours is an ask that did not work (correction.repeat_of, 2026-11-04)
+            if not corr_kind and not msg.get("_capability_replay"):
+                # the same ask again inside two hours is an ask that did not work (correction.repeat_of, 2026-11-04);
+                # a replay is code bringing the ask back, never the owner saying it again (2026-11-15 17:09, gap g-d80383)
                 corr_ask = correction.repeat_of(convo, thread, person, text)
                 if corr_ask:
                     corr_kind = "repeat"

@@ -436,7 +436,9 @@ around the same read-only brain:
   `REPLAY_AFTER_S` (the bridge restarts on new agent code first) the bridge's tick dispatches the ORIGINAL ask
   as a turn in the place it was asked, marked `_capability_replay`, with a REPLAY note in the context ("do it
   now, nothing about the wait, never ask again what they meant"). The owner never asks twice. A replay that
-  takes a route closes the gap `done`.
+  takes a route closes the gap `done`. An ask that had already landed (its card went up in the thread and was
+  tapped, or still waits for the tap: `landed_card`) is not replayed (`built_landed`), and a replay is never
+  read as the owner repeating the ask (2026-11-15: the Adriane text went twice, "the first one didn't do it").
 - **A replay that still ends in "can't" builds again** (the second request names the first build and the new
   answer); after `MAX_ATTEMPTS` (2) the owner gets ONE urgent **"Build stuck"** card in that thread: *Try it
   another way* (a fresh build carrying everything tried and the owner's words from the thread) / *Drop it*.

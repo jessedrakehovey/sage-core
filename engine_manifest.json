@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+b2a0db1",
+  "version": "2026.11.16+92429ea",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T08:06:28"
+  "synced": "2026-11-16T08:08:35"
  },
  "modules": {
   "money": {
@@ -99,15 +99,15 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "886de25d2023794e205f38486b25d764f515070eca082c38b98a08ff1a9a13b3",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
-  "assistant/agent/README.md": "342af4bffdd2a301501fdfa795a0182a0db7c8dbf4cf9fcbb3b655059a4eaea3",
+  "assistant/agent/README.md": "1f011058e4309365bf07b60dc2f0a307b7641b3105c537cb7eef798919adcf74",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "501301da3c89784a9df5bf285769fd067431525725c9f90bc1995213aa7148f7",
   "assistant/agent/addressed.py": "61f2020ec20801a82731cfc60d60378a43ffa79dccfaec775bfc3a3972483190",
   "assistant/agent/brain.py": "9a71ade0d8506ae6c0a52873aa24270350d4dfc02c4e25d5c439b156d368f530",
-  "assistant/agent/bridge.py": "1e28102e7802c2708d40ffd8e5fec215501dfbba15b76cf8f8f98f5c342c3615",
+  "assistant/agent/bridge.py": "04d99c68693bc299676b9f90e34870f9b9a05932824916215765fd0d661f5d5f",
   "assistant/agent/builder.py": "e6e7e33112231dcfa79d6e8aa400ae8ca5517c1854761c439e3f5f8df3c4bf37",
-  "assistant/agent/capability.py": "44e61c0d0422d4a937e77d8a8f1f5928de216cbd0a4b1cb5c00d9390b01ede1b",
+  "assistant/agent/capability.py": "e893ae3781a93957fe3bbb03fcf29fe07f805ca23dda295158568ad3416f87ca",
   "assistant/agent/capacity.py": "f3d24223c86cec23685e711bb07e670cea525f071d34897d917aef58d04169c9",
   "assistant/agent/cause_vocab.json": "454859d9ce48028b869fd80ffc26c2be80e865e8550c564a79186189040c397e",
   "assistant/agent/causes.py": "fb46d5c7a0627d631f9b8215dd0696682e482e2615a9bd6adb9206d68b6dfb7c",
