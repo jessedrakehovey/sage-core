@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+b4fec39",
+  "version": "2026.11.15+29be1a0",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T17:43:06"
+  "synced": "2026-11-15T17:44:11"
  },
  "modules": {
   "money": {
@@ -121,7 +121,7 @@
   "assistant/agent/commitments.py": "363e2835ba0a4d79a30ac25ab89557e66fed69a28dfe2433c148d4ecce364e02",
   "assistant/agent/core.py": "4e1f8969d5fb814fb90cf5c331b85c1069d149c1c7c8089fa03c19848ff52612",
   "assistant/agent/correction.py": "3c5d1567c36b7d15e0469ee3952bb804078f5ba1a70de6f2ba60acbc44e17447",
-  "assistant/agent/dayreview.py": "6d13e528283ac777a5dc7cee0f112e24aad87b0e2912e4085705bd9b58737355",
+  "assistant/agent/dayreview.py": "7430ae0835a8627462ed73d12546ab228fe415df8834bdda7a0d6f63032fb94d",
   "assistant/agent/desk.py": "502bf7a0caa0c2ec56f5f43403a88cae19c1490120ff2d0f22079e655aef4ada",
   "assistant/agent/desk_policy.json": "ffec791298c05bcdfa5b3c4613acab58425ed07803137d1c1378fb6846aa992d",
   "assistant/agent/desk_policy.py": "7338d96efe809694345f613c3d0a1b37f80d0c727295603e4d6105ec62b6fbbe",
