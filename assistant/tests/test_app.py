@@ -190,6 +190,7 @@ check("the installer's corner image is a 24-bit bitmap of the right size", bmp[:
 check("the picture file is a real PNG", make_assets.png(make_assets.mark(32))[:8] == b"\x89PNG\r\n\x1a\n")
 
 # ---------------------------------------------------------------- 7. one click, an app window, one agent
+appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
 iss = (ROOT / "installer" / "windows" / "SageSetup.iss").read_text(encoding="utf-8")
 ps1 = (ROOT / "installer" / "windows" / "install.ps1").read_text(encoding="utf-8")
 ui = (ROOT / "app_ui.html").read_text(encoding="utf-8")
@@ -202,9 +203,9 @@ check("the window loads nothing from outside: no stylesheet, script or font from
 shown = re.sub(r"<style>.*?</style>", "", ui, flags=re.S)
 check("the window speaks as one agent and sends nobody to a page or a terminal",
       not re.search(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I), str(re.findall(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I))[:120])
+check("a Google run already going is joined, never started twice (one sign-in page, not two)", 'if r["kind"] == "google":' in appsrc and "running(null, l.id)" in ui)
 check("the Google screen asks before anything in the owner's Google organization changes, and offers every value to copy",
       "Allow for this project" in ui and "{allow: true}" in ui and 'data-copy="' in ui and "google_relay" in ui and "google_check" in ui)
-appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
 check("the window never shows the browser's 'restore pages' popup and keeps working while another window covers it",
       "--hide-crash-restore-bubble" in appsrc and "--disable-backgrounding-occluded-windows" in appsrc and "--disable-background-timer-throttling" in appsrc)
 check("bringing the window forward restores it only when it is minimized (a maximized window is not shrunk)", "IsIconic" in appsrc and appsrc.count("ShowWindow(") == 1)

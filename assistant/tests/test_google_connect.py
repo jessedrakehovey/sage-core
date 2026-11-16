@@ -64,6 +64,10 @@ if a[:2] == ["auth", "login"]:
 if a[:2] == ["auth", "revoke"]: S["account"] = ""; out(0)
 if a[:2] == ["organizations", "list"]: out(0, json.dumps(S.get("orgs") or []))
 if a[:2] == ["organizations", "add-iam-policy-binding"]: S["org_admin"] = [a[2], opt("--member"), opt("--role")]; out(0)
+if a[:2] == ["organizations", "get-iam-policy"]: out(0, " ".join(S.get("rule_admins") or []))
+if a[:2] == ["org-policies", "describe"]:
+    on = S.get("key_blocked") and not S.get("policy_off") and "managed" not in a[2]
+    out(0, "name: projects/1/policies/" + a[2] + " spec: rules: - enforce: " + ("true" if on else "false"))
 if a[:2] == ["projects", "describe"]:
     n = (S.get("projects") or {}).get(a[2])
     out(0, n + "\n") if n else out(1, "", "ERROR: (gcloud.projects.describe) NOT_FOUND: project not found\n")
@@ -71,6 +75,10 @@ if a[:2] == ["projects", "create"]:
     if S.get("tos"): out(1, "", "ERROR: (gcloud.projects.create) FAILED_PRECONDITION: Callers must accept Terms of Service\n")
     S.setdefault("projects", {})[a[2]] = "424242424242"; S["project_org"] = opt("--organization"); out(0)
 if a[:2] == ["services", "enable"]: S["services"] = [x for x in a[2:] if "." in x]; out(0)
+if a[:3] == ["iam", "service-accounts", "describe"]:
+    S["described"] = S.get("described", 0) + 1
+    if S.get("sa") and S["described"] > S.get("slow_identity", 0): out(0, a[3] + "\n")
+    out(1, "", "ERROR: (gcloud.iam.service-accounts.describe) NOT_FOUND: Unknown service account\n")
 if a[:3] == ["iam", "service-accounts", "create"]:
     if S.get("sa"): out(1, "", "ERROR: (gcloud.iam.service-accounts.create) Resource in projects is the subject of a conflict: Service account already exists\n")
     S["sa"] = a[3]; out(0)
@@ -166,6 +174,20 @@ check("with the owner's Allow the key is made and the run finishes", r.get("ok")
 check("the rule is lifted for this ONE project, never for the organization", bool(pol) and all(p.startswith(f"name: projects/{pid}/policies/") and "enforce: false" in p for p in pol)
       and not any("organizations/" in p for p in pol), str(pol)[:300])
 check("the owner's own account is the one given the right to change it", G().get("org_admin") == ["123456", "user:dana@northwind.test", "roles/orgpolicy.policyAdmin"], str(G().get("org_admin")))
+check("only the name the rule is in force under is lifted (the other is left as it is)", len(pol) == 1 and "iam.disableServiceAccountKeyCreation" in pol[0] and "managed" not in pol[0], str(pol)[:200])
+pack3, G3 = world("holder", key_blocked=True, rule_admins=["user:someone@northwind.test", "user:dana@northwind.test"])
+g.run(pack3)
+r = g.run(pack3, allow_keys_rule=True)
+check("an owner who already holds the right to manage rules is given nothing: the organization's own access list is not touched",
+      r.get("ok") is True and not said(G3, "organizations", "add-iam-policy-binding") and "rule_right_given" not in g.load(pack3), str(G3().get("org_admin")))
+
+pack2, G2 = world("slow", slow_identity=3)
+r = g.run(pack2)
+calls = [" ".join(c[:4]) for c in G2().get("calls", [])]
+first_key = next(i for i, c in enumerate(calls) if c.startswith("iam service-accounts keys create"))
+check("the key is asked for only once Google knows the new identity (asked too early, the request hung on the first live run)",
+      r.get("ok") is True and calls[:first_key].count("iam service-accounts describe sage-agent@" + g.load(pack2)["project_id"] + ".iam.gserviceaccount.com") == 4, str(calls[first_key - 5:first_key + 1]))
+check("a refused key leaves no empty half-written file in the keys folder", not (pack / "keys" / "agent_sa.json.part").exists())
 
 # ---------------------------------------------------------------- 5. a finished run asks for nothing more
 before = len(G().get("calls", []))

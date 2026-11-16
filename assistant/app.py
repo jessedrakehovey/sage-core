@@ -290,6 +290,9 @@ def google_run(body: dict) -> dict:
     pack = _pack_or_none()
     if not pack:
         return {"ok": False, "message": "no organization yet"}
+    for r in running_jobs():                   # a second press while it runs joins the run, never starts another sign-in beside it
+        if r["kind"] == "google":
+            return {"ok": True, "job": r["id"]}
     return job_start("google", "Connecting Google", lambda note: google_connect.run(
         pack, note, allow_keys_rule=bool(body.get("allow")), other_account=bool(body.get("other"))))
 

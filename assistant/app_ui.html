@@ -478,11 +478,13 @@ const AFTER = {
     const op = (label, url) => '<button class="btn ghost small" data-open="' + esc(url) + '">' + esc(label) + '</button>';
     const part = (n, title, lines) => '<div class="layer"><span class="i">' + n + '</span><div><h3>' + esc(title) + '</h3><ol class="how">' + lines.map(x => '<li>' + x + '</li>').join("") + '</ol></div></div>';
 
-    const running = async (body) => {
+    const live = () => (S.jobs || []).find(j => j.kind === "google");
+    const running = async (body, jobId) => {
+      if (timer) { clearInterval(timer); timer = null; }
       lede.textContent = "Sign in to Google when your browser asks, and choose Allow. The rest happens by itself: about three minutes.";
       box.innerHTML = '<ul class="stages wide" id="gs">' + G.steps.map(x => '<li data-k="' + x.key + '"' + (x.status === "done" ? ' class="done"' : '') + '><span class="tick">&#10003;</span><span>' + esc(x.title.replace("the agent", A)) + '<small></small></span></li>').join("") + '</ul>';
       const at = k => { let seen = false; box.querySelectorAll("#gs li").forEach(li => { if (li.dataset.k === k) { li.className = "on"; seen = true; } else if (!seen) li.className = "done"; else if (li.className === "on") li.className = ""; }); };
-      await job(api("google", body || {}),
+      await job(jobId ? Promise.resolve({ok: true, job: jobId}) : api("google", body || {}),
         (line, j) => { const sm = box.querySelector("#gs li.on small"); if (!sm) return;
           const m = /(\d+)% of (\d+) MB/.exec(line), words = m ? "Downloading: " + m[1] + "%" : (/^[A-Z]/.test(line) ? line : "");
           if (j && j.link) { if (!sm.querySelector("button")) sm.innerHTML = esc(words || "Waiting for you in your browser.") + ' <button class="link" data-open="' + esc(j.link) + '" style="font-size:13px">Open the sign-in page again</button>'; }
@@ -510,6 +512,8 @@ const AFTER = {
       if (go) go.onclick = () => running({});
       if (al) al.onclick = () => running({allow: true});
       if (ot) ot.onclick = () => running({other: true});
+      // a run already going (started a moment ago, or from another window) is joined, not started twice
+      if (!timer) timer = setInterval(async () => { await load(); const l = live(); if (l && cur === "google") running(null, l.id); }, 3000);
     };
 
     const relay = () => {
@@ -567,6 +571,7 @@ const AFTER = {
     };
 
     const draw = () => {
+      if (live() && G.ok && !G.checked) return running(null, live().id);
       if (!G.ok) { box.innerHTML = '<div class="err">' + esc(G.message || "Not ready yet.") + '</div><div class="row">' + later + '</div>'; return bind(); }
       if (G.checked || (S.chat_connected && !G.steps.some(x => x.status === "done"))) return done();
       if (!G.auto_done) return auto();

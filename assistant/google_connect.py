@@ -180,7 +180,7 @@ def _account(pack: Path) -> str:
     return out.strip().splitlines()[0].strip() if rc == 0 and out.strip() else ""
 
 
-def _login(pack: Path, note, timeout: int = 600) -> tuple:
+def _login(pack: Path, note, timeout: int = 1800) -> tuple:      # half an hour: an owner who steps away mid sign-in comes back to a page that still works
     """Google's sign-in, waited on while its own lines are read: the tool prints the address of the page it opened, and
     that address is handed to the window ("##link"), so an owner who lost the tab can open it again. (exit code, stderr)."""
     py = welcome.pack_python(pack)
@@ -289,14 +289,28 @@ def allow_keys(pack: Path, st: dict, note) -> dict:
     rule is overridden on the project. Both names the rule goes by are tried; one of them not existing is fine."""
     pid, acct, org = st["project_id"], st.get("account") or "", st.get("org_id") or ""
     if org and acct:
-        rc, out, err = gc(pack, ["organizations", "add-iam-policy-binding", org, "--member", f"user:{acct}", "--role", "roles/orgpolicy.policyAdmin",
-                                 "--condition=None"], timeout=180)
-        if rc != 0:
-            return {"ok": False, "message": "Google would not let this account manage the organization's rules (it must be an administrator of the Google Workspace): " + _why(err)}
+        # the least change: an owner who already holds the right to manage rules is given nothing
+        rc, out, err = gc(pack, ["organizations", "get-iam-policy", org, "--flatten=bindings[].members", "--filter=bindings.role:roles/orgpolicy.policyAdmin",
+                                 "--format=value(bindings.members)"], timeout=120)
+        if not (rc == 0 and f"user:{acct}".lower() in out.lower().split()):
+            rc, out, err = gc(pack, ["organizations", "add-iam-policy-binding", org, "--member", f"user:{acct}", "--role", "roles/orgpolicy.policyAdmin",
+                                     "--condition=None"], timeout=180)
+            if rc != 0:
+                return {"ok": False, "message": "Google would not let this account manage the organization's rules (it must be an administrator of the Google Workspace): " + _why(err)}
+            st["rule_right_given"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     sdk_home().mkdir(parents=True, exist_ok=True)
     tmp = sdk_home() / "policy.yaml"
     done, last = 0, ""
+    # the rule goes by two names; only one that is actually in force for this project is lifted (when neither can be
+    # read, both are tried, as before)
+    in_force, readable = [], 0
     for rule in KEY_RULES:
+        rc, out, err = gc(pack, ["org-policies", "describe", rule, "--project", pid, "--effective", "--billing-project", pid], timeout=120)
+        if rc == 0:
+            readable += 1
+            if re.search(r"enforce:\s*true", out, re.I):
+                in_force.append(rule)
+    for rule in (in_force if readable else KEY_RULES):
         tmp.write_text(f"name: projects/{pid}/policies/{rule}\nspec:\n  rules:\n  - enforce: false\n", encoding="utf-8")
         for _ in range(4):                       # the right just granted takes a little while to count
             rc, out, err = gc(pack, ["org-policies", "set-policy", str(tmp), "--billing-project", pid], timeout=180)
@@ -333,13 +347,29 @@ def step_identity(pack: Path, st: dict, note, allow: bool = False) -> dict:
         return {"ok": False, "message": "Google would not make the agent's identity: " + _why(err)}
     kd.mkdir(parents=True, exist_ok=True)
     part = kd / "agent_sa.json.part"
+    # an identity made a second ago is not known everywhere at Google yet, and a key asked for too early can simply
+    # hang (seen on the first live run: three minutes of nothing): wait until Google can describe it
+    for _ in range(10):
+        rc, out, err = gc(pack, ["iam", "service-accounts", "describe", email, "--project", pid, "--format=value(email)"], timeout=60)
+        if rc == 0 and out.strip():
+            break
+        time.sleep(4)
     waited = False
+    stalls = 0
     for attempt in range(10):
-        rc, out, err = gc(pack, ["iam", "service-accounts", "keys", "create", str(part), "--iam-account", email, "--project", pid], timeout=180)
+        rc, out, err = gc(pack, ["iam", "service-accounts", "keys", "create", str(part), "--iam-account", email, "--project", pid], timeout=75)
         if rc == 0 and _key_ok(part, email):
             part.replace(key)
             st["key_path"] = str(key)
             return {"ok": True}
+        try:
+            part.unlink()                          # the tool makes the file before it asks: no empty half-key is left behind
+        except OSError:
+            pass
+        if rc == 124 and stalls < 2:               # Google did not answer: ask again, twice at most
+            stalls += 1
+            note("Google is slow to answer. Asking again.")
+            continue
         if _blocked(err):
             if not allow and not st.get("keys_allowed"):
                 return {"ok": False, "needs": "keys", "message": "Google blocks new keys on every new organization until an administrator allows them."}

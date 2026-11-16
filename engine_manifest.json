@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+8afe6ff",
+  "version": "2026.11.15+7cc3854",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T19:35:30"
+  "synced": "2026-11-15T19:37:13"
  },
  "modules": {
   "money": {
@@ -179,8 +179,8 @@
   "assistant/agent/websearch.py": "a86d1b9b2218a6179f595b5e84c23e5e714b25cf86ee5340fe6eed90218e6694",
   "assistant/agent/wiki_writer.py": "2e453d90276acafaddace8f68d539c9a223ce1749f424f506f243783dd054834",
   "assistant/agent/worklog.py": "d10d5ef817ce171a309a22354d78921dec7898dc90dbd7d55e35d88037ee4b6f",
-  "assistant/app.py": "3fee5be46de00df7e372f264d1021340768056395726baf9fe0a931da50882ae",
-  "assistant/app_ui.html": "8bf1d09219d5cf05d76f10b126d2414ac0702c522d45ce65e79f59b9586b1b64",
+  "assistant/app.py": "78e68ce3ccead10c84495be1af6b0c036cf74879587314ce4c3e72bd164fceb1",
+  "assistant/app_ui.html": "9246bb2149bedb234c55bbd5d4904b1f1d437ef9d276c4e469d3033af83069c9",
   "assistant/catalog.py": "f750fdfcb56967ba75a20c59a78e9a644c59756f1532cd281af862a917bbe25d",
   "assistant/catalog/_schema.json": "a4937ca84147f9c9999334f49c659d8e5b9c928d89d6f81c60a66ee6f5eea82d",
   "assistant/catalog/acuity.json": "ded4abb33d5603b5d302125db99092fe7f3751f1e9fcd2893d9a1299b3df6ced",
@@ -243,7 +243,7 @@
   "assistant/doer/vault.py": "755beb4f0a914ad528f8e292fcb23701f11245ff0be3a97270a9215701a855ee",
   "assistant/doer/vault_purge.py": "6f5c9fc7845b597a1709316b2c7680ae44cc5ef607d0775abc73eaa66192064a",
   "assistant/engine.py": "c9c9edef80691c8a67266a35e067f498e200fc0ea87d0382e8bdd7fd58792f8c",
-  "assistant/google_connect.py": "be5ddfb991a651794e8d204acb3fe966ae767a6a66909851860bac460a9eccf2",
+  "assistant/google_connect.py": "3bb24d27c99ccf694f8a4754993ca7aafff1a23ea33d8c28b7da9a9ac899b779",
   "assistant/installer/README.md": "4f9b709c2d31109b89db0ae25461489d05294a8be60d6b38fa6169769b1663e0",
   "assistant/installer/windows/SageSetup.iss": "c279f9302ddf443e3b818a528820815cef17cd71e07e8c1a365c27584c390b9b",
   "assistant/installer/windows/build.ps1": "77948cbcc9726b3136dc934c40e04cad7a0c59bc330573372890c2b1b986c6e5",
@@ -399,7 +399,7 @@
   "assistant/templates/data/sop_map.json": "3e37ed67c3cc301da57cc6d833901b0d95e9fcc779ed72a8720478924bcf7e78",
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
   "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
-  "assistant/tests/test_app.py": "746e7d9b026f4d9a096e6e129d887af4b8c25f70bdf0c37a7f679ed1f31420cc",
+  "assistant/tests/test_app.py": "e23cbf57754d65bae5c4a02315dc746bf173ff019bb602044b82126015300f16",
   "assistant/tests/test_browser_mcp.py": "8e3c2581b008a73690409d8d8e07b1a8dbf03da8cbdd184e19e3911d2d67077f",
   "assistant/tests/test_browser_stay_up.py": "ed244d913588e5046a0d996e796d903d826297cdcfa3bde03465bc79329948e8",
   "assistant/tests/test_build_ack.py": "5157cc084a99371522ea4e4ad06347795f3451935f91da8cece68f32cfe88246",
@@ -442,7 +442,7 @@
   "assistant/tests/test_escalation.py": "42734c734c6d871d62e4c983faaad1e0304997ec965e49e475eef8a9b8e406aa",
   "assistant/tests/test_followthrough.py": "495d1f8bc91f3b91a37d6d79f08074cafbac9520ac03857878e4c7c02b2a4ea7",
   "assistant/tests/test_form_ingest.py": "b02b252f0ba1582775d9a3873a16dd7dce8b6cf9dd559bad157312e262afbba5",
-  "assistant/tests/test_google_connect.py": "d6911ddd3a2962b5dba4c5bf95d2740c94b0ee644dabf37c04de932e0c2c3e3e",
+  "assistant/tests/test_google_connect.py": "c28c2f7d04b5c80e7450a4419b7305384d4b53add05b77c16aca909d15d59bc7",
   "assistant/tests/test_held.py": "828ea2a7d2da5df688e32ae1a0ce8214cab0a6cd7e7ff66e4a862515eaf0a22f",
   "assistant/tests/test_home_tab.py": "0ad95170c0c8c019bf370adb0155782dade2b4e4a5d72d9b072253e66a10dcf8",
   "assistant/tests/test_ideas_teach_egress.py": "59e30be353a98bcb3bb1333ca568374064b4568d3b9a9c745a3da3b8445258f0",
