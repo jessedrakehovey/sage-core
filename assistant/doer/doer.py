@@ -328,9 +328,15 @@ def _browser_server(out_dir: Path) -> dict:
         own += ["--cursor-label", str(cur["label"]).strip()]
     if cur.get("color"):
         own += ["--cursor-color", str(cur["color"])]
-    if str(CFG.get("browser_server") or "python").lower() == "node":
+    which = str(CFG.get("browser_server") or "python").lower()
+    if which == "node":
         return node
     script = str(HERE / "browser_mcp.py")
+    if which == "native":
+        # the engine's own driver (browser_native.py + cdp.py, 2026-11-15): standard library only, so any interpreter
+        # serves it and there is nothing to check for. "python" (the Playwright package underneath) stays the default
+        # until the owner switches; the tools, their names and the gates are the same either way.
+        return {"command": sys.executable, "args": [script] + own + ["--engine", "native"]}
     try:
         from alib import VENV_PY
         cands = [sys.executable, str(VENV_PY)]

@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+c30f281",
+  "version": "2026.11.16+9aca619",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T09:32:29"
+  "synced": "2026-11-16T10:12:19"
  },
  "modules": {
   "money": {
@@ -225,7 +225,7 @@
   "assistant/doer/computer_policy.json": "8ce249978f51907026cb5de1c8b2d5ed518253cfe59dfa403e4177ac0599e99f",
   "assistant/doer/computer_policy.py": "40fc80a3ef74eefb0c0400ea30258818038fb10a512763da97e45b4a6d2de10f",
   "assistant/doer/computer_prompt.md": "a6120ffa23cea9a032efd312807e87b75d272e13bb1f637793de166b51441b6f",
-  "assistant/doer/doer.py": "a3906810302bee6de2072f056362064f766576881372469b05ffd1ac349829d2",
+  "assistant/doer/doer.py": "ac14eecd015d59ba40d9cf422312bc4caf7e8853c386be9b4d1b91bd91bab3c3",
   "assistant/doer/egress.py": "ef7484f7970cbcdfd2d7a6a23521c3b286018af38287fc1ed13f51f03a891ff9",
   "assistant/doer/learn.py": "51a4522d95a29517308d0f91b9d9c80caadcf77886f5b0597331655b272301a1",
   "assistant/doer/leftopen.py": "e97dfb8660d62f5fa4a8d4deeb556d83e91544eed8515d642b33cd654c27d49b",
