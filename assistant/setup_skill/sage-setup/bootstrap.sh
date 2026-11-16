@@ -42,7 +42,7 @@ VENV="$HOME/.venvs/$SLUG-sage"; PY="$VENV/bin/python"
 [[ -x "$PY" ]] || python3 -m venv "$VENV"
 "$PY" -m pip install --quiet --upgrade pip
 "$PY" -m pip install --quiet -r "$ENGINE_DIR/assistant/requirements.txt"
-"$PY" -m playwright install chromium >/dev/null
+PLAYWRIGHT_SKIP_BROWSER_GC=1 "$PY" -m playwright install chromium >/dev/null   # keep the shared folder's other browsers
 
 # a folder holding another organization's agent is never touched (coexist.py): only this org's own pack is re-used
 if [[ -f "$OUT/assistant/org.json" ]]; then

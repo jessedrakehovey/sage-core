@@ -9,6 +9,13 @@ $vault = "{{ORG_ROOT}}"
 $py    = "C:\Users\owner1\.venvs\wedding-web\Scripts\pythonw.exe"
 if (-not (Test-Path $py)) { $py = "C:\Users\owner1\.venvs\wedding-web\Scripts\python.exe" }
 if (-not (Test-Path $py)) { $py = "python" }
+# a new organization's PC has its own interpreter: ASSISTANT_PY, then org.json -> python, win over the paths above (2026-11-15:
+# an installed organization's operator, spine and deadman all called a venv that only exists on the source PC)
+try { $orgPy = [string]((Get-Content (Join-Path $vault 'assistant\org.json') -Raw -ErrorAction Stop | ConvertFrom-Json).python) } catch { $orgPy = '' }
+if ($orgPy) { $orgPy = [Environment]::ExpandEnvironmentVariables($orgPy) -replace '^~', $env:USERPROFILE }
+if ($env:ASSISTANT_PY -and (Test-Path $env:ASSISTANT_PY)) { $py = $env:ASSISTANT_PY } elseif ($orgPy -and (Test-Path $orgPy)) { $py = $orgPy }
+$pyw = Join-Path (Split-Path -Parent $py) 'pythonw.exe'
+if ((Split-Path -Leaf $py) -eq 'python.exe' -and (Test-Path $pyw)) { $py = $pyw }   # no console window for the page server
 # the port guard (assistant/ports.py): Mission Control may have moved off :9019 when another program held it
 $pyc = $py -replace 'pythonw\.exe$', 'python.exe'
 $port = 9019

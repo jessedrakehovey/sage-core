@@ -828,7 +828,7 @@ def export(dst: Path, src_root: Path = VAULT, with_tests: bool = True, git: bool
             out = dst / rel
             out.parent.mkdir(parents=True, exist_ok=True)
             txt = export_text(rel, read_text(src), src_root)
-            out.write_text(txt, encoding="utf-8")
+            out.write_text(txt, encoding="utf-8", newline="")
             files[rel] = sha(txt.encode("utf-8"))
     man = {"engine": {"name": "sage-core", "version": _source_version(src_root), "exported": time.strftime("%Y-%m-%dT%H:%M:%S"),
                       "source": "export", "root_placeholder": ROOT_PLACEHOLDER},
@@ -910,7 +910,7 @@ def install_tree(src_root: Path, org_root: Path, with_tests: bool = False, with_
             if with_scrub:
                 tmpl = scrub(tmpl, rel)
             files[rel] = sha(tmpl.encode("utf-8"))
-            dst.write_text(from_template(tmpl, org_root, rel), encoding="utf-8")
+            dst.write_text(from_template(tmpl, org_root, rel), encoding="utf-8", newline="")
         else:
             data = src.read_bytes()
             files[rel] = sha(data)
@@ -942,7 +942,7 @@ def install_file(engine_root: Path, rel: str, org_root: Path) -> None:
     src, dst = engine_root / rel, org_root / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
     if is_text(rel):
-        dst.write_text(from_template(read_text(src), org_root, rel), encoding="utf-8")
+        dst.write_text(from_template(read_text(src), org_root, rel), encoding="utf-8", newline="")
     else:
         shutil.copy2(src, dst)
 

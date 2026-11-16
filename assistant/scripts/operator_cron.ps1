@@ -24,6 +24,15 @@ $vault  = "{{ORG_ROOT}}"
 $asst   = Join-Path $vault 'assistant'
 $claude = "C:\Users\owner1\AppData\Roaming\npm\claude.cmd"
 $py     = "C:\Users\owner1\.venvs\wedding-web\Scripts\python.exe"
+# a new organization's PC has its own interpreter: ASSISTANT_PY, then org.json -> python, win over the paths above (2026-11-15:
+# an installed organization's operator, spine and deadman all called a venv that only exists on the source PC)
+try { $orgPy = [string]((Get-Content (Join-Path $vault 'assistant\org.json') -Raw -ErrorAction Stop | ConvertFrom-Json).python) } catch { $orgPy = '' }
+if ($orgPy) { $orgPy = [Environment]::ExpandEnvironmentVariables($orgPy) -replace '^~', $env:USERPROFILE }
+if ($env:ASSISTANT_PY -and (Test-Path $env:ASSISTANT_PY)) { $py = $env:ASSISTANT_PY } elseif ($orgPy -and (Test-Path $orgPy)) { $py = $orgPy }
+if (-not (Test-Path $claude)) {                      # this PC's own Claude CLI (native or npm), the way sage.py finds it
+    try { $c = [string](& $py (Join-Path $asst 'sage.py') claude-cli 2>$null | Select-Object -Last 1) } catch { $c = '' }
+    if ($c.Trim() -and (Test-Path $c.Trim())) { $claude = $c.Trim() }
+}
 $log    = Join-Path $(if ($env:WV_LOG_DIR) { $env:WV_LOG_DIR } else { Join-Path $env:USERPROFILE ".claude" }) "assistant-operator.log"
 if ($env:ASSISTANT_CLAUDE) { $claude = $env:ASSISTANT_CLAUDE }   # test hook
 

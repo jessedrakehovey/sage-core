@@ -56,6 +56,7 @@ Say "installing Python packages"
 & $py -m pip install --quiet --upgrade pip
 & $py -m pip install --quiet -r (Join-Path $engineDir 'assistant\requirements.txt')
 Say "installing the Playwright Chromium browser (one-time download)"
+$env:PLAYWRIGHT_SKIP_BROWSER_GC = '1'   # keep the other browsers in the shared folder (another program's, or one in use)
 & $py -m playwright install chromium | Out-Null
 
 # the pack. A folder that already holds an organization is only re-used when it is THIS organization's pack made by

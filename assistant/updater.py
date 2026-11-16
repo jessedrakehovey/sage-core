@@ -333,6 +333,19 @@ def _prune_engines() -> None:
         shutil.rmtree(p, ignore_errors=True)
 
 
+def _refreeze_gates() -> None:
+    """A release that passed its gate is the new baseline for the send-gate tripwire (scripts/guardrails/check_gates.py):
+    the gated files are engine files, so without this every update would read as tampering the next night (2026-11-15).
+    Only a pack that already has a baseline is touched; never fatal."""
+    gates = ROOT / "scripts" / "guardrails" / "check_gates.py"
+    if not gates.exists() or not (gates.parent / "gate_baseline.json").exists():
+        return
+    try:
+        subprocess.run([sys.executable, str(gates), "--freeze"], cwd=str(ROOT), capture_output=True, timeout=120)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _request_restart(why: str) -> None:
     try:
         RESTART.parent.mkdir(parents=True, exist_ok=True)
@@ -419,6 +432,7 @@ def run(force: bool = False, gates: tuple = GATES, url: str = "", dry: bool = Fa
             man["engine"].setdefault("installed", installed_at)       # the mark of a pack (engine.update copies the release's header)
             _save(man_p, man)
         _prune_engines()
+        _refreeze_gates()
         _request_restart(f"engine {rec['installed']} -> {avail}")
         summary = engine.update_summary(rep)
         note(f"Engine updated {rec['installed'] or 'unknown'} -> {avail}: {summary.splitlines()[0]}." +

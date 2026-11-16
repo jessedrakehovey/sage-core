@@ -25,6 +25,7 @@ in its environment, so no wrapper needs this PC's paths.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import platform
@@ -217,6 +218,29 @@ def _mc_keepalive(dry: bool) -> tuple:
         return False, f"could not start mc_server.py: {e}"
 
 
+def stop_page() -> str:
+    """End this pack's Mission Control too. serve starts it as a process of its own (so a restart on new code keeps the
+    page up), which also meant `stop` left it running: the port held, the pack's files open, an uninstall unable to
+    delete the folder (2026-11-15). Only a server whose health answer names THIS pack is ever stopped, so another
+    agent on the same computer is never touched."""
+    try:
+        with urllib.request.urlopen(_mc_url() + "/api/health", timeout=3) as r:
+            h = json.loads(r.read().decode("utf-8", "replace") or "{}")
+    except Exception:  # noqa: BLE001
+        return ""
+    pid = int(h.get("pid") or 0)
+    if not pid or pid == os.getpid() or str(h.get("pack") or "") != ports.slug():
+        return ""
+    try:
+        if IS_WIN:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=30)
+        else:
+            os.kill(pid, 15)
+    except Exception as e:  # noqa: BLE001
+        return f"mission control (pid {pid}) is still running: {type(e).__name__}"
+    return f"mission control stopped (pid {pid})"
+
+
 BUILTINS = {"mc_keepalive": _mc_keepalive}
 
 
@@ -238,7 +262,10 @@ def run_job(job: dict, dry: bool) -> tuple:
     out = ((r.stdout or "") + (r.stderr or "")).strip()
     last = out.splitlines()[-1] if out else ""
     exp = str(job.get("expect") or "")
-    if r.returncode == 0 and exp and not any(ln.strip().startswith(exp) for ln in out.splitlines()[-3:]):
+    # a job's summary line may carry its log's timestamp ("2026-11-15 17:51:47  SPINE ran=..."): that is still the line,
+    # and a clean spine / deadman run read as FAILED on every pass of a new organization without this (2026-11-15)
+    stamp = re.compile(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}\s+")
+    if r.returncode == 0 and exp and not any(stamp.sub("", ln.strip()).startswith(exp) for ln in out.splitlines()[-3:]):
         return False, ("silent: exit 0 without a " + exp + " line: " + last[:200])[:300]
     return r.returncode == 0, last[:300]
 
@@ -604,11 +631,15 @@ def install_startup() -> int:
     exe = Path(sys.executable)
     if IS_WIN:
         pyw = exe.with_name("pythonw.exe")
+        # the trigger and the principal name THIS user: a logon trigger with no user means "any user's logon", which only an
+        # administrator may register, so every owner's install (no admin) got "Access is denied" and no startup entry (2026-11-15)
+        dom, user = os.environ.get("USERDOMAIN") or platform.node(), os.environ.get("USERNAME") or ""
+        who = html.escape(dom + "\\" + user if user else dom)
         xml = f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Sage supervisor: the spine, the probe, the operator, the deadman and Mission Control in one process.</Description></RegistrationInfo>
-  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
-  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{who}</UserId></LogonTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>{who}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <RestartOnFailure><Interval>PT1M</Interval><Count>99</Count></RestartOnFailure><Enabled>true</Enabled></Settings>
@@ -976,7 +1007,9 @@ def probe_cmd() -> int:
 
 # ---------------------------------------------------------------- cli
 def main() -> int:
-    sys.stdout.reconfigure(encoding="utf-8")
+    for s in (sys.stdout, sys.stderr):          # under pythonw (the startup task) there are none: reconfiguring None ended serve
+        if s is not None and hasattr(s, "reconfigure"):     # with exit 1 before its first log line, every logon (2026-11-15)
+            s.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("doctor"); p.add_argument("--json", action="store_true"); p.add_argument("--no-probe", action="store_true"); p.add_argument("--fix", action="store_true")
@@ -1048,6 +1081,9 @@ def main() -> int:
         STOP.touch()
         pid = serve_pid()
         print(f"stop requested{' (pid ' + str(pid) + ' exits within ' + str(TICK_S) + ' s)' if pid else ' (serve was not running)'}")
+        page = stop_page()
+        if page:
+            print(page)
         return 0
     if a.cmd == "install-startup":
         if refuse_collisions("install-startup"):

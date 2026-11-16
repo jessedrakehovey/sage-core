@@ -228,7 +228,7 @@ port = free_port()
 env = {k: v for k, v in os.environ.items() if not k.startswith(("ASSISTANT_", "SAGE_"))}
 env.update(SAGE_HOME=str(TMP / "home"), PYTHONIOENCODING="utf-8", WV_LOG_DIR=str(TMP / "logs"))
 srv = subprocess.Popen([sys.executable, str(ENGINE / "assistant" / "welcome.py"), "--port", str(port), "--no-browser"], cwd=str(ENGINE), env=env,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       stdout=open(TMP / "welcome_server.log", "w", encoding="utf-8"), stderr=subprocess.STDOUT)   # kept: a crash says why
 
 
 def http(method, path, body=None, origin=None):

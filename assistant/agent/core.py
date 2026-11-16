@@ -69,9 +69,13 @@ MEM_KINDS = ("person", "preference", "household", "business", "process")
 # ------------------------------------------------------------------ io
 def load(path, default):
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        got = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return default
+    if isinstance(got, dict) and isinstance(default, dict):
+        for k, v in default.items():      # a store seeded "{}" (a new organization's rules / memory / routines) is that
+            got.setdefault(k, v)          # store, empty: its reader's keys are there, not a KeyError every minute (2026-11-15)
+    return got
 
 
 def save(path, obj) -> None:

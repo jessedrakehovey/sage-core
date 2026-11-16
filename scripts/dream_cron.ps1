@@ -159,7 +159,10 @@ try {
         try { $claude = (Invoke-Py @((Join-Path $vault 'assistant\sage.py'), 'claude-cli')).Trim() } catch { $claude = '' }
     }
     if (-not $claude -or -not (Test-Path $claude)) { Log "ERROR: claude CLI not found (set ASSISTANT_CLAUDE or install the Claude Code CLI; python assistant/sage.py doctor)"; exit 1 }
-    $before = (& git -C $vault rev-parse HEAD 2>$null)
+    # an organization installed from the engine has no git (the installer carries none): under 'Stop' git's "not a git
+    # repository" on stderr ended dreaming before it began (2026-11-15). Only a repository is asked.
+    $isRepo = (Test-Path (Join-Path $vault '.git')) -and [bool](Get-Command git -ErrorAction SilentlyContinue)
+    $before = if ($isRepo) { (& git -C $vault rev-parse HEAD 2>$null) } else { '' }
     Push-Location $vault
     # Headless, unattended -> skip interactive permission prompts. Writes + commits are
     # the whole point of this job; the repo is the rollback save point. The shared runner
@@ -179,7 +182,7 @@ try {
 
     # Notify the owner via Mission Control with the EXACT git diff this run produced (Phase 1 memory +
     # Phase 2 auto-applied skill/mistakes edits), so self-improvements are reviewable/revertible.
-    $after = (& git -C $vault rev-parse HEAD 2>$null)
+    $after = if ($isRepo) { (& git -C $vault rev-parse HEAD 2>$null) } else { '' }
     if ($before -and $after -and ($before -ne $after)) {
         $commits = (& git -C $vault log --oneline "$before..$after") -join "`n"
         $stat    = (& git -C $vault diff --stat "$before..$after") -join "`n"

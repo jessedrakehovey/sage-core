@@ -85,8 +85,16 @@ def _source_pairs(org_name: str, owners: list, out_name: str) -> tuple:
         infra.append((engine._rx_word(s), "example"))
     for loc in sorted(v["locals"], key=len, reverse=True):
         infra.append((re.compile(re.escape(loc), re.I), owners[0]["key"]))
-    if v.get("root"):
-        infra.append((re.compile(re.escape(Path(v["root"]).name), re.I), out_name))
+    # the source folder's own name -> the new one's: only when the source IS an organization's folder, and only as a
+    # whole word. Run from an installed engine (%LOCALAPPDATA%\Sage\engine, the app's path) the folder is named
+    # "engine", and every "engine" in every prompt, note and doc of the new organization became its folder's name
+    # (2026-11-15: the update job was "Pine Street Bakery OS-update", the operator's prompt said the same)
+    try:
+        probe = engine.read_text(VAULT / "assistant" / "scripts" / "spine.ps1")
+    except OSError:
+        probe = ""
+    if v.get("root") and engine.ROOT_PLACEHOLDER not in probe:
+        infra.append((engine._rx_word(Path(v["root"]).name), out_name))
     for p in v["persons"]:
         who = "the owner" if p["role"] == "owner" else "a team member"
         for w in sorted({p["name"]} | set(p["words"]), key=len, reverse=True):
@@ -321,7 +329,7 @@ def main() -> int:
             txt = rx.sub(rep, txt)
         # the source PC's account SID (or the template's placeholder) becomes the installing user's own (2026-10-29)
         txt = engine.SID_RX.sub(sid or engine.SID_PLACEHOLDER, txt).replace(engine.SID_PLACEHOLDER, sid or engine.SID_PLACEHOLDER)
-        xml.write_text(txt, encoding="utf-8")
+        xml.write_text(txt, encoding="utf-8", newline="")
     (out / "Wiki" / "_meta" / "index.md").write_text("# Wiki index\n", encoding="utf-8")
     agent = out / "assistant" / "agent"
     profile = json.loads((HERE / "agent" / "profile.json").read_text(encoding="utf-8"))
@@ -343,8 +351,9 @@ def main() -> int:
            "people": [{"name": o["name"], "role": "owner", "about": o["email"]} for o in owners],
            "lanes": [], "services": [], "duties": [], "never": [], "updated": time.strftime("%Y-%m-%dT%H:%M:%S")}
     (agent / "state" / "org.json").write_text(json.dumps(org, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    for f in ("rules.json", "memory.json", "routines.json"):
-        (agent / "state" / f).write_text("{}\n", encoding="utf-8")
+    for f, empty in (("rules.json", {"next_id": 1, "rules": []}), ("memory.json", {"next_id": 1, "facts": []}),
+                     ("routines.json", {"next_id": 1, "routines": []})):       # the readers' own empty shapes, never "{}"
+        (agent / "state" / f).write_text(json.dumps(empty) + "\n", encoding="utf-8")
     reg = json.loads((HERE / "connections.json").read_text(encoding="utf-8"))
     rows = [r for r in reg["connections"] if r["id"] in GENERIC_CONNECTIONS]
     for o in owners:
@@ -412,7 +421,7 @@ def main() -> int:
         for rx, rep in infra:            # the organization's names only; never the owner's name (the PC's user path carries it)
             new = rx.sub(rep, new)
         if new != txt:
-            f.write_text(new, encoding="utf-8")
+            f.write_text(new, encoding="utf-8", newline="")
     for f in (out / "assistant").rglob("*"):
         if f.suffix.lower() not in (".json", ".md") or not f.is_file() or f.name == "org.json":
             continue          # the .ps1 / .xml files were rewritten above (their paths may contain the PC's user name)
@@ -423,7 +432,7 @@ def main() -> int:
         if os.environ.get("NEW_ORG_DEBUG"):
             print(f"SCRUB {f.relative_to(out)} changed={new != txt}", file=sys.stderr)
         if new != txt:
-            f.write_text(new, encoding="utf-8")
+            f.write_text(new, encoding="utf-8", newline="")
     # the manifest records each file as WRITTEN here (after the scrub above), so `sage update` sees a file nobody touched
     # since the install as "unchanged by hand" and replaces it; and the engine's own version from the export's manifest
     # (an exported engine has no git, so _source_version alone would drop the sha and the updater would call the first
@@ -466,6 +475,11 @@ def main() -> int:
         cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except (OSError, ValueError):
         pass
+    # the send-gate tripwire's baseline is the organization's own: frozen from the files as installed, or every nightly
+    # self-test reads "FAIL: no baseline" and posts a card on the owners' first morning (2026-11-15)
+    gates = out / "scripts" / "guardrails" / "check_gates.py"
+    if gates.exists():
+        subprocess.run([sys.executable, str(gates), "--freeze"], cwd=str(out), capture_output=True, timeout=120)
     (alloc["home"] / "logs").mkdir(parents=True, exist_ok=True)
     coexist.register(out)
     clash = coexist.collisions(out)

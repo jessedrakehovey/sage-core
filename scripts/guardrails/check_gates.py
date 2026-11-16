@@ -209,6 +209,8 @@ def freeze() -> None:
         "targets": {},
     }
     for name, (rel, kind) in TARGETS.items():
+        if not (VAULT / rel).exists():
+            continue        # a target this folder never carried (an organization made from the engine has no niche crons)
         text = _read(rel)
         data["targets"][name] = {
             "path": rel,
@@ -217,7 +219,7 @@ def freeze() -> None:
             "allowed_count": len(_all_allow(text, kind)),
         }
     BASELINE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"Froze baseline for {len(TARGETS)} targets -> {BASELINE.relative_to(VAULT)}")
+    print(f"Froze baseline for {len(data['targets'])} targets -> {BASELINE.relative_to(VAULT)}")
 
 
 def verify() -> int:
@@ -228,6 +230,13 @@ def verify() -> int:
     fails, warns = [], []
 
     for name, (rel, kind) in TARGETS.items():
+        if not (VAULT / rel).exists():
+            # never carried here (not in the baseline): nothing to guard. Carried once and now gone: that IS a finding
+            # (a gated job replaced by something unguarded), so it fails as before (2026-11-15: an organization made
+            # from the engine has no travel / lots / ads crons, and freeze crashed on them)
+            if name in (base.get("targets") or {}):
+                fails.append(f"[{name}] {rel}: gated file is GONE (it was in the frozen baseline)")
+            continue
         text = _read(rel)
         allow = _all_allow(text, kind)
         deny = _canonical_deny(text, kind)

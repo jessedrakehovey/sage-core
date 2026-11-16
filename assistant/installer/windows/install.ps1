@@ -37,6 +37,7 @@ $ProgressPreference = 'SilentlyContinue'      # Windows PowerShell 5.1 draws a p
 $Steps = 6
 $env:PIP_NO_CACHE_DIR = '1'                    # an installer neither needs nor trusts a package cache left on the machine
 $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+$env:PLAYWRIGHT_SKIP_BROWSER_GC = '1'          # Playwright's install otherwise deletes every browser in the shared folder no registered copy of it claims: another program's, or the one Sage's browser is running from (2026-11-15)
 function Step($n, $title) { Write-Host "##step $n/$Steps $title" }
 # anything that stops the install says why in one plain line the installer can show, and ends with exit 1
 trap { Write-Host ("##fail " + $_.Exception.Message); exit 1 }
