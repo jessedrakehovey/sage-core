@@ -686,6 +686,11 @@ def deliver(t: dict, text: str) -> None:
     plus Google Chat when that is where they asked)."""
     text = pc_only(text)
     p = t.get("payload") or {}
+    if t.get("source") == "learn" or p.get("via") == "learn":
+        # the doer's own upkeep (learn.py: build or repair one of its tools) has no result for an owner: Mission
+        # Control only. 2026-10-31 a 6:15 AM DM named a tool's file, --apply, exit 1 and "Learned: tool ... works".
+        _mc_note(text)
+        return
     key = str(p.get("from") or _first_owner())
     try:
         import receipts

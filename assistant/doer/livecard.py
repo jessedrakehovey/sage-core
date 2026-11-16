@@ -422,6 +422,8 @@ def start(t: dict, phase: str = "") -> str:
     """Post the card for a job that is starting. -> the message name ('' when no card goes out)."""
     if not on() or not isinstance(t, dict) or not _TID.fullmatch(str(t.get("id") or "")):
         return ""
+    if t.get("source") == "learn" or (t.get("payload") or {}).get("via") == "learn":
+        return ""                                # the doer's own tool upkeep: Mission Control only, no card in Chat
     tid = t["id"]
     space, thread = _space_for(t)
     g = _channel()

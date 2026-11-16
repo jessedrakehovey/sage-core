@@ -365,8 +365,8 @@ level: **hot** (score >= 6: tick every 10 min, 4 jobs a day), **busy** (>= 3: 30
 engine itself decides whether a tick is due. An own build or repair job that came back BLOCKED backs
 the pace off for a day (the opportunity is there, the hands cannot use it yet). Rails: skills go
 through `skills.write` (secrets and permissions refused), the engine never runs code, never answers a
-card, never sends; it queues the same gated `agent_run` tickets an owner's `do` would, and each one
-reports in the owner's chat.
+card, never sends; it queues the same gated `agent_run` tickets an owner's `do` would. Their reports go to
+Mission Control only, never Chat, and they get no live card (2026-10-31: a 6:15 AM DM named a tool file and its exit code).
 
 ```bash
 python assistant/doer/learn.py --status
