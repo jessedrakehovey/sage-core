@@ -531,7 +531,24 @@ def made_events(days: int = 60) -> list:
             pass
         m = re.match(r"calendar event '(.*)' (\S+(?: \S+)?) on (\w+)'s calendar", str(r.get("summary") or ""))
         title, when, owner = (m.group(1), m.group(2), m.group(3)) if m else (str(r.get("summary") or "")[:80], "", "")
-        out.append({"id": u["id"], "account": u.get("account", ""), "title": title, "when": when, "owner": owner, "change": r.get("id")})
+        out.append({"id": u["id"], "account": u.get("account", ""), "title": title, "when": when, "owner": owner, "change": r.get("id"),
+                    "group": str(u.get("group") or "")})
+    return out
+
+
+def _one_per_group(evs: list) -> list:
+    """An event put on every owner's calendar is ONE event to talk about: its copies ride along as `copies`, so a
+    change or a removal reaches each calendar and "which one did you mean" never lists the same event twice."""
+    out, first = [], {}
+    for e in evs:
+        g = e.get("group")
+        if g and g in first:
+            first[g].setdefault("copies", []).append(e)
+            continue
+        e = dict(e)
+        if g:
+            first[g] = e
+        out.append(e)
     return out
 
 
@@ -552,7 +569,7 @@ def find_made_event(match: str, date: str = "", hint: str = "") -> tuple:
     title fragment (case-insensitive), `date` narrows to YYYY-MM-DD. `hint` (an event_change's new
     start) only breaks a tie: when several match and exactly one is on that day, that one is meant.
     Still more than one: one short plain question naming them, no dashes or ids (the owner 2026-10-17)."""
-    cands = made_events()
+    cands = _one_per_group(made_events())
     m = (match or "").strip().lower()
     if m:
         cands = [e for e in cands if m in e["title"].lower()]
@@ -620,9 +637,26 @@ def _event_reminder(ev: dict, owner: str, by: str) -> None:
         pass
 
 
-def _log_event(ev: dict, owner: str, account: str, made: dict, by: str) -> None:
+def _log_event(ev: dict, owner: str, account: str, made: dict, by: str, group: str = "") -> None:
     core.log_change("event", f"calendar event '{ev.get('title')}' {ev.get('start')} on {owner}'s calendar",
-                    {"op": "event_remove", "account": account, "id": made.get("id") or ""}, by)
+                    {"op": "event_remove", "account": account, "id": made.get("id") or "", **({"group": group} if group else {})}, by)
+
+
+def _first_name(key) -> str:
+    u = (core.people().get("users") or {}).get(str(key or "")) or {}
+    return str(u.get("name") or key or "their").split()[0]
+
+
+EVERY_OWNER = ("owners", "both", "all", "everyone", "everybody", "us", "ours", "our", "each owner", "every owner", "both owners", "all owners")
+
+
+def event_owners(ev: dict, by: str) -> list:
+    """Whose calendar an event goes on: the owner named in `calendar`, every owner for "owners" / "both" (2026-11-16:
+    "put it on our calendars" put it on one), else the person who asked."""
+    cal = str(ev.get("calendar") or "").strip().lower()
+    if cal in EVERY_OWNER:
+        return list(core.owners()) or [by]
+    return [ev.get("calendar") if ev.get("calendar") in (core.people().get("users") or {}) else by]
 
 
 def retry_events(post_in, now: float | None = None) -> int:
@@ -651,7 +685,7 @@ def retry_events(post_in, now: float | None = None) -> int:
                     + ". It's not on there; add it yourself or ask me to try again.")
             n += 1
             continue
-        _log_event(ev, it.get("owner", ""), it["account"], made, it.get("by", ""))
+        _log_event(ev, it.get("owner", ""), it["account"], made, it.get("by", ""), str(it.get("group") or ""))
         post_in(it["convo"], it["thread"], f"'{title}' is on the calendar now; the second try went through.")
         n += 1
     core.save(EVENT_RETRY, keep)
@@ -896,30 +930,33 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
         if not isinstance(ev, dict) or not core.can(person, "schedule"):
             continue
         import google_api
-        owner = ev.get("calendar") if ev.get("calendar") in (core.people().get("users") or {}) else by
-        accts = google_api.accounts_of(owner)
-        if not accts:
-            out.append(f"Not added to the calendar: {owner}'s Google calendar is not connected yet.")
-            continue
-        eid = secrets.token_hex(16)                     # one id for every attempt: a retry can never double the event
-        try:
-            made = _create_event(accts[0], ev, eid, EVENT_BACKOFF_S)
-        except Exception as e:  # noqa: BLE001
-            if _timed_out(e):
-                # still timing out after the quick retries: the bridge tries again next minute-tick
-                # and says how it went in this thread (2026-10-14: a one-off timeout dropped an event)
-                c = ctx or {}
-                q = core.load(EVENT_RETRY, [])
-                q.append({"ev": ev, "eid": eid, "owner": owner, "account": accts[0], "by": by, "tries": 0,
-                          "convo": str(c.get("convo") or f"dm:{by}"), "thread": str(c.get("thread") or ""),
-                          "next_try": time.time() + EVENT_RETRY_MIN * 60})
-                core.save(EVENT_RETRY, q)
-                out.append(f"The calendar timed out on '{ev.get('title')}', so it isn't on yet. I'll try again in a few minutes and tell you here.")
-            else:
-                out.append(f"That didn't make it onto the calendar ({str(e)[:80]}).")
-            continue
-        _log_event(ev, owner, accts[0], made, by)
-        _event_reminder(ev, owner, by)
+        whose = event_owners(ev, by)
+        group = secrets.token_hex(6) if len(whose) > 1 else ""      # one event on several calendars: changed and removed as one
+        for owner in whose:
+            accts = google_api.accounts_of(owner)
+            if not accts:
+                out.append(f"Not added to {_first_name(owner)}'s calendar: their Google calendar is not connected yet." if group
+                           else f"Not added to the calendar: {owner}'s Google calendar is not connected yet.")
+                continue
+            eid = secrets.token_hex(16)                 # one id for every attempt: a retry can never double the event
+            try:
+                made = _create_event(accts[0], ev, eid, EVENT_BACKOFF_S)
+            except Exception as e:  # noqa: BLE001
+                if _timed_out(e):
+                    # still timing out after the quick retries: the bridge tries again next minute-tick
+                    # and says how it went in this thread (2026-10-14: a one-off timeout dropped an event)
+                    c = ctx or {}
+                    q = core.load(EVENT_RETRY, [])
+                    q.append({"ev": ev, "eid": eid, "owner": owner, "account": accts[0], "by": by, "tries": 0, "group": group,
+                              "convo": str(c.get("convo") or f"dm:{by}"), "thread": str(c.get("thread") or ""),
+                              "next_try": time.time() + EVENT_RETRY_MIN * 60})
+                    core.save(EVENT_RETRY, q)
+                    out.append(f"The calendar timed out on '{ev.get('title')}', so it isn't on yet. I'll try again in a few minutes and tell you here.")
+                else:
+                    out.append(f"That didn't make it onto the calendar ({str(e)[:80]}).")
+                continue
+            _log_event(ev, owner, accts[0], made, by, group)
+            _event_reminder(ev, owner, by)
 
     # edit / remove events the agent itself created (the owner 2026-10-07; the ledger is the allow-list)
     for ev in _list(sug.get("event_remove"))[:4]:
@@ -931,10 +968,11 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
             out.append(why)
             continue
         import google_api
-        if google_api.remove_event(found["account"], found["id"]):
-            core.log_change("event_remove", f"removed calendar event '{found['title']}' ({found['when']})", {"op": "none", "id": found["id"]}, by)
-        else:
-            out.append(f"I couldn't remove '{found['title']}' from the calendar just now.")
+        for one in [found] + list(found.get("copies") or []):       # every owner's copy of it
+            if google_api.remove_event(one["account"], one["id"]):
+                core.log_change("event_remove", f"removed calendar event '{one['title']}' ({one['when']})", {"op": "none", "id": one["id"]}, by)
+            else:
+                out.append(f"I couldn't remove '{one['title']}' from " + (f"{_first_name(one.get('owner'))}'s calendar" if found.get("copies") else "the calendar") + " just now.")
     for ev in _list(sug.get("event_change"))[:4]:
         if not isinstance(ev, dict) or not core.can(person, "schedule"):
             continue
@@ -943,16 +981,17 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
             out.append(why)
             continue
         import google_api
-        try:
-            google_api.update_event(found["account"], found["id"], str(ev.get("title") or ""), str(ev.get("start") or ""),
-                                    str(ev.get("end") or ""), ev.get("location"), ev.get("notes"),
-                                    ev.get("all_day") if "all_day" in ev else (False if ev.get("start") and len(str(ev.get("start"))) > 10 else None))
-        except Exception as e:  # noqa: BLE001
-            out.append(f"I couldn't change '{found['title']}' on the calendar ({str(e)[:80]}).")
-            continue
-        core.log_change("event_change", f"changed calendar event '{found['title']}' ({found['when']}) -> "
-                        + ", ".join(f"{k}={v}" for k, v in ev.items() if k not in ("match", "date") and v not in (None, "")),
-                        {"op": "none", "id": found["id"]}, by)
+        for one in [found] + list(found.get("copies") or []):       # every owner's copy of it
+            try:
+                google_api.update_event(one["account"], one["id"], str(ev.get("title") or ""), str(ev.get("start") or ""),
+                                        str(ev.get("end") or ""), ev.get("location"), ev.get("notes"),
+                                        ev.get("all_day") if "all_day" in ev else (False if ev.get("start") and len(str(ev.get("start"))) > 10 else None))
+            except Exception as e:  # noqa: BLE001
+                out.append(f"I couldn't change '{one['title']}' on " + (f"{_first_name(one.get('owner'))}'s calendar" if found.get("copies") else "the calendar") + f" ({str(e)[:80]}).")
+                continue
+            core.log_change("event_change", f"changed calendar event '{one['title']}' ({one['when']}) -> "
+                            + ", ".join(f"{k}={v}" for k, v in ev.items() if k not in ("match", "date") and v not in (None, "")),
+                            {"op": "none", "id": one["id"]}, by)
 
     if sug.get("followups") and core.can(person, "schedule"):
         import followups
@@ -1131,7 +1170,7 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
 
     # the money talk (scripts/money/brief.py, 2026-11-03): an owner's answer becomes a rule, a target, a move; ledgered, undoable
     for m in _list(sug.get("money"))[:4]:
-        if not (isinstance(m, dict) and m.get("op") and core.is_owner(person) and core.can(person, "teach")) or m.get("op") in ("history", "bills", "balances"):
+        if not (isinstance(m, dict) and m.get("op") and core.is_owner(person) and core.can(person, "teach")) or m.get("op") in ("history", "bills", "balances", "spend"):
             continue                                            # history / bills / balances are read only; its figures went to the model already
         try:
             sys.path.insert(0, str(core.VAULT / "assistant" / "scripts" / "money"))

@@ -191,11 +191,12 @@ NOW = {
     "python packages": ("Building blocks", "all here", "some building blocks did not install", True),
     "playwright browsers": ("A browser of its own", "installed", "the browser the agent works in is not installed yet", True),
     "browser tools": ("Browser hands", "working", "the agent cannot work its browser yet", True),
+    "voice notes": ("Voice notes", "understood on this computer", "the tool that hears voice notes is not installed yet", True),
     "claude cli": ("Claude on this computer", "installed", "Claude is not installed on this computer yet", True),
     "engine updates": ("Updates", "new versions arrive by themselves", "", False),
     "disk": ("Room on the disk", "plenty", "less than 5 GB free: make some room", False),
 }
-FIX_SAME = {"browser tools": "python packages"}       # one fix covers both rows
+FIX_SAME = {"browser tools": "python packages", "voice notes": "python packages"}       # one fix covers these rows
 
 
 def checks() -> dict:

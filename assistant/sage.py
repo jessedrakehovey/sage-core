@@ -433,6 +433,17 @@ def doctor(probe: bool = True, fix: bool = False) -> list:
     sem_ok = bool(r and r.returncode == 0)
     add("semantic search", "ok" if sem_ok else "info", f"fastembed + numpy in {sp}" if sem_ok else f"not installed in {sp}: wiki search falls back to keywords (scripts/wiki_tool.py search)",
         f'"{sp}" -m pip install -r assistant/requirements-semantic.txt   (then org.json -> semantic_python = that interpreter)')
+    # voice notes: the speech package in config voice.python, an older speech install, or the jobs' interpreter. Without
+    # it a voice note in chat is saved and not understood, so this row is info (the agent fetches the package itself the
+    # first time one arrives, agent/space_reader.py ensure_speech), never a failure
+    vp = next((c for c in (os.path.expanduser(str(((_load(HERE / "config.json", {}) or {}).get("voice") or {}).get("python") or "")),
+                           str(Path.home() / ".venvs" / "whisper" / "Scripts" / "python.exe")) if c and Path(c).exists()), "")
+    if not vp:
+        tr = HERE / "scripts" / "transcribe.py"
+        r = subprocess.run([py, str(tr), "--check"], capture_output=True, text=True, timeout=60) if Path(py).exists() and tr.exists() else None
+        vp = py if r and r.returncode == 0 else ""
+    add("voice notes", "ok" if vp else "info", f"understood on this computer ({vp})" if vp else f"the speech package is not in {py}: a voice note is saved, not understood",
+        f'"{py}" -m pip install -r assistant/requirements.txt')
     pb = _playwright_browsers()
     has_browsers = pb.exists() and any(pb.iterdir())
     add("playwright browsers", "ok" if has_browsers else "warn", str(pb) + ("" if has_browsers else " (none installed)"), f'"{py}" -m playwright install chromium')

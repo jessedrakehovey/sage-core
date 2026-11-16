@@ -1771,6 +1771,36 @@ one door to all of it, and the window's **Settings** screen is drawn from what i
   may look and changes nothing. `python assistant/sage.py settings` prints every setting; `settings set <key> <json>`.
 - A new organization's staff role now starts with `task` (hand a task to the owners), as the live one has.
 
+### What the product page says, held to it by code (2026-11-16)
+
+The page for new organizations was checked sentence by sentence against the ENGINE (not this organization's own
+pack). What was not true for a fresh install was built, and `tests/test_claims.py` + `tests/test_money_spend.py` now
+fail when a sentence stops being true.
+
+- **"Ask him every day until it's sorted"**: a team space schedule takes `until_reply` (a person on the people list).
+  `routines.answered_since` reads the space's own lines: once that person has written there since the schedule last
+  asked, the schedule ends (nothing more is posted), the stop is in the change ledger (undo = back on) and the owner
+  who set it gets one line. Their words before the first ask, someone else's words and words in another space do not
+  end it. For someone OUTSIDE the team, the daily look-up schedule that drafts one card and ends itself with
+  `ROUTINE_DONE` is unchanged: every send is still an owner's tap.
+- **"Put it on our calendars"**: `event.calendar` takes `owners` (also both / everyone / us). `actions.event_owners`
+  expands it; the copies share a `group` in the ledger, `find_made_event` folds them into one event with `copies`, and a
+  change or a removal reaches every copy. An owner whose calendar is not connected is named in the refusal or the reply.
+- **"Talk to it"**: `assistant/scripts/transcribe.py` is the engine's own (the only copy used to live outside
+  `assistant/`, so it never shipped) and `faster-whisper` is in `requirements.txt`, which the installer installs.
+  `space_reader.whisper_python()` picks `config.json -> voice.python`, else an older speech install, else the jobs'
+  interpreter when the package is in it; `voice.model` / `voice.language` are optional. An install that predates this
+  fetches the package itself the first time a voice note arrives (`ensure_speech`, once a day at most) and the agent
+  says so; `sage doctor` has a `voice notes` row and the app's computer check a Fix button for it.
+- **"How much did we spend on software last month, across everything?"**: the money tool's read-only `spend`
+  (`scripts/money/brief.py`): one kind of spending (an envelope by name on either side, else a word in the charge) in
+  one month on every linked account, each account's share, the month before, and each merchant that charged more.
+- Checked and already true, now with a test: a photo is looked at, names become real tags, an added event gets its
+  reminder, a correction is a rule before the next reply and can be undone.
+- Still the owner's call, not built: quiet hours hold what goes out BY ITSELF; a message an owner approves at night
+  goes at the tap unless they turn on "Hold what I approve at night" in Settings (`exec.quiet_holds_approved`). And
+  naming a CRM files the connector build (`onboarding.crm_build`, `CRM_CONTRACT.md`); no connector ships ready-made.
+
 ## The organization's own pages, and the shoot-day app in the OS (2026-11-01)
 
 `config.json -> pages` is the one place an organization adds a page to Mission Control without touching the

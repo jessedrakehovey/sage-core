@@ -37,7 +37,7 @@ import forecast  # noqa: E402
 if _other is not None:
     sys.modules["common"] = _other
 
-OPS = ("place", "target", "move", "cover", "assign", "reconciled", "fund", "history", "bills", "balances")
+OPS = ("place", "target", "move", "cover", "assign", "reconciled", "fund", "history", "bills", "balances", "spend")
 
 
 # ------------------------------------------------------------------ the open questions
@@ -232,6 +232,94 @@ def bills(days: int = 0, led: dict | None = None, c: dict | None = None, today: 
     return {"ok": True, "line": "\n".join(lines)}
 
 
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+
+def _month_name(key: str) -> str:
+    return f"{_MONTHS[int(key[5:7]) - 1]} {key[:4]}"
+
+
+def _prev_month(key: str) -> str:
+    y, m = int(key[:4]), int(key[5:7])
+    return f"{y - 1:04d}-12" if m == 1 else f"{y:04d}-{m - 1:02d}"
+
+
+def spend(what: str = "", month: str = "", led: dict | None = None, r: dict | None = None, today: date | None = None,
+          jump_pct: float = 10.0) -> dict:
+    """Read only (2026-11-16, "how much did we spend on software last month, across everything?"): what one kind of
+    spending came to in one month on every linked account, each account's share, the month before, and every merchant
+    that charged more than it did the month before. `what` is an envelope by name on either side (business software
+    and personal software are one question), else words looked for in the charge itself; nothing named = everything
+    that sits in an envelope. `month` is YYYY-MM; left out, the last full month. -> {"ok", "line"}; nothing changes."""
+    led = led if led is not None else C.ledger()
+    r = r or C.rules()
+    today = today or C.now_local().date()
+    key = month if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(month or "")) else _prev_month(today.strftime("%Y-%m"))
+    before = _prev_month(key)
+    if not (led.get("accounts") or {}):
+        return {"ok": False, "line": "no account is on the bank feeds yet."}
+    w = re.sub(r"\s+", " ", str(what or "").strip().lower().strip(".,;:?"))
+    buckets = {k: v for k, v in (r.get("buckets") or {}).items() if not k.startswith("_")}
+    envs = set()
+    if w:
+        for k, v in buckets.items():
+            tail, lab = k.split(":")[-1].lower(), str(v.get("label") or "").lower()
+            if w in (k.lower(), tail, lab) or tail.startswith(w) or (len(w) >= 4 and w in lab):
+                envs.add(k)
+        one = categorize.resolve_bucket(w, r)
+        if one:
+            envs.add(one)
+
+    def mine(t: dict) -> bool:
+        if float(t.get("amount") or 0) >= 0:
+            return False
+        if envs:
+            return t.get("bucket") in envs
+        if w:
+            return w in str(t.get("description") or "").lower()
+        return bool(t.get("bucket")) and str(t.get("bucket")) in buckets
+
+    def rows(k: str) -> list:
+        return [t for t in led["transactions"].values() if str(t.get("posted") or "")[:7] == k and mine(t)]
+
+    names = {str(a.get("id")): str(a.get("name") or a.get("id")) for a in (led.get("accounts") or {}).values()}
+    now, was = rows(key), rows(before)
+    kind = (", ".join(sorted({B.label(e, r) for e in envs})) if envs else (w or "everything in an envelope")).capitalize()
+    if not now:
+        return {"ok": True, "line": f"{kind}, {_month_name(key)}: no charges on the {len(names)} linked account{'s' if len(names) != 1 else ''}."
+                                     + (f" The month before: {C.money(-sum(float(t['amount']) for t in was))}." if was else "")}
+    per = {}
+    for t in now:
+        a = per.setdefault(str(t.get("account_id")), [0.0, 0])
+        a[0] -= float(t.get("amount") or 0)
+        a[1] += 1
+    total, prev = sum(v[0] for v in per.values()), -sum(float(t.get("amount") or 0) for t in was)
+    lines = [f"{kind}, {_month_name(key)}: {C.money(total)} on {len(per)} account{'s' if len(per) != 1 else ''} ({len(now)} charge{'s' if len(now) != 1 else ''})."]
+    for aid, (amt, n) in sorted(per.items(), key=lambda kv: -kv[1][0]):
+        lines.append(f"  {names.get(aid, aid)}: {C.money(amt)} ({n} charge{'s' if n != 1 else ''})")
+    if was:
+        diff = total - prev
+        lines.append(f"The month before ({_month_name(before)}): {C.money(prev)}, so "
+                     + (f"{C.money(abs(diff))} {'more' if diff > 0 else 'less'} this time." if abs(diff) >= 0.5 else "about the same."))
+    else:
+        lines.append(f"The month before ({_month_name(before)}): nothing of this kind on record.")
+    last = {}
+    for t in sorted(was, key=lambda t: str(t.get("posted") or "")):
+        last[C.merchant_key(t.get("description") or "")] = t
+    ups = []
+    for t in sorted(now, key=lambda t: str(t.get("posted") or "")):
+        old = last.get(C.merchant_key(t.get("description") or ""))
+        if not old:
+            continue
+        a, b = -float(old.get("amount") or 0), -float(t.get("amount") or 0)
+        if b - a >= 1 and b > a * (1 + jump_pct / 100):
+            ups.append(f"{str(t.get('description') or '')[:40]} went from {C.money(a, True)} to {C.money(b, True)} ({names.get(str(t.get('account_id')), '')})")
+            last.pop(C.merchant_key(t.get("description") or ""), None)
+    if ups:
+        lines.append("Charged more than the month before: " + "; ".join(ups[:5]) + ".")
+    return {"ok": True, "line": "\n".join(lines)}
+
+
 def balances(led: dict | None = None, c: dict | None = None) -> dict:
     """Read only (2026-11-12, "what is my current balance according to the ledger across all accounts, including credit
     cards?"): every ledger account's latest bank balance, grouped by side, with what each side has in cash, what its cards
@@ -311,6 +399,8 @@ def apply(op: str, payload: dict, by: str = "") -> dict:
         return history(str(payload.get("account") or ""), int(_amt(payload.get("days")) or 30), led, c, r)
     if op == "balances":
         return balances(led, c)
+    if op == "spend":
+        return spend(str(payload.get("what") or payload.get("envelope") or ""), str(payload.get("month") or ""), led, r)
     if op == "place":
         g = resolve_merchant(str(payload.get("merchant") or ""), led, c)
         env = resolve_envelope(str(payload.get("envelope") or ""), r)

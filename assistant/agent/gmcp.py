@@ -124,10 +124,15 @@ WRITE_TOOLS = [
                     "`bills` (read only) when they ask what is due, whether a bill is really due, or why money is short: the predicted "
                     "bills of the next `days`, how each is known, and each account's balance against them; "
                     "`balances` (read only) when they ask what they have or owe right now: every account's latest balance, "
-                    "credit cards included, with the totals and the net. "
+                    "credit cards included, with the totals and the net; "
+                    "`spend` (read only) when they ask what one kind of spending came to in a month ('how much did we spend on software "
+                    "last month, across everything'): the total on every linked account, each account's share, the month before, "
+                    "and every charge that went up. "
                     "Envelope names come from MONEY. Never guess a category yourself.",
      "inputSchema": {"type": "object", "required": ["op"], "properties": {
-         "op": {"type": "string", "enum": ["place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances"]},
+         "op": {"type": "string", "enum": ["place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances", "spend"]},
+         "what": {"type": "string", "description": "spend: the kind of spending, as an envelope name ('software', 'groceries') or a word in the charge; leave out for all of it"},
+         "month": {"type": "string", "description": "spend: YYYY-MM; leave out for the last full month"},
          "account": {"type": "string", "description": "history: the card by name; leave out for every card"},
          "days": {"type": "number", "description": "history: how far back ('a month ago' = 30); bills: how far ahead (default a week)"},
          "merchant": {"type": "string", "description": "place: the merchant as MONEY QUESTIONS names it"},
@@ -276,6 +281,8 @@ WRITE_TOOLS = [
          "to": {"type": "string", "description": " | ".join(OWNERS + ["both"]) + " (an owner key)"}, "say": {"type": "string"}, "prompt": {"type": "string"},
          "space": {"type": "string", "description": "post it in a team space the app is in instead (its name as shown in Chat): fixed `say` only, "
                                                     "opening with the person's name (\"Name, ...\") so they are tagged"},
+         "until_reply": {"type": "string", "description": "with `space` only: the person being asked (their name). The schedule ends by itself "
+                                                          "once they have answered in that space ('ask him every day until he answers')"},
          "until": {"type": "string", "description": "YYYY-MM-DD: the last day it runs"}}}},
     {"name": "unschedule", "description": "Stop a schedule by its id (s2) or its title, from YOUR SCHEDULES.",
      "inputSchema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string", "description": "the schedule's id (s2) or its title"}}}},
@@ -300,10 +307,11 @@ WRITE_TOOLS = [
      "inputSchema": {"type": "object", "required": ["to", "about", "at"], "properties": {
          "to": {"type": "string", "description": "an owner key"}, "about": {"type": "string"}, "at": {"type": "string", "description": "YYYY-MM-DDTHH:MM"}}}},
     {"name": "event",
-     "description": "Add an event to an owner's own calendar (invites nobody). One call per event; a three-day trip is three calls.",
+     "description": "Add an event to an owner's own calendar (invites nobody), or to every owner's with calendar \"owners\" "
+                    "(\"put it on our calendars\"). One call per event; a three-day trip is three calls.",
      "inputSchema": {"type": "object", "required": ["title", "start"], "properties": {
          "title": {"type": "string"}, "start": {"type": "string", "description": "YYYY-MM-DD HH:MM (or YYYY-MM-DD with all_day)"},
-         "end": {"type": "string"}, "calendar": {"type": "string", "description": "an owner key"}, "location": {"type": "string"},
+         "end": {"type": "string"}, "calendar": {"type": "string", "description": "an owner key, or \"owners\" for every owner's calendar"}, "location": {"type": "string"},
          "notes": {"type": "string"}, "all_day": {"type": "boolean"}}}},
     {"name": "event_change",
      "description": "Change an event YOU added (see CALENDAR EVENTS YOU ADDED). Events anyone else made are theirs.",

@@ -48,7 +48,7 @@ CAPS = {"learn": 3, "unlearn": 3, "remember": 5, "forget": 5, "schedule": 2, "un
         "event_change": 4, "event_remove": 4, "followup": 4, "task": 3, "do": 3, "note": 2, "skill": 2, "decide": 2, "switch": 2,
         "identify": 5, "job": 2, "approve": 2, "blocked": 3, "project": 3, "money": 4, "onboard": 3, "revoke": 3}
 # the money deeds (scripts/money/brief.py, 2026-11-03): an owner's answer in the money talk becomes a rule, a target, a move
-MONEY_OPS = ("place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances")
+MONEY_OPS = ("place", "target", "move", "assign", "cover", "reconciled", "fund", "history", "bills", "balances", "spend")
 PROJECT_OPS = ("open", "update", "park", "close", "resume")
 # a project step that pays, moves money, deletes or handles a credential is never a job of the system's (the money lane never pays)
 _PROJECT_OWNER_ONLY = re.compile(r"\b(?:pay|pays|paying|paid|transfer|wire|venmo|zelle|withdraw|purchase|buy|delete|erase|wipe|format|password|passcode|credential)\b", re.I)
@@ -452,6 +452,11 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
                 return False, "refused: I don't see that team space; give its name as it shows in Chat.", payload
             if not _s(payload.get("say")):
                 return False, "refused: a team space schedule posts fixed `say` text, addressed by name (\"Name, ...\").", payload
+        if _s(payload.get("until_reply")):
+            if not _s(payload.get("space")):
+                return False, "refused: `until_reply` goes with `space`: the schedule asks in a team space and stops when that person answers there.", payload
+            if not routines.person_key(payload["until_reply"]):
+                return False, "refused: that person is not on the people list, so their answer could not be recognised. An owner adds them in Settings first.", payload
         payload.setdefault("to", person.get("key", "both"))
         if "on" in when and not (_s(payload.get("say")) or _s(payload.get("prompt"))).strip():
             return False, "refused: an event schedule needs `say` (what to tell them; what happened is added by code).", payload
@@ -506,9 +511,21 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         return True, f"accepted: {name} turns {'on' if on else 'off'} right after this reply. Say it in one clause.", {"job": j["key"], "on": on}
     if kind == "event":
         import google_api
-        owner = payload.get("calendar") if payload.get("calendar") in (core.people().get("users") or {}) else person.get("key", "")
+        import actions
         if not _s(payload.get("title")) or not _s(payload.get("start")):
             return False, "refused: an event needs a title and a start (YYYY-MM-DD HH:MM, or YYYY-MM-DD with all_day).", payload
+        whose = actions.event_owners(payload, person.get("key", ""))
+        if len(whose) > 1:                                  # "on our calendars": every owner's, the connected ones
+            on = [o for o in whose if google_api.accounts_of(o)]
+            if not on:
+                return False, "refused: no owner's Google calendar is connected yet (they can say 'connect my calendar' and its card comes up in chat). Say so in one line; do not say it is on the calendar.", payload
+            payload["calendar"] = "owners"
+            names = " and ".join(actions._first_name(o) for o in on)
+            missing = [actions._first_name(o) for o in whose if o not in on]
+            return True, (f"accepted: it goes on {names}'s calendar{'s' if len(on) > 1 else ''} right after this reply."
+                          + (f" {' and '.join(missing)}'s calendar is not connected yet: say that too." if missing else "")
+                          + " Say it in one clause, as something you've put on."), payload
+        owner = whose[0]
         if not google_api.accounts_of(owner):
             return False, f"refused: {owner}'s Google calendar is not connected (they can say 'connect my calendar' and its card comes up in chat). Say so in one line; do not say it is on the calendar.", payload
         payload["calendar"] = owner
@@ -776,6 +793,13 @@ def _validate_money(payload: dict) -> tuple:
         return True, ("accepted, read only (nothing changes): the forecast says\n" + h["line"] + "\nAnswer from these figures: "
                       "say plainly whether a bill they ask about is really due (and that the date is predicted from past charges), "
                       "then the breakdown per account, balance against bills. Never 'I can't move money' to a question."), out
+    if op == "spend":                       # read only: one kind of spending in one month, every account, against the month before (2026-11-16)
+        h = brief.spend(_s(payload.get("what") or payload.get("envelope")), _s(payload.get("month")))
+        if not h["ok"]:
+            return False, f"refused: {h['line']}", payload
+        return True, ("accepted, read only (nothing changes): the ledger says\n" + h["line"] + "\nAnswer from these figures: the total "
+                      "first, then each account in a short line, then how it compares with the month before, then any charge that "
+                      "went up, by name. A charge that is not in an envelope yet is not counted: say so if they seem to expect more."), out
     if op == "balances":                    # read only: every account's balance, cards included, and the net (2026-11-12)
         h = brief.balances()
         if not h["ok"]:

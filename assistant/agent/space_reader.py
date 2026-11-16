@@ -55,7 +55,9 @@ READER_ADDRESS = _org("chat_reader") or _org("alert_from")
 WATERMARKS = core.DATA / "space_watermarks.json"
 SEEN = core.DATA / "seen_messages.json"
 ATTACH = core.DATA / "attachments"
-WHISPER_PY = Path.home() / ".venvs" / "whisper" / "Scripts" / "python.exe"
+WHISPER_PY = Path.home() / ".venvs" / "whisper" / "Scripts" / "python.exe"      # a speech install from before the engine carried its own
+TRANSCRIBE = core.AGENT.parent / "scripts" / "transcribe.py"                      # the engine's own (2026-11-16)
+SPEECH_TRY = core.DATA / "speech_install.json"
 AUDIO_EXT = (".m4a", ".mp3", ".ogg", ".oga", ".opus", ".wav", ".aac", ".amr", ".webm", ".mp4", ".mov", ".m4v")
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic")
 CHAT = "https://chat.googleapis.com/v1"
@@ -217,16 +219,64 @@ def download(att: dict, stamp: str = "") -> Path | None:
         return None
 
 
+def voice_cfg() -> dict:
+    """config.json -> voice: {"python": an interpreter that has the speech package, "model": "small.en", "language": "en"}.
+    All optional: with nothing set, the jobs' own interpreter and an English model."""
+    try:
+        v = json.loads((core.AGENT.parent / "config.json").read_text(encoding="utf-8-sig")).get("voice")
+    except (OSError, ValueError):
+        v = None
+    return v if isinstance(v, dict) else {}
+
+
+def _has_speech(py: str) -> bool:
+    try:
+        return subprocess.run([py, str(TRANSCRIBE), "--check"], capture_output=True, timeout=60, creationflags=core.NO_WINDOW).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def whisper_python() -> str:
+    """The interpreter that can turn a voice note into words: config voice.python, a speech install from before the
+    engine carried its own, else the jobs' interpreter when the package is in it (assistant/requirements.txt, which the
+    installer installs). '' = voice notes cannot be understood on this computer yet."""
+    for cand in (os.path.expanduser(str(voice_cfg().get("python") or "")), str(WHISPER_PY)):
+        if cand and Path(cand).exists():
+            return cand
+    py = os.path.expanduser(_org("python")) or sys.executable
+    return py if Path(py).exists() and _has_speech(py) else ""
+
+
+def ensure_speech() -> bool:
+    """An install from before the speech package was one of the engine's own has none: fetch it into the jobs'
+    interpreter in the background, once a day at most, so the next voice note is understood without anyone going to
+    the computer. -> True when an install was started now."""
+    py = os.path.expanduser(_org("python")) or sys.executable
+    last = core.load(SPEECH_TRY, {}) or {}
+    if not Path(py).exists() or time.time() - float(last.get("ts") or 0) < 86400:
+        return False
+    core.save(SPEECH_TRY, {"ts": time.time(), "python": py})
+    try:
+        subprocess.Popen([py, "-m", "pip", "install", "--disable-pip-version-check", "--no-warn-script-location", "faster-whisper"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, creationflags=core.NO_WINDOW)
+    except OSError:
+        return False
+    return True
+
+
 def transcribe(path: Path, timeout: int = 900) -> str:
-    """Local faster-whisper through scripts/transcribe.py. '' on failure. A failed run is tried once more
-    offline (the cached model, no hub check), since one hiccup lost the owner's voice note (2026-11-07)."""
-    if not WHISPER_PY.exists():
+    """Local faster-whisper through the engine's scripts/transcribe.py. '' on failure. A failed run is tried once more
+    offline (the cached model, no hub check), since one hiccup lost an owner's voice note (2026-11-07)."""
+    py = whisper_python()
+    if not py:
         return ""
+    v = voice_cfg()
+    extra = (["--model", str(v["model"])] if v.get("model") else []) + (["--language", str(v["language"])] if v.get("language") else [])
     txt = path.with_suffix(".txt")
     for offline in (False, True):
         env = dict(os.environ, HF_HUB_OFFLINE="1") if offline else None
         try:
-            r = subprocess.run([str(WHISPER_PY), str(core.VAULT / "scripts" / "transcribe.py"), str(path), "--out-dir", str(path.parent)],
+            r = subprocess.run([py, str(TRANSCRIBE), str(path), "--out-dir", str(path.parent)] + extra,
                                capture_output=True, text=True, timeout=timeout, cwd=str(core.VAULT), env=env,
                                creationflags=core.NO_WINDOW)
             if txt.exists() and txt.read_text(encoding="utf-8", errors="replace").strip():
@@ -268,6 +318,14 @@ def describe_attachments(atts: list, who: str, stamp: str = "") -> list:
         sfx = p.suffix.lower()
         if ct.startswith(("audio", "video")) or sfx in AUDIO_EXT:
             tr = transcribe(p)
+            if not tr and not whisper_python():
+                # no speech tool on this computer (an install older than the engine's own): it is fetched now, in the
+                # background, and this note is heard on the next message that carries it (retry_failed_voice)
+                started = ensure_speech()
+                parts.append(f"[voice note from {who} saved at {p}; transcription failed] [The tool that hears voice notes is not on this "
+                             f"computer yet{'; it is being installed right now, by itself, and takes a few minutes' if started else ''}. Say so in one "
+                             "plain line and ask them to type this one or send it again in a few minutes. Never send them to the computer.]")
+                continue
             parts.append(f"[voice note from {who}, transcribed on this machine: \"{tr}\"]" if tr
                          else f"[voice note from {who} saved at {p}; transcription failed]")
         elif ct.startswith("image") or sfx in IMAGE_EXT:
@@ -288,4 +346,4 @@ if __name__ == "__main__":
         print(json.dumps(spaces(), indent=1))
     else:
         print(json.dumps({"client": CLIENT.exists(), "reader_token": TOKEN.exists(), "app": gchat.configured(),
-                          "whisper": WHISPER_PY.exists()}, indent=1))
+                          "whisper": bool(whisper_python())}, indent=1))

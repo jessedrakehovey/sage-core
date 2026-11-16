@@ -7,6 +7,9 @@ do one thing: put a message in front of an owner. `say` posts fixed text (zero L
 anyone outside the household. A routine with `space` (2026-11-02: "tag him in a message every day in
 our group chat") posts its fixed `say` in a team space the app is in instead, never the owners' home
 space or a DM, and never a `prompt` (a team space is business only). `until` (YYYY-MM-DD) ends it.
+`until_reply` (a person on the people list; team space schedules only) ends it the moment that person has written in
+that space since the last time it asked: "ask him every day until he answers" stops by code, and the owner who set it
+is told it stopped (2026-11-16).
 
   when: {"daily": "07:30"} | {"weekly": "mon 07:30"} | {"once": "2026-10-12 09:00"} | {"every_hours": 4}
         | {"on": "<event>", "match": "<words>"}
@@ -310,9 +313,44 @@ def add(spec: dict, by: str = "", now: datetime | None = None) -> dict:
     on_missing = str(spec.get("on_missing") or "").strip().lower()
     if on_missing and on_missing not in ("skip", "say"):
         return {"status": "refused", "reason": "on_missing must be skip (post nothing when there is nothing) or say"}
-    extra = {k: v for k, v in (("space", space), ("space_title", stitle), ("until", until), ("on_missing", on_missing)) if v}
+    until_reply = ""
+    if str(spec.get("until_reply") or "").strip():
+        if not space:
+            return {"status": "refused", "reason": "until_reply is for a team space schedule: it stops when that person answers there"}
+        until_reply = person_key(spec["until_reply"])
+        if not until_reply:
+            return {"status": "refused", "reason": "I don't know who that is; they need to be on the people list first"}
+    extra = {k: v for k, v in (("space", space), ("space_title", stitle), ("until", until), ("on_missing", on_missing),
+                               ("until_reply", until_reply)) if v}
     with core.locked:
         return _add(title, say, prompt, to, when, due, by, extra)
+
+
+def person_key(name) -> str:
+    """Anyone on the people list (an owner or a team member) by key, full name or first name; '' when unknown."""
+    want = re.sub(r"[^a-z0-9 ]", "", str(name or "").lower()).strip()
+    for key, u in (core.people().get("users") or {}).items():
+        full = str(u.get("name") or "").lower()
+        if want and (want in (key, full) or (full and want == full.split()[0])):
+            return key
+    return ""
+
+
+def answered_since(r: dict) -> bool:
+    """True when the person a team space schedule waits on (`until_reply`) has written in that space since the schedule
+    last asked there. It has to have asked at least once: what they wrote before the first ask is not its answer."""
+    who = str(((core.people().get("users") or {}).get(str(r.get("until_reply") or "")) or {}).get("name") or "").strip().lower()
+    if not who or not r.get("space"):
+        return False
+    asked = answered = False
+    for row in core.rows(core.TRANSCRIPT):
+        if row.get("convo") != r["space"]:
+            continue
+        if row.get("routine") == r["id"]:
+            asked, answered = True, False
+        elif asked and str(row.get("who") or "").strip().lower() == who and row.get("channel") != "routine":
+            answered = True
+    return answered
 
 
 def _where(r: dict) -> str:
@@ -783,6 +821,22 @@ def tick(post, now: datetime | None = None, run_prompt=None, post_space=None) ->
             continue
         name = core.profile().get("name", "Agent")
         text = ""
+        if r.get("until_reply") and r.get("space") and int(r.get("runs") or 0) >= 1 and answered_since(r):
+            # the person it was asking has answered in that space: it ends here, nothing is posted there, and the
+            # owner who set it hears once that it stopped
+            first = str(((core.people().get("users") or {}).get(r["until_reply"]) or {}).get("name") or "They").split()[0]
+            r["active"] = False
+            r["stopped"] = now.strftime(FMT) + " (answered)"
+            _history_add(r["id"], True, "", note=f"ended: {first} answered", now=now)
+            core.log_change("routine_off", f"stopped schedule {r['id']}: {r['title']} ({first} answered)", {"op": "routine_on", "id": r["id"]}, "code")
+            by = str(r.get("by") or "")
+            if by in (core.owners() or {}):
+                line = f"{first} answered in {r.get('space_title') or 'the team space'}, so I've stopped asking: {r['title']}."
+                post(by, line)
+                core.say(f"dm:{by}", name, line, channel="routine", meta={"routine": r["id"]})
+            changed = True
+            touched.add(r["id"])
+            continue
         if _idle_paused(r, now):
             # the owner it is for has not written in a while: this occurrence is skipped (not fired, not shifted into the
             # night); the routine keeps its natural next time, and the hold is in its history
