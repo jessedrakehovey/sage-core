@@ -611,6 +611,10 @@ def validate(kind: str, payload, person: dict, t: dict) -> tuple:
         text = _s(payload.get("text"))
         if len(text) < 6:
             return False, "refused: say exactly what to do, where, with which values.", payload
+        import billcheck                    # a paid-or-not check on a stale provider login is never sent (billcheck.py)
+        stale = billcheck.shape(text)[1]
+        if stale:
+            return False, f"refused: no job was sent. Tell them exactly this, in one line: {stale}", payload
         if payload.get("lane") not in lanes():
             payload["lane"] = _guess_lane(text)
         where = "computer" if _s(payload.get("where")).lower() == "computer" else "browser"

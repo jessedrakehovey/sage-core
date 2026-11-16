@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import billcheck  # noqa: E402
 import core  # noqa: E402
 import routines  # noqa: E402
 import skills  # noqa: E402
@@ -482,9 +483,11 @@ def decide_card(lane: str, d: dict, person: dict, ctx: dict) -> dict:
 def _queue_do(lane: str, text: str, person: dict, ctx: dict, where: str = "") -> bool:
     """Hand work that must be DONE somewhere (a site, an account) to the doer (assistant/doer):
     one agent_run ticket, then wake the doer so it starts within seconds instead of at the
-    next spine tick. The doer answers in this same conversation."""
+    next spine tick. The doer answers in this same conversation. A paid-or-not check is sent to the
+    provider's own site, never a bank; a stale provider login raises billcheck.Stale (billcheck.py)."""
     sys.path.insert(0, str(core.AGENT.parent / "scripts"))
     import tickets
+    text = billcheck.check(text)
     where = "computer" if str(where or "").lower() == "computer" else ""
     sid = f"do|{where or 'web'}|{time.time():.0f}|{text[:40]}" if where else f"do|{time.time():.0f}|{text[:40]}"
     skill = skills.match(text)                             # what was learned on that site last time rides along
@@ -1189,6 +1192,9 @@ def apply(sug: dict, person: dict, ctx: dict | None = None) -> list:
         lane = do.get("lane") if do.get("lane") in LANES else "personal"
         try:
             tid = _queue_do(lane, str(do["text"]).strip(), person, ctx or {}, where=str(do.get("where") or ""))
+        except billcheck.Stale as e:
+            out.append(str(e))
+            continue
         except Exception as e:  # noqa: BLE001
             tid = ""
             out.append("I couldn't start on that just now; ask me again in a minute.")

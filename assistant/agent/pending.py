@@ -415,9 +415,15 @@ def answer(key: str, option: str, text: str = "", by: str = "owner") -> dict:
         close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; filed for the builder as {k}.", applied)
         said = "Got it, building it with your OK. You'll hear from me here when it lands, with an undo."
     elif e["kind"] in ("ask", "build") and opt.startswith("have sage"):
-        tid = _queue(e, text, by)
-        close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; handed to {'the doer' if _to_doer(e['text']) else 'the operator'} ({tid or 'already queued'}).", applied)
-        said = "On it. Anything that goes out to someone will still come to you as a card first."
+        import billcheck
+        try:
+            tid = _queue(e, text, by)
+        except billcheck.Stale as ex:              # a paid-or-not check on a stale provider login: no job, one line
+            close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; not sent: {ex}", applied)
+            said = str(ex)
+        else:
+            close(e, "approved", f"Approved by {by} on a chat card {core.stamp()}; handed to {'the doer' if _to_doer(e['text']) else 'the operator'} ({tid or 'already queued'}).", applied)
+            said = "On it. Anything that goes out to someone will still come to you as a card first."
     else:
         return {"ok": False, "reason": f"unknown option {option!r}"}
     try:

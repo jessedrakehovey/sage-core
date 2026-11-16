@@ -486,6 +486,9 @@ around the same read-only brain:
 - **Whether a bill or fee is paid is looked up (2026-10-30, gap g-c0da13).** "I probably paid the fee by now. So now
   what do I do with it" got "a quick search of your email or bank would settle it". Both prompts now say: `mail_search`
   for the receipt first, then a `do` that signs in to the account and reads the payment and the next step. Section 22.
+  Since 2026-11-16 (the Oct 30 Cox check signed in to Chase) `billcheck.py` shapes every such job in code: it names the
+  provider's own site (cox.com, etags.com...) and forbids any bank, credit union or card site; when that provider's
+  login is marked stale in the doer's `sites.json`, no job is sent and the owner gets one line that the login needs updating.
 - **Who is at fault for a charge is settled and acted on (2026-11-12, gap g-b9f40e).** "So this means that our mechanic
   parked our vehicle somewhere illegal" got "I can't back that up". Both prompts now say: read the notice, texts, mail and
   calendar for who had the car, then the same turn a `task` draft asking them to cover it (or a `do`). Section 26.

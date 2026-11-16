@@ -1535,6 +1535,8 @@ def handle(msg: dict, pre_ack: str = "") -> None:
             try:
                 tid = actions._queue_do(lane, claims.forced_task_text(person["name"], text, r.get("reply")), person,
                                         {"convo": convo, "thread": thread, "space": dm_space})
+            except actions.billcheck.Stale as e:
+                tid, r["reply"] = "", str(e)          # the promised job cannot run on a dead login; say so instead
             except Exception as e:  # noqa: BLE001
                 tid, _ = "", log(f"forced do failed: {type(e).__name__}: {str(e)[:120]}")
             if tid:
