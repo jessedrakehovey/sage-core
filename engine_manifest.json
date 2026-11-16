@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+1011fea",
+  "version": "2026.11.15+02287bc",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T17:13:58"
+  "synced": "2026-11-15T17:15:14"
  },
  "modules": {
   "money": {
@@ -407,7 +407,7 @@
   "assistant/tests/test_builder_order.py": "cc763c2e718d3868bdc6425ece768fae9c00ec9014c24d307152e54d5a70ecd0",
   "assistant/tests/test_builder_verify.py": "f16933b5d2d125fbd08d736dc8d37d0e65db193515e64d409cf45a2bd642b0bb",
   "assistant/tests/test_burst.py": "8ecbd9b8a57e012921ad892d9f2ae7d22cf4e09238972a4e0241bddb676faeae",
-  "assistant/tests/test_capability.py": "7339b17e60c46e359d1311d67d82cd1323e9ea9f71e4fd11a8f85cef600b8e70",
+  "assistant/tests/test_capability.py": "c194e5af4e17f3646d0e242b01987d78c0d4cffc6265fbd60b5972730c69394f",
   "assistant/tests/test_capacity.py": "cc545627a22adfcbc383a92c3424dc332ccb1c08f2756be2ad3ee6ae18d15eac",
   "assistant/tests/test_cards_digest.py": "d8b4a4b1cfd242f29430d1471bcf76068ce99f47a05ee4c0eae1c96822594ddb",
   "assistant/tests/test_cards_exec.py": "b6e1d162bb3cc74298785e0c24d31b0add4a740708de942eca9b2eb37835285d",

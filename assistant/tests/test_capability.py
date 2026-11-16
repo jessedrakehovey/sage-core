@@ -802,6 +802,33 @@ sysc = cards.post([{"header": "Email to Sam", "lane": "wedding",
 es.set_status(es.enqueue("email_send", SB, es.APPROVER, "card:rs-seed2")["id"], "done", "SENT=1")
 sa_ = cards.answer(sysc.get("qid") or sysc.get("id"), "Send", by="gchat:owner1")
 ok("RESEND" in str(sa_.get("mint_error")) and not sa_.get("ticket"), f"a system-raised second email to the same thread is still refused ({sa_})")
+# the 2026-10-25 17:28 ask itself (a photo of the refusal): replayed, a further email in the same thread says RESEND
+# and the first tap sends
+RS_PHOTO = ("[owner1 sent a photo. LOOK AT IT with your Read tool before answering: {{ORG_ROOT}}"
+            "\\assistant\\data\\agent\\attachments\\20261025-172824_Image_935FA29F-4D6B-4299-B65C-BA5F48EAC715.png]")
+RB3 = "Hi Corwin,\n\nJust a nudge on the Sloane & Bram cut: the deadline is Nov 2.\n\nowner1"
+
+
+def fake_run_photo(prompt, resume="", model="", timeout=600):
+    import gmcp
+    os.environ["AGENT_TURN"] = brain._TURN["path"]
+    seen["rs3"] = gmcp.call("task", {"lane": "wedding", "text": "Follow-up email to Corwin, deadline Nov 2",
+                                     "draft": {"channel": "email", "to": RB["to"], "name": "Corwin", "subject": RB["subject"],
+                                               "text": RB3, "account": RB["from"]}})
+    return {"ok": True, "session": "S21b", "text": "Here's the follow-up to Corwin again, right under this."}
+
+
+brain._run_claude = fake_run_photo
+n0, g0 = len(NOTES), len(cap._load()["gaps"])
+bridge.handle({"channel": "local", "person": owner1, "text": RS_PHOTO, "convo": "spaces/AAQAtest",
+               "thread": "spaces/AAQAtest/threads/corwin", "space": "spaces/AAQAtest", "direct": True})
+rsc3 = [c for c in (cards._read(f) for f in cards.LIVE.glob("*.json"))
+        if (((c.get("questions") or [{}])[0].get("exec") or {}).get("payload") or {}).get("body") == RB3]
+ok(str(seen["rs3"]).startswith("accepted") and len(rsc3) == 1 and "RESEND" in rsc3[0]["questions"][0]["question"],
+   f"the photo ask: the further email card says RESEND by itself ({seen['rs3'][:120]})")
+ra3 = cards.answer(rsc3[0]["id"], rsc3[0]["questions"][0]["exec"]["approve_label"], by="gchat:owner1")
+ok(ra3.get("ok") and ra3.get("ticket") and not ra3.get("mint_error") and len(NOTES) == n0 and len(cap._load()["gaps"]) == g0,
+   f"the photo ask: the first tap sends, no refusal, no build filed ({ra3.get('mint_error') or ra3.get('reason')})")
 # ---------------------------------------------------------------- 22. "did I pay the fee" is looked up, never sent back to the owner
 # the owner, 2026-10-29 20:40 (gap g-c0da13): "I probably paid the fee by now. So now what do I do with it" was answered
 # "I couldn't check the account to confirm the fee, so a quick search of your email or bank for a Cox charge would settle it".
