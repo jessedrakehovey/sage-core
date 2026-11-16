@@ -301,7 +301,8 @@ urgency, and the weekly-digest rule was beaten by each poster's own `"urgent": T
   `cards.system_to_chat` (env `ASSISTANT_CARDS_SYSTEM=chat` in tests).
 - **The reflex works the system cards** (`reflex.d_system_cards` + `fix_system_card`): step 0 presses the card's own
   recommended button by code (run the job / the task / the drain / the sensor; on a stalled ticket's "Waiting Nd" card
-  it taps "Hand it to Sage" on the card itself, so the card closes and the ticket goes to the operator), an hour later a still-open finding
+  it taps "Hand it to Sage" on the card itself, so the card closes and the ticket goes to the operator; on a weekly
+  hand-off card such as Outstanding balance it taps the recommended button, e.g. "Check the open invoices"), an hour later a still-open finding
   becomes ONE build request with the evidence, and only a sign-in that is the owner's to do (a connection card) or a
   paused channel with approved items behind it is said in Chat, in the card's own words, once a week at most. Nothing
   else about the machinery reaches an owner.

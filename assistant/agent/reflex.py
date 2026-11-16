@@ -773,6 +773,33 @@ def fix_leak(f: dict, d: dict, dry: bool) -> dict:
     return {"what": f"filed the build request to gate {cls}" + (f": {key}" if key else ""), "ok": bool(key), "build": key, "final": True}
 
 
+def _hands_off(data: dict) -> bool:
+    """A weekly card whose recommended button hands the work to Sage (a connector sensor's weekly card: Outstanding
+    balance, Cold leads). It carries a sentinel key, so it is a system card and never reaches the digest; nothing pressed it and
+    each week it became a build request (card q33fb0a5b9392, 2026-11-16)."""
+    return bool((data.get("act") or {}).get("handoff")) and not str(data.get("sentinel_key") or "").startswith("staged:")
+
+
+def _tap_handoff(data: dict, dry: bool) -> dict:
+    """Tap the card's own recommended button, as an owner would: the card is answered (the finding clears) and the sweep
+    (cards._act_on_sentinel) mints the operator ticket that does the work; anything outward comes back as its own card."""
+    if dry:
+        return {"what": "would hand it to Sage from its card", "ok": True}
+    label = ""
+    try:
+        sys.path.insert(0, str(core.AGENT.parent / "scripts"))
+        import cards
+        c = cards._read(cards.LIVE / f"{data.get('qid')}.json") or {}
+        opts = [str(o.get("label") or "") for o in ((c.get("questions") or [{}])[0].get("options") or [])]
+        label = next((o for o in opts if "(recommended)" in o.lower()), opts[0] if opts else "")
+        r = cards.answer(str(data.get("qid")), label, by="reflex") if label else {"ok": False, "reason": "it has no button"}
+    except Exception as e:  # noqa: BLE001
+        r = {"ok": False, "reason": f"{type(e).__name__}: {str(e)[:100]}"}
+    if r.get("ok"):
+        return {"what": f"handed it to Sage from its card ({_short(label, 50)})", "ok": True}
+    return {"what": f"could not hand it to Sage: {_short(r.get('reason'), 100)}", "ok": False}
+
+
 def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
     """Step 0: the card's own recommended button, pressed by code (run the job / the task / the drain / the sensor);
     a connection that needs a sign-in has no code step: final at once, so the owner hears one line. Step 1: the
@@ -784,6 +811,8 @@ def fix_system_card(f: dict, d: dict, dry: bool) -> dict:
         return {"what": "a sign-in only the owner can do", "ok": False, "final": True}
     if data.get("kind") == "breaker":
         return {"what": "a channel paused on repeated failures; the owner decides", "ok": False, "final": True}
+    if step == 0 and _hands_off(data):
+        return _tap_handoff(data, dry)
     if step == 0 and str(data.get("sentinel_key") or "").startswith("staged:"):
         # a stalled ticket's "Waiting Nd" card (a system card since 2026-11-09): its recommended button is "Hand it to
         # Sage", a tap on the card itself (cards._act_on_sentinel mints the operator ticket), so the card is answered
@@ -1090,9 +1119,10 @@ def tick(dry: bool = False, only: tuple = (), now: float | None = None) -> dict:
             continue
         out["open"] += 1
         tries = [x for x in f.get("fixes") or [] if "hand it to Sage" in str(x.get("what") or "") or str(x.get("what") or "").startswith(("handed it", "closed it"))]
-        if f.get("kind") == "system_card" and str((f.get("data") or {}).get("sentinel_key") or "").startswith("staged:") \
+        if f.get("kind") == "system_card" and (str((f.get("data") or {}).get("sentinel_key") or "").startswith("staged:")
+                                               or _hands_off(f.get("data") or {})) \
                 and len(tries) < 2 and not any(str(x.get("what") or "").startswith(("handed it", "closed it")) for x in tries):
-            # a "Waiting Nd" card gets its hand-off tap before anything else, even one escalated before the tap existed
+            # a "Waiting Nd" card (or a weekly hand-off card) gets its tap before anything else, even one escalated before the tap existed
             # (card q52050f15f98a, 2026-11-11); two failed taps and it takes the ordinary road (a build request)
             r = fix_system_card(dict(f, step=0), d, dry)
             f["fixes"].append({"ts": now, "what": r.get("what", ""), "ok": bool(r.get("ok")), "final": False, "build": ""})
