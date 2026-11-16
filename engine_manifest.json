@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.15+9aca13b",
+  "version": "2026.11.15+ee72820",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-15T18:44:11"
+  "synced": "2026-11-15T19:17:53"
  },
  "modules": {
   "money": {
@@ -179,8 +179,8 @@
   "assistant/agent/websearch.py": "a86d1b9b2218a6179f595b5e84c23e5e714b25cf86ee5340fe6eed90218e6694",
   "assistant/agent/wiki_writer.py": "2e453d90276acafaddace8f68d539c9a223ce1749f424f506f243783dd054834",
   "assistant/agent/worklog.py": "d10d5ef817ce171a309a22354d78921dec7898dc90dbd7d55e35d88037ee4b6f",
-  "assistant/app.py": "2d2f3e75de8f52deb3f5ae2ce818fb56bec978baea29c25091d5b40a97e927f4",
-  "assistant/app_ui.html": "be5db1dda02226fef6a58a1aa364d9d682349406b7d9dd477979f2f5ee774ef8",
+  "assistant/app.py": "3fee5be46de00df7e372f264d1021340768056395726baf9fe0a931da50882ae",
+  "assistant/app_ui.html": "8bf1d09219d5cf05d76f10b126d2414ac0702c522d45ce65e79f59b9586b1b64",
   "assistant/catalog.py": "f750fdfcb56967ba75a20c59a78e9a644c59756f1532cd281af862a917bbe25d",
   "assistant/catalog/_schema.json": "a4937ca84147f9c9999334f49c659d8e5b9c928d89d6f81c60a66ee6f5eea82d",
   "assistant/catalog/acuity.json": "ded4abb33d5603b5d302125db99092fe7f3751f1e9fcd2893d9a1299b3df6ced",
@@ -399,7 +399,7 @@
   "assistant/templates/data/sop_map.json": "3e37ed67c3cc301da57cc6d833901b0d95e9fcc779ed72a8720478924bcf7e78",
   "assistant/tests/test_account_fallback.py": "b6c5cafa0547f88e00c244cd94125bcbac68df81abc417ee92821d2cdaefc681",
   "assistant/tests/test_agent.py": "d056b10580acee3b00b654083f84f2b1e7313a11f9e183e3d3640a323acb3d17",
-  "assistant/tests/test_app.py": "0d2b941824c022bd64f30cc3aba2822ef9e566bb73ce702338b1921c7358001e",
+  "assistant/tests/test_app.py": "746e7d9b026f4d9a096e6e129d887af4b8c25f70bdf0c37a7f679ed1f31420cc",
   "assistant/tests/test_browser_mcp.py": "8e3c2581b008a73690409d8d8e07b1a8dbf03da8cbdd184e19e3911d2d67077f",
   "assistant/tests/test_browser_stay_up.py": "ed244d913588e5046a0d996e796d903d826297cdcfa3bde03465bc79329948e8",
   "assistant/tests/test_build_ack.py": "5157cc084a99371522ea4e4ad06347795f3451935f91da8cece68f32cfe88246",

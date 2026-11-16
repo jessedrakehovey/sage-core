@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sage</title>
 <meta name="theme-color" content="#fbf8f2">
+<meta name="color-scheme" content="light">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2317785f'/%3E%3Cg transform='translate(16 16) rotate(45)'%3E%3Cpath d='M0-10.5A12.6 12.6 0 0 1 0 10.5A12.6 12.6 0 0 1 0-10.5Z' fill='%23fff'/%3E%3Cpath d='M0 10.5V-2.5' stroke='%2317785f' stroke-width='1.7' stroke-linecap='round'/%3E%3C/g%3E%3C/svg%3E">
 <!-- The app's window (assistant/app.py serves this file; it is never opened as a web page). The look: warm paper,
      one deep green, soft pastel washes, a serif for headlines and a plain sans for everything else, pill buttons,
@@ -28,6 +29,7 @@
   --ease:cubic-bezier(.2,.7,.2,1);
 }
 *{box-sizing:border-box}
+html{background:#fbf8f2;color-scheme:light}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16.5px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow:hidden;cursor:default}
 body::before{content:"";position:fixed;inset:0;background:radial-gradient(640px 460px at 92% -2%,var(--mint),transparent 70%),radial-gradient(520px 420px at -6% 44%,var(--peach),transparent 70%),radial-gradient(460px 340px at 56% 108%,var(--butter),transparent 72%);opacity:.9;pointer-events:none}
@@ -38,7 +40,7 @@ button,input{font-family:inherit}
 
 /* ---------- frame ---------- */
 .app{position:relative;z-index:1;height:100%;display:grid;grid-template-rows:64px 1fr}
-.top{display:flex;align-items:center;gap:14px;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(251,248,242,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);user-select:none}
+.top{display:flex;align-items:center;gap:14px;padding:0 28px;border-bottom:1px solid var(--line);background:rgba(251,248,242,.82);user-select:none}
 .logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:-.01em}
 .logo svg{width:30px;height:30px;display:block}
 .top .sp{flex:1}

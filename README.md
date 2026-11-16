@@ -1,4 +1,4 @@
-# sage-core 2026.11.15+9aca13b
+# sage-core 2026.11.15+ee72820
 
 The engine of a Sage agent: the code, generic prompts, generic skills and templates, with nothing of any
 organization in it. An organization is a separate folder (its *pack*) made from this engine by

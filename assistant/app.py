@@ -56,6 +56,8 @@ IDLE_S = 900                     # with no window process to watch, this long wi
 KEY = secrets.token_urlsafe(24)
 _LAST_PING = {"t": time.time()}
 _QUIT = {"now": False}
+_PINGED = {"t": 0.0}             # when the window itself last asked for its state (never moved by another program's call)
+_OPENED = {"t": 0.0}             # when a window was last opened
 _JOBS: dict = {}
 _JOBS_LOCK = threading.Lock()
 FONT_CSS = ("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..700"
@@ -384,6 +386,8 @@ POSTS = {
     "job": lambda b: job_get(str(b.get("id") or "")),
     "google": google_run, "google_status": google_status, "google_text": google_text, "google_relay": google_relay, "google_check": google_check,
     "quit": lambda b: (_QUIT.update(now=True) or {"ok": True, "message": "closing"}),
+    # how lately the window spoke (a ping), and whether one was opened in the last moments: a second launch asks
+    "alive": lambda b: {"ok": True, "ping_age": round(time.time() - _PINGED["t"], 1), "opening": time.time() - _OPENED["t"] < 20},
 }
 
 
@@ -427,7 +431,7 @@ class _Handler(BaseHTTPRequestHandler):
         if p == "/api/state":
             if not self._ours():
                 return self._json({"ok": False, "message": "not from the app's window"}, 403)
-            _LAST_PING["t"] = time.time()
+            _LAST_PING["t"] = _PINGED["t"] = time.time()
             return self._json(state())
         return self._send(404, "", "text/plain")
 
@@ -491,10 +495,16 @@ def open_window(url: str) -> subprocess.Popen | None:
         return None
     prof = home() / "app-window"
     prof.mkdir(parents=True, exist_ok=True)
+    _OPENED["t"] = time.time()
     argv = [exe, f"--app={url}", f"--user-data-dir={prof}", f"--window-size={WINDOW_SIZE[0]},{WINDOW_SIZE[1]}", "--no-first-run",
             "--no-default-browser-check", "--disable-sync", "--disable-extensions", "--disable-default-apps",
             "--disable-features=Translate,msEdgeTranslate,msHubApps,msEdgeSidebarV2,EdgeCollections,AutofillServerCommunication",
-            "--password-store=basic"]
+            "--password-store=basic",
+            # a window closed by the installer, a restart or a power cut makes the browser think it crashed, and it then
+            # puts a "restore pages" popup over the app: never
+            "--hide-crash-restore-bubble", "--disable-session-crashed-bubble",
+            # the owner is in their browser signing in while this window waits behind it: it keeps drawing and polling
+            "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"]
     try:
         return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
     except OSError:
@@ -502,30 +512,177 @@ def open_window(url: str) -> subprocess.Popen | None:
         return None
 
 
+def _command_line(pid: int) -> str:
+    """The command line a process of this user was started with ('' when it cannot be read). Windows hands it over
+    whole (NtQueryInformationProcess, class 60); nothing of the other process's memory is read."""
+    try:
+        import ctypes
+        import struct
+        from ctypes import wintypes
+        k, nt = ctypes.windll.kernel32, ctypes.windll.ntdll
+        k.OpenProcess.restype = wintypes.HANDLE
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        nt.NtQueryInformationProcess.argtypes = [wintypes.HANDLE, ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)]
+        h = k.OpenProcess(0x1000, False, pid)              # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_string_buffer(32768)
+            n = ctypes.c_ulong()
+            if nt.NtQueryInformationProcess(h, 60, buf, len(buf), ctypes.byref(n)) != 0:
+                return ""
+            length = struct.unpack_from("H", buf, 0)[0]
+            ptr = struct.unpack_from("P", buf, ctypes.sizeof(ctypes.c_void_p))[0]
+            return ctypes.wstring_at(ptr, length // 2) if ptr and length else ""
+        finally:
+            k.CloseHandle(h)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+_OURS: dict = {}                 # process id -> is it the app's own browser (asked once per process)
+
+
+def app_windows() -> list:
+    """(window, process id) for every window of the app: the windows of a browser process started on the app's own
+    profile folder. Never by title (another program's window may be called the same), and never by the process the app
+    started (the browser hands its window to another process of its own)."""
+    if not IS_WIN:
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        mark = str(home() / "app-window").lower()
+        found: list = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(hwnd, _l):
+            if not u.IsWindowVisible(hwnd) or u.GetWindowTextLengthW(hwnd) == 0:
+                return True
+            owner = wintypes.DWORD()
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+            pid = int(owner.value)
+            if pid not in _OURS:
+                _OURS[pid] = mark in _command_line(pid).lower()
+            if _OURS[pid]:
+                found.append((hwnd, pid))
+            return True
+
+        u.EnumWindows(each, 0)
+        if len(_OURS) > 400:                               # process ids are reused over a long day
+            _OURS.clear()
+        return found
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def front_window(wait_s: float = 0.0) -> bool:
+    """The app's window to the front; restored only when it is minimized (restoring a maximized window would shrink
+    it). wait_s: keep looking that long for a window that is still opening. False when there is none."""
+    if not IS_WIN:
+        return False
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        end = time.time() + wait_s
+        while True:
+            wins = app_windows()
+            if wins:
+                hwnd = wins[0][0]
+                if u.IsIconic(hwnd):
+                    u.ShowWindow(hwnd, 9)      # SW_RESTORE
+                u.SetForegroundWindow(hwnd)
+                return True
+            if time.time() >= end:
+                return False
+            time.sleep(0.4)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def close_windows() -> bool:
+    """Every window of the app closed, the polite way; a browser of ours still showing one a few seconds later is
+    ended (it is the app's own, on the app's own profile). A window never outlives its service: one that did would be a
+    dead page with the app's name on it."""
+    wins = app_windows()
+    if not wins:
+        return False
+    try:
+        import ctypes
+        for hwnd, _pid in wins:
+            ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)      # WM_CLOSE
+    except Exception:  # noqa: BLE001
+        pass
+    for _ in range(10):
+        time.sleep(0.4)
+        if not app_windows():
+            return True
+    for pid in {w[1] for w in app_windows()}:
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=15, creationflags=NO_WINDOW)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return True
+
+
+def _claim_single() -> bool:
+    """One app at a time for this home: a lock file holding the owner's process id. Two launches in the same second
+    (a double click) used to both become the app, each with a window of its own. A lock left by a process that is gone
+    is taken over."""
+    lock = home() / "app.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    for _ in range(2):
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode("ascii"))
+            os.close(fd)
+            return True
+        except FileExistsError:
+            try:
+                other = int(lock.read_text(encoding="ascii").strip() or 0)
+            except (OSError, ValueError):
+                other = 0
+            if other and other != os.getpid() and welcome.ports.pid_alive(other):
+                return False
+            try:
+                lock.unlink()
+            except OSError:
+                return False
+        except OSError:
+            return True                        # a home that cannot hold a lock: the app still opens
+    return False
+
+
+def _release_single() -> None:
+    lock = home() / "app.lock"
+    try:
+        if int(lock.read_text(encoding="ascii").strip() or 0) == os.getpid():
+            lock.unlink()
+    except (OSError, ValueError):
+        pass
+
+
 def _front_existing() -> bool:
-    """A second click on the Start-menu entry: the window that is already open comes to the front (one app, one window)."""
+    """A second click on the Start-menu entry: the window that is already open comes to the front (one app, one
+    window). A window that is still loading has no title yet, so the service is asked how lately its window spoke:
+    a window that spoke in the last half minute is there, and no second one is opened beside it."""
     info = welcome._load(home() / "app.json", {}) or {}
     port, key = int(info.get("port") or 0), str(info.get("key") or "")
     if not port or not key:
         return False
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/state", headers={"X-Sage-Key": key})
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/alive", data=b"{}", method="POST",
+                                     headers={"X-Sage-Key": key, "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=2) as r:
-            if r.status != 200:
-                return False
+            alive = json.loads(r.read().decode("utf-8") or "{}")
     except Exception:  # noqa: BLE001
         return False
-    if IS_WIN:
-        try:
-            import ctypes
-            u = ctypes.windll.user32
-            hwnd = u.FindWindowW(None, TITLE)
-            if hwnd:
-                u.ShowWindow(hwnd, 9)          # SW_RESTORE
-                u.SetForegroundWindow(hwnd)
-                return True
-        except Exception:  # noqa: BLE001
-            pass
+    if front_window(wait_s=6.0 if float(alive.get("ping_age", 999)) < 30 or alive.get("opening") else 0.0):
+        return True
+    if float(alive.get("ping_age", 999)) < 30 or alive.get("opening"):
+        return True                            # its window is there (loading, or under another name): leave it be
     open_window(f"http://127.0.0.1:{port}/")   # the service is alive but its window is gone: a new window on it
     return True
 
@@ -544,15 +701,12 @@ def quit_running() -> bool:
                 was = r.status == 200
         except Exception:  # noqa: BLE001
             pass
-    if IS_WIN:
-        try:
-            import ctypes
-            hwnd = ctypes.windll.user32.FindWindowW(None, TITLE)
-            if hwnd:
-                ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)      # WM_CLOSE
-                was = True
-        except Exception:  # noqa: BLE001
-            pass
+    for _ in range(8):                         # the service closes its own window as it ends: give it that moment
+        if not was or not app_windows():
+            break
+        time.sleep(0.5)
+    if close_windows():
+        was = True
     if was:
         time.sleep(1.5)
     return was
@@ -572,6 +726,12 @@ def _packs_own_copy() -> Path | None:
 def run(window: bool = True, port: int = 0) -> int:
     if window and _front_existing():
         return 0
+    if window and not _claim_single():
+        for _ in range(20):                    # another launch is a second ahead of this one: front its window when it is up
+            time.sleep(0.5)
+            if _front_existing():
+                break
+        return 0
     srv = ThreadingHTTPServer(("127.0.0.1", port), _Handler)    # port 0 (the default): the system picks a free one, nothing to collide with
     srv.daemon_threads = True
     port = srv.server_address[1]
@@ -585,6 +745,9 @@ def run(window: bool = True, port: int = 0) -> int:
         threading.Thread(target=fetch_fonts, daemon=True).start()
     print(f"APP {url}", flush=True)
     proc = open_window(url) if window else None
+    if proc is not None:
+        threading.Thread(target=front_window, kwargs={"wait_s": 12.0}, daemon=True).start()
+    opened = time.time()
     _LAST_PING["t"] = time.time() + 30                           # a slow first paint is not an idle window
     try:
         while True:
@@ -593,17 +756,24 @@ def run(window: bool = True, port: int = 0) -> int:
                 break
             if window and proc is None and time.time() - _LAST_PING["t"] > IDLE_S and not running_jobs():
                 break                                            # no window process to watch (a tab in the default browser): it is closed when it stops pinging
-            if proc is not None and proc.poll() is not None and time.time() - _LAST_PING["t"] > 12 and not running_jobs():
-                break                                            # the browser process ended and nothing has pinged since
+            if (proc is not None and IS_WIN and time.time() - opened > 25 and time.time() - _LAST_PING["t"] > 12
+                    and not running_jobs() and not app_windows()):
+                break                                            # the app's window is closed (none of ours is left, and nothing has pinged since)
+            if proc is not None and not IS_WIN and proc.poll() is not None and time.time() - _LAST_PING["t"] > 12 and not running_jobs():
+                break                                            # elsewhere: the browser process ended and nothing has pinged since
     except KeyboardInterrupt:
         pass
     srv.shutdown()
+    if proc is not None:
+        close_windows()                        # the service is ending: its window goes with it
     try:
         info = welcome._load(home() / "app.json", {}) or {}
         if info.get("pid") == os.getpid():
             (home() / "app.json").unlink()
     except OSError:
         pass
+    if window:
+        _release_single()
     return 0
 
 

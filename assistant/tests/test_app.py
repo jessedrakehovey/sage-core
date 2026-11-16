@@ -106,6 +106,10 @@ try:
           and json.loads(http("POST", "/api/google_text", {"what": "secret"}, key=key)[1]).get("ok") is False)
     code, body = http("POST", "/api/google_status", {}, key=key)
     check("Google's status with no organization yet says so, plainly", code == 200 and json.loads(body).get("ok") is False and "organization" in json.loads(body).get("message", ""))
+    code, body = http("POST", "/api/alive", {}, key=key)
+    al = json.loads(body) if code == 200 else {}
+    check("a second launch can ask how lately the window spoke (so it never opens a second window beside one that is loading)",
+          al.get("ok") is True and al.get("ping_age", 99) < 30 and al.get("opening") is False, body[:160])
     code, body = http("POST", "/api/nothing", {}, key=key)
     check("an unknown step is a 404", code == 404)
     code, body = http("GET", "/fonts/../app.py")
@@ -200,6 +204,25 @@ check("the window speaks as one agent and sends nobody to a page or a terminal",
       not re.search(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I), str(re.findall(r"\b(operator|doer|builder|supervisor|Mission Control|terminal|localhost|command line)\b", shown, flags=re.I))[:120])
 check("the Google screen asks before anything in the owner's Google organization changes, and offers every value to copy",
       "Allow for this project" in ui and "{allow: true}" in ui and 'data-copy="' in ui and "google_relay" in ui and "google_check" in ui)
+appsrc = (ROOT / "app.py").read_text(encoding="utf-8")
+check("the window never shows the browser's 'restore pages' popup and keeps working while another window covers it",
+      "--hide-crash-restore-bubble" in appsrc and "--disable-backgrounding-occluded-windows" in appsrc and "--disable-background-timer-throttling" in appsrc)
+check("bringing the window forward restores it only when it is minimized (a maximized window is not shrunk)", "IsIconic" in appsrc and appsrc.count("ShowWindow(") == 1)
+check("the app finds its windows by its own browser profile, never by a title another program may share", "FindWindowW" not in appsrc and "GetWindowThreadProcessId" in appsrc and 'home() / "app-window"' in appsrc)
+check("a window never outlives its service", "close_windows()                        # the service is ending" in appsrc)
+if os.name == "nt":
+    check("a process's own command line can be read (how the app knows a browser window is its own)", "test_app.py" in app._command_line(os.getpid()), app._command_line(os.getpid())[:120])
+    check("with no app window open, none is found: other programs' windows are never taken for the app's", app.app_windows() == [])
+lock = app.home() / "app.lock"
+lock.parent.mkdir(parents=True, exist_ok=True)
+lock.write_text(str(os.getppid()), encoding="ascii")
+held = app._claim_single()
+lock.write_text("999999", encoding="ascii")
+taken = app._claim_single()
+mine = lock.read_text(encoding="ascii").strip() == str(os.getpid())
+app._release_single()
+check("one app at a time: a second launch finds the first one's lock; a lock left by a process that is gone is taken over and given back", held is False and taken is True and mine and not lock.exists())
+check("the window paints light from its first frame, with no blur to redraw", 'name="color-scheme" content="light"' in ui and "backdrop-filter" not in ui)
 check("every screen the flow names exists", all(f"  {k}: " in ui for k in ("intro", "org", "agent", "people", "building", "computer", "claude", "google", "home")))
 
 print()
