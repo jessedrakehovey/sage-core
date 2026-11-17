@@ -1,11 +1,11 @@
 {
  "engine": {
   "name": "sage-core",
-  "version": "2026.11.16+4544d61",
+  "version": "2026.11.16+4317026",
   "exported": "2026-10-28T09:37:22",
   "source": "export",
   "root_placeholder": "{{ORG_ROOT}}",
-  "synced": "2026-11-16T17:17:11"
+  "synced": "2026-11-16T17:19:02"
  },
  "modules": {
   "money": {
@@ -99,7 +99,7 @@
   "assistant/CRM_CONTRACT.md": "4c963953a07744dd593e15d286130e2b5264a6046c04e1bfe9129d9e7b6d1427",
   "assistant/README.md": "9c911bdd02f93dfa836c680553b51e1e8de7b486d035d7302565f673d456e3c9",
   "assistant/agent/GOOGLE_SETUP.md": "cc03f674bb443b9a0e8b7ac8e5e570b70d2c76b069410e3cb3dc4ab50d4e6287",
-  "assistant/agent/README.md": "cfe6ced82105a1666c35f0027ad185425a6f038f9279b5183636ee38d38b0977",
+  "assistant/agent/README.md": "0719e2c3dbe9474289deba031421be803ec176de3688fa25628605e3b6b6f1c1",
   "assistant/agent/account.py": "31f596cd24c0117955265621e7a69a482193e886c5aeb1f74e4cca0bddbaaa02",
   "assistant/agent/ack.py": "08608a6736c9b94a1cc60b3e43bb493ac443b0452d8753836984f864b4c167bc",
   "assistant/agent/actions.py": "98825a4c0c12fa5068865ab1719aae77db20cbd4cc1c432e8108815edec889f9",
@@ -130,7 +130,7 @@
   "assistant/agent/dream.py": "0eb9733981de4025db573c977f84b6a44ca25a6a82fd7e8deab7d1397533fc5b",
   "assistant/agent/event_reminders.py": "2488d0d48850fd5efce294f2148b3c9d28e9f396d0919316872b12ee5b7be910",
   "assistant/agent/followups.py": "f8a8fd5a89dd873756ef881eb990c9e95299cea77a9ac9bf6efd98cfa12d74e6",
-  "assistant/agent/gchat.py": "f147c32f5b6dd0c31dc71a3b0a40a52b5f59dbedf2125c28a156071dab70921b",
+  "assistant/agent/gchat.py": "976b4517bfd2b8e273dfde8e70521c29995106313842387a600efc21ce6bf180",
   "assistant/agent/gchat_relay/Code.gs": "6e1bd96857bf1dc304651e309e28d323fce7c58705f596daaa7de7333ef71984",
   "assistant/agent/gchat_relay/Code.oneline.gs": "e3c95de18c7834320950736ee4f01177a26811b1720d5e5df875fa3269e6b4ee",
   "assistant/agent/gchat_relay/README.md": "783e08912950159c8f70709dc736ec6509b972b17b9cab2b2b2200c3752e4927",
@@ -173,7 +173,7 @@
   "assistant/agent/templates/prompt.generic.md": "6e6a0647f947348cede83f0f3c6fae1926f3025be315d9a81c14ca71113a94a5",
   "assistant/agent/templates/prompt.staff.md": "888fd437b3a82960a625a295f4a23667f67e9508b41ec053816ddf7fd8e26f31",
   "assistant/agent/templates/prompt.team.md": "99b295b4f46d273a6c3f4daac9f172f8e99d3d215824b4439d57be77fae7dcd4",
-  "assistant/agent/thread_keys.py": "1939dab82189b14e4f2356e6488e1f4555df430803f58ebb5138ec7378654eae",
+  "assistant/agent/thread_keys.py": "c318ca38c89477876d189d55863880d64c22a6fc7fe28064cb3663138e012dab",
   "assistant/agent/thread_report.py": "584d186923e863f3e3fe59fa3297f39118d3b4a8d5f9fbe91a0de38c8e94fc3d",
   "assistant/agent/truth.py": "565f90d33c3a3e83a0f5805d64f1763332fdacce5a3c5ed00f677878b8c269f0",
   "assistant/agent/untrusted.py": "e7d3db7fa239cf277b71226c1336c6d70b8523e3d5153873c983f729ef63f3e0",
@@ -510,7 +510,7 @@
   "assistant/tests/test_startup.py": "a58ccd17d90573a528bac3fdcf459997fa78ee4a9fd890a1e3e1f2718d0ca6ed",
   "assistant/tests/test_switches.py": "8b682cb256e5b97a83bb8f7ced03b05a0fdd910dd5044afa11d9398e7b25c87b",
   "assistant/tests/test_template.py": "bbb6ce54089f1c077e5c93864baf18a968a6950b4903a0d5edbecb7ba1c9bbde",
-  "assistant/tests/test_thread_keys.py": "9b23c5d63859a8b476860309df97d336725d1d78d58d7dda7a91203ca1ce572a",
+  "assistant/tests/test_thread_keys.py": "e8b93c3adab9e615bfb9d42e4b80cd24af5e23812549bcd56d478240971d0117",
   "assistant/tests/test_threadfix.py": "21720972f7fd8366b3f9a8343b666e763ce375e651ceb66ab8935e2980c873a9",
   "assistant/tests/test_today_gaps.py": "314f0196ea6832e2b1c47a8f137098beb18f14115ae467d8d60562b7d66c4915",
   "assistant/tests/test_totp.py": "931d226fe94f72998671887da8b575439c66c14f35241cc3bf4593763a64cdd5",

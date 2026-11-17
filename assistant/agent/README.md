@@ -1409,7 +1409,9 @@ correction. Each fix below is a failure that was chased by hand. Tests: `tests/t
 Not changed, on purpose: unrelated lines sharing the day's thread (that is `thread_keys.py`, one thread per day, as
 asked for the same day). To see whether that keeps the thread count down, `python assistant/agent/thread_report.py`
 prints the new threads opened per space per day for the last 14 days (opened vs adopted from a person) and the
-busiest subjects, read-only from `thread_keys.json` (2026-11-16, ported from the sister agent).
+busiest subjects, read-only from `thread_keys.json` (2026-11-16, ported from the sister agent). A test run that is
+left on the live store (no scratch `AGENT_DATA` / `ASSISTANT_DATA`) never keys, adopts or retitles a thread
+(`thread_keys.live_store_under_test`), so fake headers never land in the live registry.
 
 **The wake-up's replacement (2026-11-05).** The carrier's email-to-text address is being shut down, so the phone now
 ASKS instead of being woken: automations on the phone run the send shortcut when its owner leaves the chat app, when

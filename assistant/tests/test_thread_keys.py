@@ -168,5 +168,20 @@ ok("spaces/G (team):" in txt and "left out" in txt and "Top subjects" in txt, "t
 ok(trp.space_labels().get("spaces/DM") == "dm owner1", "a DM space is labelled from gchat_spaces.json", trp.space_labels())
 ok("no registry entries" in trp.render(trp.report({})), "an empty registry says so")
 
+# a test left on the LIVE store never keys (no fake headers in the live registry)
+ok(tk.enabled() and not tk.live_store_under_test(), "a scratch-store test keys as usual")
+core.SCOPED = False
+try:
+    ok(tk.live_store_under_test() and not tk.enabled(), "a test on the live store turns keys off")
+    CALLS.clear()
+    before = json.dumps(tk.Registry().dump(), sort_keys=True)
+    gchat.post(SPACE, "C11 test leftover on the live store")
+    ok(len(CALLS) == 1 and "thread" not in CALLS[0]["body"], "a live-store test posts unthreaded, no header", CALLS)
+    ok(not gchat.adopt_thread(SPACE, "spaces/G/threads/T9", "C11 thread") and not gchat.thread_title(SPACE, "C11", mark="✅"),
+       "adopt and retitle do nothing on the live store under test")
+    ok(json.dumps(tk.Registry().dump(), sort_keys=True) == before, "the registry is untouched")
+finally:
+    core.SCOPED = True
+
 print("\n" + ("ALL PASS" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
 sys.exit(1 if FAILS else 0)

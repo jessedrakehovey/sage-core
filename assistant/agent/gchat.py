@@ -537,6 +537,8 @@ def adopt_thread(space: str, thread: str, text: str = "") -> bool:
     if not space or not thread or "/threads/" not in str(thread) or _is_dm(space):
         return False
     try:
+        if not _tk().enabled():
+            return False
         return bool(_tk().Registry().adopt(space, thread, text, _slug()))
     except Exception:  # noqa: BLE001
         return False
@@ -547,6 +549,8 @@ def thread_title(space: str, subject: str, title: str = "", mark: str | None = N
     names one; `title` replaces the line; `mark` goes before it ("✅ done") and never stacks.
     Only a header the app posted can be edited (an adopted thread has none)."""
     tk = _tk()
+    if not tk.enabled():
+        return False
     reg = tk.Registry()
     ents = reg.dump().get(space) or {}
     base = tk.safe_key(subject) if subject in ents else tk.base_key(subject, _slug())[0]

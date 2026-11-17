@@ -52,7 +52,25 @@ def _orgcfg():
         return None
 
 
+def live_store_under_test() -> bool:
+    """A test process (its script is test_*.py, or unittest / pytest runs it) left on the LIVE store
+    (core.SCOPED false). Tests post through gchat with a fake Chat API; with keys on, each run would
+    write its fake headers into the live thread_keys.json and the next real post about that subject
+    would reply in a thread that does not exist (ported from the sister agent, 2026-11-04). A test
+    with a scratch store (AGENT_DATA / ASSISTANT_DATA, e.g. test_thread_keys) is not affected."""
+    try:
+        if core.SCOPED:
+            return False
+        main = Path(sys.argv[0]) if sys.argv and sys.argv[0] else Path("")
+        return main.name.lower().startswith("test_") or main.parent.name == "unittest" or "pytest" in sys.modules
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def enabled() -> bool:
+    """org.json chat_thread_keys; absent = on. Always off for a test on the live store."""
+    if live_store_under_test():
+        return False
     o = _orgcfg()
     v = o.get("chat_thread_keys") if o else None
     return True if v is None else bool(v)
