@@ -44,6 +44,8 @@ checkout, signing), the turn sets `"handoff": true`: before the card posts, `bro
 running browser onto the main monitor, maximized and in front (no restart, so the cart survives) and reads the
 window back. The card and the chat line say "open on your screen" only when that read-back is visible; the card
 has no Approve (just "I finished it" / Cancel), and the browser is left open. `browser.py --front` does the same by hand.
+"I finished it" on any of a job's hand-off cards (`handoff_cards.json`) is final (2026-11-01): the job is never
+claimed or rerun again, the next tick closes it done with its follow-ups stopped, and nothing more is said in chat.
 
 **No code came (2026-10-07).** A code card also lists the site's other sign-in ways as buttons
 (`Use instead: Email a code to j***@gmail.com`, ...) plus `No code came`. Tapping one needs no code:

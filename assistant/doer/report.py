@@ -261,7 +261,23 @@ def checkpoint(tid: str, spec_file: str) -> str:
             hf.write_text(json.dumps(dict(json.loads(hf.read_text(encoding="utf-8")), qid=r["qid"])), encoding="utf-8")
         except (OSError, ValueError):
             pass
+        remember_handoff(tid, r["qid"])
     return f"CHECKPOINT={r['qid']}"
+
+
+def remember_handoff(tid: str, qid: str) -> None:
+    """Every hand-off card a job posted (handoff_cards.json; handoff.json keeps only the latest). doer.owner_finished
+    reads it: an 'I finished it' on ANY of them ends the job (2026-11-01: a tap on the 8:37 card did not stop a rerun)."""
+    f = OUT / tid / "handoff_cards.json"
+    try:
+        got = json.loads(f.read_text(encoding="utf-8")) if f.is_file() else []
+    except (OSError, ValueError):
+        got = []
+    if qid and qid not in got:
+        try:
+            f.write_text(json.dumps((list(got) + [qid])[-20:]), encoding="utf-8")
+        except OSError:
+            pass
 
 
 def evidence(tid: str, what: str = "", detail: str = "", ok: bool = True, files=(), note: str = "") -> str:

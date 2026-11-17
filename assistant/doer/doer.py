@@ -901,6 +901,52 @@ def _handoff(t: dict | None, since: float = 0.0) -> dict | None:
     return d if float(d.get("epoch") or 0) >= since else None
 
 
+def owner_finished(tid: str, settled: bool = False) -> dict | None:
+    """The answer entry when an owner tapped 'I finished it' on any hand-off card of this job, else None.
+    settled: only once the undo window has passed. The job is then the owner's done deed: never claimed, rerun or
+    re-carded (2026-11-01: the tap on the 8:37 Lensrentals card left the job claimed, a stale-claim rerun at 9:20
+    rebuilt the cart and posted a new checkout card)."""
+    try:
+        import cards
+        from report import HANDOFF_DONE
+    except Exception:  # noqa: BLE001
+        return None
+    tid = str(tid or "")
+    qids = list(load_json(OUT / tid / "handoff_cards.json", []) or []) if tid else []
+    last = str((_handoff({"id": tid}) or {}).get("qid") or "")
+    if last and last not in qids:
+        qids.append(last)
+    if not qids:
+        return None
+    idx = cards._answers_index() or {}
+    for qid in qids:
+        e = idx.get(qid)
+        if not e or e.get("undone") or str(e.get("option") or "") != HANDOFF_DONE:
+            continue
+        if settled and time.time() - float(e.get("epoch") or 0) < cards.UNDO_S:
+            continue
+        return dict(e, qid=qid)
+    return None
+
+
+def close_finished_by_owner() -> list:
+    """Close every agent_run job an owner finished by hand: done, follow-ups cancelled (report.py then posts no new
+    card for it), nothing said in chat. -> the ticket ids closed."""
+    done = []
+    for t in tickets._load().values():
+        if t.get("kind") != KIND or t.get("status") not in ("new", "claimed", "staged"):
+            continue
+        e = owner_finished(t["id"], settled=True)
+        if not e:
+            continue
+        if tickets._transition(t["id"], "done", "doer", f"card {e['qid']}: the owner finished it by hand; not rerun",
+                               {"new", "claimed", "staged"}):
+            _live("close_followups", t["id"], "owner finished it")
+            log(f"ticket {t['id']}: owner tapped '{e.get('option')}' on {e['qid']}: closed, no rerun")
+            done.append(t["id"])
+    return done
+
+
 def _close_browser(t: dict | None = None, since: float = 0.0) -> None:
     """Quit the browser after a run, unless it is the sign-in window (that one closes itself), a hand-off
     left it on the owner's screen (the cart or the form lives in this session; 2026-10-28), or a page is held open
@@ -1057,6 +1103,10 @@ def run_ticket(t: dict, dry: bool = False, follow_up: str = "", login: dict | No
     login: the sign-in card's payload when this run carries on after a login was handed over; a login the site
     then refuses brings the sign-in card back (_relogin) instead of ending the job."""
     tid = t["id"]
+    if not dry and owner_finished(tid):                                  # the owner did the last step: nothing to redo
+        tickets._transition(tid, "done", "doer", "the owner finished it by hand; not rerun", {"new", "claimed", "staged"})
+        _live("close_followups", tid, "owner finished it")
+        return "DOER_SKIPPED the owner finished this job by hand"
     if not follow_up and not dry:
         _live("clear_stopped", tid)                                      # a fresh claim of the job forgets an old Stop
     if not dry and _leftopen():
@@ -1413,7 +1463,10 @@ def _quiet(now=None) -> bool:
 
 
 def _claimable_now(t: dict) -> bool:
-    """A pre-approved client send (payload.standing) never goes out during quiet hours: it waits."""
+    """A pre-approved client send (payload.standing) never goes out during quiet hours: it waits. A job the owner
+    finished by hand ('I finished it') is never claimed again."""
+    if owner_finished(t.get("id")):
+        return False
     return not ((t.get("payload") or {}).get("standing") and _quiet())
 
 
@@ -1507,6 +1560,8 @@ def tick(dry: bool = False) -> str:
         if due and (dry or tickets._transition(due[0]["id"], "claimed", "doer", f"code card answered '{due[1]}': "
                                                "switching sign-in method", {"staged", "done"})):
             return run_ticket(due[0], dry, follow_up=fallback_block(due[1]))
+        if not dry:
+            close_finished_by_owner()
         own = _login_self_due()
         if own and not dry:
             return "SELF_SIGNIN " + self_signin(*own)
